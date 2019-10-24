@@ -31,7 +31,7 @@ MenuButtonWidget::MenuButtonWidget(const ToolBarsManager::ToolBarDefinition::Ent
 	m_menu(new Menu(Menu::UnknownMenu, this)),
 	m_isHidden(false)
 {
-	setIcon(ThemesManager::createIcon(QLatin1String("otter-browser"), false));
+    setIcon(ThemesManager::createIcon(QLatin1String("waterphoenix-browser"), false));
 	setText(definition.options.value(QLatin1String("text"), tr("Menu")).toString());
 	setMenu(m_menu);
 	setPopupMode(QToolButton::InstantPopup);

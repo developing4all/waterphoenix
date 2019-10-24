@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.7.0)
 
-project(otter-browser)
+project(waterphoenix-browser)
 
 set(MAJOR_VERSION "1")
 set(MINOR_VERSION "0")
@@ -27,7 +27,7 @@ if (EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
 	set(CPACK_PACKAGE_VERSION_MAJOR "${MAJOR_VERSION}")
 	set(CPACK_PACKAGE_VERSION_MINOR "${MINOR_VERSION}")
 	set(CPACK_PACKAGE_VERSION_PATCH "${PATCH_VERSION}")
-	set(CPACK_PACKAGE_NAME "otter-browser")
+        set(CPACK_PACKAGE_NAME "waterphoenix-browser")
 	set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}_${MAJOR_VERSION}.${MINOR_VERSION}.${CPACK_PACKAGE_VERSION_PATCH}")
 	set(CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}_${MAJOR_VERSION}.${MINOR_VERSION}.${CPACK_PACKAGE_VERSION_PATCH}")
 	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libhunspell-1.5-0 (>= 1.5.1), libqt5multimedia5 (>=5.6.0), libqt5qml5 (>=5.6.0), libqt5svg5 (>=5.6.0), libqt5webkit5 (>=5.212.0~alpha2)")
@@ -524,66 +524,66 @@ elseif (UNIX)
 	)
 endif ()
 
-add_executable(otter-browser WIN32 MACOSX_BUNDLE
+add_executable(waterphoenix-browser WIN32 MACOSX_BUNDLE
 	${otter_ui}
 	${otter_res}
 	${otter_src}
 )
 
 if (Qt5WebEngineWidgets_FOUND AND ENABLE_QTWEBENGINE)
-	target_link_libraries(otter-browser Qt5::WebEngineCore Qt5::WebEngineWidgets)
+        target_link_libraries(waterphoenix-browser Qt5::WebEngineCore Qt5::WebEngineWidgets)
 endif ()
 
 if (Qt5WebKitWidgets_FOUND AND ENABLE_QTWEBKIT)
-	target_link_libraries(otter-browser Qt5::WebKit Qt5::WebKitWidgets)
+        target_link_libraries(waterphoenix-browser Qt5::WebKit Qt5::WebKitWidgets)
 endif ()
 
 if (HUNSPELL_FOUND AND ENABLE_SPELLCHECK)
-	target_link_libraries(otter-browser ${HUNSPELL_LIBRARIES})
+        target_link_libraries(waterphoenix-browser ${HUNSPELL_LIBRARIES})
 endif ()
 
 if (WIN32)
-	target_link_libraries(otter-browser Qt5::WinExtras ole32 shell32 advapi32 user32)
+        target_link_libraries(waterphoenix-browser Qt5::WinExtras ole32 shell32 advapi32 user32)
 elseif (APPLE)
 	find_library(FRAMEWORK_Cocoa Cocoa)
 	find_library(FRAMEWORK_Foundation Foundation)
 
-	set_target_properties(otter-browser PROPERTIES OUTPUT_NAME "Otter Browser")
+        set_target_properties(waterphoenix-browser PROPERTIES OUTPUT_NAME "Otter Browser")
 
-	target_link_libraries(otter-browser Qt5::MacExtras ${FRAMEWORK_Cocoa} ${FRAMEWORK_Foundation})
+        target_link_libraries(waterphoenix-browser Qt5::MacExtras ${FRAMEWORK_Cocoa} ${FRAMEWORK_Foundation})
 elseif (UNIX)
 	if (Qt5DBus_FOUND AND ENABLE_DBUS)
-		target_link_libraries(otter-browser Qt5::DBus)
+                target_link_libraries(waterphoenix-browser Qt5::DBus)
 	endif ()
 
 	if (ENABLE_CRASHREPORTS)
-		target_link_libraries(otter-browser -lpthread)
+                target_link_libraries(waterphoenix-browser -lpthread)
 	endif ()
 endif ()
 
-target_link_libraries(otter-browser Qt5::Core Qt5::Gui Qt5::Multimedia Qt5::Network Qt5::PrintSupport Qt5::Qml Qt5::Svg Qt5::Widgets)
+target_link_libraries(waterphoenix-browser Qt5::Core Qt5::Gui Qt5::Multimedia Qt5::Network Qt5::PrintSupport Qt5::Qml Qt5::Svg Qt5::Widgets)
 
 set(XDG_APPS_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/share/applications CACHE FILEPATH "Install path for .desktop files")
 
 file(GLOB _qm_files resources/translations/*.qm)
 
 foreach(_current_QM_FILE ${_qm_files})
-	install(FILES ${_current_QM_FILE} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/otter-browser/locale/)
+        install(FILES ${_current_QM_FILE} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/waterphoenix-browser/locale/)
 
 	if (APPLE)
 		file(COPY ${_current_QM_FILE} DESTINATION "Otter Browser.app/Contents/Resources/locale/")
 	endif()
 endforeach()
 
-install(FILES resources/icons/otter-browser-16.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/16x16/apps/ RENAME otter-browser.png)
-install(FILES resources/icons/otter-browser-32.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/32x32/apps/ RENAME otter-browser.png)
-install(FILES resources/icons/otter-browser-48.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/48x48/apps/ RENAME otter-browser.png)
-install(FILES resources/icons/otter-browser-64.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/64x64/apps/ RENAME otter-browser.png)
-install(FILES resources/icons/otter-browser-128.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/128x128/apps/ RENAME otter-browser.png)
-install(FILES resources/icons/otter-browser-256.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/256x256/apps/ RENAME otter-browser.png)
-install(FILES otter-browser.desktop DESTINATION ${XDG_APPS_INSTALL_DIR})
-install(FILES man/otter-browser.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1/)
-install(TARGETS otter-browser DESTINATION bin/)
+install(FILES resources/icons/waterphoenix-browser-16.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/16x16/apps/ RENAME waterphoenix-browser.png)
+install(FILES resources/icons/waterphoenix-browser-32.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/32x32/apps/ RENAME waterphoenix-browser.png)
+install(FILES resources/icons/waterphoenix-browser-48.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/48x48/apps/ RENAME waterphoenix-browser.png)
+install(FILES resources/icons/waterphoenix-browser-64.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/64x64/apps/ RENAME waterphoenix-browser.png)
+install(FILES resources/icons/waterphoenix-browser-128.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/128x128/apps/ RENAME waterphoenix-browser.png)
+install(FILES resources/icons/waterphoenix-browser-256.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/256x256/apps/ RENAME waterphoenix-browser.png)
+install(FILES waterphoenix-browser.desktop DESTINATION ${XDG_APPS_INSTALL_DIR})
+install(FILES man/waterphoenix-browser.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1/)
+install(TARGETS waterphoenix-browser DESTINATION bin/)
 
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)
 

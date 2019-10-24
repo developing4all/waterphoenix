@@ -22,6 +22,17 @@
         <file>icons/otter-browser.ico</file>
         <file>icons/otter-browser.png</file>
         <file>icons/otter-browser.svg</file>
+        <file>icons/waterphoenix-browser-16.png</file>
+        <file>icons/waterphoenix-browser-32.png</file>
+        <file>icons/waterphoenix-browser-48.png</file>
+        <file>icons/waterphoenix-browser-64.png</file>
+        <file>icons/waterphoenix-browser-128.png</file>
+        <file>icons/waterphoenix-browser-256.png</file>
+        <file>icons/waterphoenix-browser-file-type-256.png</file>
+        <file>icons/waterphoenix-browser-file-type.ico</file>
+        <file>icons/waterphoenix-browser.ico</file>
+        <file>icons/waterphoenix-browser.png</file>
+        <file>icons/waterphoenix-browser.svg</file>
         <file>icons/theme/addon-user-script.png</file>
         <file>icons/theme/application-exit.png</file>
         <file>icons/theme/application-rss+xml.png</file>

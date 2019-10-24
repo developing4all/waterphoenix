@@ -11,3 +11,4 @@ debug
 *.user
 .kde4
 *.kde4
+CMakeLists.txt.user.*

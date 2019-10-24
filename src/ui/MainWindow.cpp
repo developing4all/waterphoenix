@@ -2056,7 +2056,7 @@ MainWindow* MainWindow::findMainWindow(QObject *parent)
 		return nullptr;
 	}
 
-	if (parent->metaObject()->className() == QLatin1String("Otter::MainWindow"))
+    if (parent->metaObject()->className() == QLatin1String("Otter::MainWindow"))
 	{
 		return qobject_cast<MainWindow*>(parent);
 	}
@@ -2071,7 +2071,7 @@ MainWindow* MainWindow::findMainWindow(QObject *parent)
 
 	while (parent)
 	{
-		if (parent->metaObject()->className() == QLatin1String("Otter::MainWindow"))
+        if (parent->metaObject()->className() == QLatin1String("Otter::MainWindow"))
 		{
 			mainWindow = qobject_cast<MainWindow*>(parent);
 
