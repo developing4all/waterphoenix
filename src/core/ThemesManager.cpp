@@ -251,7 +251,7 @@ QIcon ThemesManager::createIcon(const QString &name, bool fromTheme)
 		return QIcon::fromTheme(name);
 	}
 
-	const QString iconPath((!fromTheme && name == QLatin1String("otter-browser")) ? QLatin1String(":/icons/otter-browser") : m_iconThemePath + name);
+    const QString iconPath((!fromTheme && name == QLatin1String("waterphoenix-browser")) ? QLatin1String(":/icons/waterphoenix-browser") : m_iconThemePath + name);
 	const QString svgPath(iconPath + QLatin1String(".svg"));
 	const QString rasterPath(iconPath + QLatin1String(".png"));
 

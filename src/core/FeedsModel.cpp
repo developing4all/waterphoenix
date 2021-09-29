@@ -954,7 +954,7 @@ bool FeedsModel::save(const QString &path) const
 	writer.writeStartElement(QLatin1String("opml"));
 	writer.writeAttribute(QLatin1String("version"), QLatin1String("1.0"));
 	writer.writeStartElement(QLatin1String("head"));
-	writer.writeTextElement(QLatin1String("title"), QLatin1String("Newsfeeds exported from Otter Browser ") + Application::getFullVersion());
+    writer.writeTextElement(QLatin1String("title"), QLatin1String("Newsfeeds exported from Water Phoenix Browser ") + Application::getFullVersion());
 	writer.writeEndElement();
 	writer.writeStartElement(QLatin1String("body"));
 

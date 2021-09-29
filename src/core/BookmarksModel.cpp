@@ -571,7 +571,7 @@ void BookmarksModel::readBookmark(QXmlStreamReader *reader, Bookmark *parent)
 					{
 						if (reader->isStartElement())
 						{
-							if (reader->name() == QLatin1String("metadata") && reader->attributes().value(QLatin1String("owner")).toString().startsWith(QLatin1String("http://otter-browser.org/")))
+                            if (reader->name() == QLatin1String("metadata") && reader->attributes().value(QLatin1String("owner")).toString().startsWith(QLatin1String("http://waterphoenix.org/")))
 							{
 								while (reader->readNext())
 								{
@@ -649,7 +649,7 @@ void BookmarksModel::readBookmark(QXmlStreamReader *reader, Bookmark *parent)
 					{
 						if (reader->isStartElement())
 						{
-							if (reader->name() == QLatin1String("metadata") && reader->attributes().value(QLatin1String("owner")).toString().startsWith(QLatin1String("http://otter-browser.org/")))
+                            if (reader->name() == QLatin1String("metadata") && reader->attributes().value(QLatin1String("owner")).toString().startsWith(QLatin1String("http://waterphoenix.org/")))
 							{
 								while (reader->readNext())
 								{
@@ -775,7 +775,7 @@ void BookmarksModel::writeBookmark(QXmlStreamWriter *writer, Bookmark *bookmark)
 			{
 				writer->writeStartElement(QLatin1String("info"));
 				writer->writeStartElement(QLatin1String("metadata"));
-				writer->writeAttribute(QLatin1String("owner"), QLatin1String("http://otter-browser.org/otter-xbel-bookmark"));
+                writer->writeAttribute(QLatin1String("owner"), QLatin1String("http://waterphoenix.org/waterphoenix-xbel-bookmark"));
 
 				if (!bookmark->getRawData(KeywordRole).toString().isEmpty())
 				{
@@ -819,7 +819,7 @@ void BookmarksModel::writeBookmark(QXmlStreamWriter *writer, Bookmark *bookmark)
 			{
 				writer->writeStartElement(QLatin1String("info"));
 				writer->writeStartElement(QLatin1String("metadata"));
-				writer->writeAttribute(QLatin1String("owner"), QLatin1String("http://otter-browser.org/otter-xbel-bookmark"));
+                writer->writeAttribute(QLatin1String("owner"), QLatin1String("http://waterphoenix.org/waterphoenix-xbel-bookmark"));
 				writer->writeTextElement(QLatin1String("keyword"), bookmark->getRawData(KeywordRole).toString());
 				writer->writeEndElement();
 				writer->writeEndElement();
