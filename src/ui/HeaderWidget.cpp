@@ -17,28 +17,46 @@
 *
 **************************************************************************/
 
-#ifndef OTTER_PREFERENCESPAGE_H
-#define OTTER_PREFERENCESPAGE_H
+#include "HeaderWidget.h"
 
-#include <QtWidgets/QWidget>
+#include <QtCore/QEvent>
+#include <QtWidgets/QApplication>
 
 namespace Otter
 {
 
-class PreferencesPage : public QWidget
+HeaderWidget::HeaderWidget(const QString &text, QWidget *parent, Qt::WindowFlags flags) : QLabel(text, parent, flags)
 {
-	Q_OBJECT
-
-public:
-	explicit PreferencesPage(QWidget *parent);
-
-public slots:
-	virtual void save() = 0;
-
-signals:
-	void settingsModified();
-};
-
+	updateFont();
 }
 
-#endif
+HeaderWidget::HeaderWidget(QWidget *parent, Qt::WindowFlags flags) : QLabel(parent, flags)
+{
+	updateFont();
+}
+
+void HeaderWidget::changeEvent(QEvent *event)
+{
+	QLabel::changeEvent(event);
+
+	switch (event->type())
+	{
+		case QEvent::ApplicationFontChange:
+		case QEvent::StyleChange:
+			updateFont();
+
+			break;
+		default:
+			break;
+	}
+}
+
+void HeaderWidget::updateFont()
+{
+	QFont font(parentWidget() ? parentWidget()->font() : QApplication::font());
+	font.setBold(true);
+
+	setFont(font);
+}
+
+}

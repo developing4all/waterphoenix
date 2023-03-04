@@ -19,6 +19,8 @@
 **************************************************************************/
 
 #include "ContentPreferencesPage.h"
+#include "../../../core/Application.h"
+#include "../../../core/SessionsManager.h"
 #include "../../../core/SettingsManager.h"
 #include "../../../ui/ColorWidget.h"
 #include "../../../ui/OptionWidget.h"
@@ -111,9 +113,65 @@ QWidget* FontItemDelegate::createEditor(QWidget *parent, const QStyleOptionViewI
 	return widget;
 }
 
-ContentPreferencesPage::ContentPreferencesPage(QWidget *parent) : PreferencesPage(parent),
-	m_ui(new Ui::ContentPreferencesPage)
+ContentPreferencesPage::ContentPreferencesPage(QWidget *parent) : CategoryPage(parent),
+	m_ui(nullptr)
 {
+}
+
+ContentPreferencesPage::~ContentPreferencesPage()
+{
+	if (wasLoaded())
+	{
+		delete m_ui;
+	}
+}
+
+void ContentPreferencesPage::changeEvent(QEvent *event)
+{
+	QWidget::changeEvent(event);
+
+	if (!wasLoaded())
+	{
+		return;
+	}
+
+	switch (event->type())
+	{
+		case QEvent::FontChange:
+		case QEvent::StyleChange:
+			updateStyle();
+
+			break;
+		case QEvent::LanguageChange:
+			m_ui->retranslateUi(this);
+			m_ui->enableImagesComboBox->setItemText(0, tr("All images"));
+			m_ui->enableImagesComboBox->setItemText(1, tr("Cached images"));
+			m_ui->enableImagesComboBox->setItemText(2, tr("No images"));
+			m_ui->enablePluginsComboBox->setItemText(0, tr("Enabled"));
+			m_ui->enablePluginsComboBox->setItemText(1, tr("On demand"));
+			m_ui->enablePluginsComboBox->setItemText(2, tr("Disabled"));
+			m_ui->userStyleSheetFilePathWidget->setFilters({tr("Style sheets (*.css)")});
+			m_ui->popupsComboBox->setItemText(0, tr("Ask"));
+			m_ui->popupsComboBox->setItemText(1, tr("Block all"));
+			m_ui->popupsComboBox->setItemText(2, tr("Open all"));
+			m_ui->popupsComboBox->setItemText(3, tr("Open all in background"));
+			m_ui->fontsViewWidget->getSourceModel()->setHorizontalHeaderLabels({tr("Style"), tr("Font"), tr("Preview")});
+			m_ui->colorsViewWidget->getSourceModel()->setHorizontalHeaderLabels({tr("Type"), tr("Preview")});
+
+			break;
+		default:
+			break;
+	}
+}
+
+void ContentPreferencesPage::load()
+{
+	if (wasLoaded())
+	{
+		return;
+	}
+
+	m_ui = new Ui::ContentPreferencesPage();
 	m_ui->setupUi(this);
 	m_ui->enableImagesComboBox->addItem(tr("All images"), QLatin1String("enabled"));
 	m_ui->enableImagesComboBox->addItem(tr("Cached images"), QLatin1String("onlyCached"));
@@ -135,6 +193,7 @@ ContentPreferencesPage::ContentPreferencesPage(QWidget *parent) : PreferencesPag
 	m_ui->popupsComboBox->addItem(tr("Block all"), QLatin1String("blockAll"));
 	m_ui->popupsComboBox->addItem(tr("Open all"), QLatin1String("openAll"));
 	m_ui->popupsComboBox->addItem(tr("Open all in background"), QLatin1String("openAllInBackground"));
+	m_ui->enableContentBlockingCheckBox->setChecked(SettingsManager::getOption(SettingsManager::ContentBlocking_EnableContentBlockingOption).toBool());
 	m_ui->defaultZoomSpinBox->setValue(SettingsManager::getOption(SettingsManager::Content_DefaultZoomOption).toInt());
 	m_ui->zoomTextOnlyCheckBox->setChecked(SettingsManager::getOption(SettingsManager::Content_ZoomTextOnlyOption).toBool());
 	m_ui->proportionalFontSizeSpinBox->setValue(SettingsManager::getOption(SettingsManager::Content_DefaultFontSizeOption).toInt());
@@ -197,6 +256,15 @@ ContentPreferencesPage::ContentPreferencesPage(QWidget *parent) : PreferencesPag
 
 	updateStyle();
 
+	connect(m_ui->manageContentBlockingButton, &QPushButton::clicked, this,[&]()
+	{
+		const QUrl url(QLatin1String("about:content-filters"));
+
+		if (!SessionsManager::hasUrl(url, true))
+		{
+			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}}, this);
+		}
+	});
 	connect(m_ui->fontsViewWidget->selectionModel(), &QItemSelectionModel::currentChanged, this, [&](const QModelIndex &currentIndex, const QModelIndex &previousIndex)
 	{
 		m_ui->fontsViewWidget->closePersistentEditor(previousIndex.sibling(previousIndex.row(), 1));
@@ -215,44 +283,8 @@ ContentPreferencesPage::ContentPreferencesPage(QWidget *parent) : PreferencesPag
 			m_ui->colorsViewWidget->openPersistentEditor(currentIndex.sibling(currentIndex.row(), 1));
 		}
 	});
-}
 
-ContentPreferencesPage::~ContentPreferencesPage()
-{
-	delete m_ui;
-}
-
-void ContentPreferencesPage::changeEvent(QEvent *event)
-{
-	QWidget::changeEvent(event);
-
-	switch (event->type())
-	{
-		case QEvent::FontChange:
-		case QEvent::StyleChange:
-			updateStyle();
-
-			break;
-		case QEvent::LanguageChange:
-			m_ui->retranslateUi(this);
-			m_ui->enableImagesComboBox->setItemText(0, tr("All images"));
-			m_ui->enableImagesComboBox->setItemText(1, tr("Cached images"));
-			m_ui->enableImagesComboBox->setItemText(2, tr("No images"));
-			m_ui->enablePluginsComboBox->setItemText(0, tr("Enabled"));
-			m_ui->enablePluginsComboBox->setItemText(1, tr("On demand"));
-			m_ui->enablePluginsComboBox->setItemText(2, tr("Disabled"));
-			m_ui->userStyleSheetFilePathWidget->setFilters({tr("Style sheets (*.css)")});
-			m_ui->popupsComboBox->setItemText(0, tr("Ask"));
-			m_ui->popupsComboBox->setItemText(1, tr("Block all"));
-			m_ui->popupsComboBox->setItemText(2, tr("Open all"));
-			m_ui->popupsComboBox->setItemText(3, tr("Open all in background"));
-			m_ui->fontsViewWidget->getSourceModel()->setHorizontalHeaderLabels({tr("Style"), tr("Font"), tr("Preview")});
-			m_ui->colorsViewWidget->getSourceModel()->setHorizontalHeaderLabels({tr("Type"), tr("Preview")});
-
-			break;
-		default:
-			break;
-	}
+	markAsLoaded();
 }
 
 void ContentPreferencesPage::save()
@@ -261,6 +293,7 @@ void ContentPreferencesPage::save()
 	SettingsManager::setOption(SettingsManager::Permissions_EnablePluginsOption, m_ui->enablePluginsComboBox->currentData(Qt::UserRole).toString());
 	SettingsManager::setOption(SettingsManager::Content_UserStyleSheetOption, m_ui->userStyleSheetFilePathWidget->getPath());
 	SettingsManager::setOption(SettingsManager::Permissions_ScriptsCanOpenWindowsOption, m_ui->popupsComboBox->currentData().toString());
+	SettingsManager::setOption(SettingsManager::ContentBlocking_EnableContentBlockingOption, m_ui->enableContentBlockingCheckBox->isChecked());
 	SettingsManager::setOption(SettingsManager::Content_DefaultZoomOption, m_ui->defaultZoomSpinBox->value());
 	SettingsManager::setOption(SettingsManager::Content_ZoomTextOnlyOption, m_ui->zoomTextOnlyCheckBox->isChecked());
 	SettingsManager::setOption(SettingsManager::Content_DefaultFontSizeOption, m_ui->proportionalFontSizeSpinBox->value());
@@ -282,6 +315,11 @@ void ContentPreferencesPage::updateStyle()
 {
 	m_ui->colorsViewWidget->setMaximumHeight(m_ui->colorsViewWidget->getContentsHeight());
 	m_ui->fontsViewWidget->setMaximumHeight(m_ui->fontsViewWidget->getContentsHeight());
+}
+
+QString ContentPreferencesPage::getTitle() const
+{
+	return tr("Content");
 }
 
 }

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -43,6 +43,7 @@
 #include "../../../ui/ContentsDialog.h"
 #include "../../../ui/MainWindow.h"
 #include "../../../ui/Menu.h"
+#include "../../../ui/QuickResponseCodeDialog.h"
 #include "../../../ui/ReloadTimeDialog.h"
 #include "../../../ui/SourceViewerWebWidget.h"
 #include "../../../ui/WebsiteInformationDialog.h"
@@ -326,6 +327,14 @@ void WebContentsWidget::triggerAction(int identifier, const QVariantMap &paramet
 {
 	switch (identifier)
 	{
+		case ActionsManager::ShowLinkAsQuickResponseCodeAction:
+			{
+				QuickResponseCodeDialog *dialog(new QuickResponseCodeDialog(m_webWidget->getActiveLink().url.toString(), this));
+				dialog->setAttribute(Qt::WA_DeleteOnClose);
+				dialog->show();
+			}
+
+			break;
 		case ActionsManager::OpenSelectionAsLinkAction:
 			{
 				const QString text(m_webWidget->getSelectedText().trimmed());
@@ -372,32 +381,34 @@ void WebContentsWidget::triggerAction(int identifier, const QVariantMap &paramet
 			{
 				const QVector<PasswordsManager::PasswordInformation> passwords(PasswordsManager::getPasswords(getUrl(), PasswordsManager::FormPassword));
 
-				if (!passwords.isEmpty())
+				if (passwords.isEmpty())
 				{
-					PasswordsManager::PasswordInformation password;
+					return;
+				}
 
-					if (passwords.count() == 1)
+				PasswordsManager::PasswordInformation password;
+
+				if (passwords.count() == 1)
+				{
+					password = passwords.value(0);
+				}
+				else
+				{
+					SelectPasswordDialog dialog(passwords, this);
+
+					if (dialog.exec() == QDialog::Accepted)
 					{
-						password = passwords.value(0);
+						password = dialog.getPassword();
 					}
-					else
-					{
-						SelectPasswordDialog dialog(passwords, this);
+				}
 
-						if (dialog.exec() == QDialog::Accepted)
-						{
-							password = dialog.getPassword();
-						}
-					}
+				if (password.isValid())
+				{
+					m_webWidget->fillPassword(password);
 
-					if (password.isValid())
-					{
-						m_webWidget->fillPassword(password);
+					password.timeUsed = QDateTime::currentDateTimeUtc();
 
-						password.timeUsed = QDateTime::currentDateTimeUtc();
-
-						PasswordsManager::addPassword(password);
-					}
+					PasswordsManager::addPassword(password);
 				}
 			}
 
@@ -474,7 +485,15 @@ void WebContentsWidget::triggerAction(int identifier, const QVariantMap &paramet
 				m_layout->insertWidget(0, m_searchBarWidget);
 
 				connect(m_searchBarWidget, &SearchBarWidget::requestedSearch, this, &WebContentsWidget::findInPage);
-				connect(m_searchBarWidget, &SearchBarWidget::flagsChanged, this, &WebContentsWidget::updateFindHighlight);
+				connect(m_searchBarWidget, &SearchBarWidget::flagsChanged, this, [&](WebWidget::FindFlags flags)
+				{
+					if (m_searchBarWidget)
+					{
+						m_webWidget->findInPage({}, (flags | WebWidget::HighlightAllFind));
+						m_webWidget->findInPage(m_searchBarWidget->getQuery(), flags);
+					}
+				}
+);
 				connect(m_webWidget, &WebWidget::findInPageResultsChanged, m_searchBarWidget, &SearchBarWidget::updateResults);
 
 				if (SettingsManager::getOption(SettingsManager::Search_EnableFindInPageAsYouTypeOption).toBool())
@@ -854,28 +873,30 @@ void WebContentsWidget::handleUrlChange(const QUrl &url)
 
 void WebContentsWidget::handleSavePasswordRequest(const PasswordsManager::PasswordInformation &password, bool isUpdate)
 {
-	if (!m_passwordBarWidget)
+	if (m_passwordBarWidget)
 	{
-		bool isValid(false);
+		return;
+	}
 
-		for (int i = 0; i < password.fields.count(); ++i)
+	bool isValid(false);
+
+	for (int i = 0; i < password.fields.count(); ++i)
+	{
+		if (password.fields.at(i).type == PasswordsManager::PasswordField && !password.fields.at(i).value.isEmpty())
 		{
-			if (password.fields.at(i).type == PasswordsManager::PasswordField && !password.fields.at(i).value.isEmpty())
-			{
-				isValid = true;
+			isValid = true;
 
-				break;
-			}
+			break;
 		}
+	}
 
-		if (isValid)
-		{
-			m_passwordBarWidget = new PasswordBarWidget(password, isUpdate, this);
+	if (isValid)
+	{
+		m_passwordBarWidget = new PasswordBarWidget(password, isUpdate, this);
 
-			connect(m_passwordBarWidget, &PasswordBarWidget::requestedClose, this, &WebContentsWidget::closePasswordBar);
+		connect(m_passwordBarWidget, &PasswordBarWidget::requestedClose, this, &WebContentsWidget::closePasswordBar);
 
-			addInformationBar(m_passwordBarWidget);
-		}
+		addInformationBar(m_passwordBarWidget);
 	}
 }
 
@@ -904,7 +925,7 @@ void WebContentsWidget::handlePermissionRequest(WebWidget::FeaturePermission fea
 	{
 		for (int i = 0; i < m_permissionBarWidgets.count(); ++i)
 		{
-			if (m_permissionBarWidgets.at(i)->getFeature() == feature && m_permissionBarWidgets.at(i)->getUrl() == url)
+			if (m_permissionBarWidgets.at(i)->hasMatch(feature, url))
 			{
 				m_layout->removeWidget(m_permissionBarWidgets.at(i));
 
@@ -920,7 +941,7 @@ void WebContentsWidget::handlePermissionRequest(WebWidget::FeaturePermission fea
 	{
 		for (int i = 0; i < m_permissionBarWidgets.count(); ++i)
 		{
-			if (m_permissionBarWidgets.at(i)->getFeature() == feature && m_permissionBarWidgets.at(i)->getUrl() == url)
+			if (m_permissionBarWidgets.at(i)->hasMatch(feature, url))
 			{
 				return;
 			}
@@ -932,9 +953,18 @@ void WebContentsWidget::handlePermissionRequest(WebWidget::FeaturePermission fea
 
 		m_permissionBarWidgets.append(widget);
 
-		emit needsAttention();
+		connect(widget, &PermissionBarWidget::permissionChanged, this, [=](WebWidget::PermissionPolicies policies)
+		{
+			m_webWidget->setPermission(feature, url, policies);
 
-		connect(widget, &PermissionBarWidget::permissionChanged, this, &WebContentsWidget::notifyPermissionChanged);
+			m_permissionBarWidgets.removeAll(widget);
+
+			m_layout->removeWidget(widget);
+
+			widget->deleteLater();
+		});
+
+		emit needsAttention();
 	}
 }
 
@@ -945,18 +975,18 @@ void WebContentsWidget::handleInspectorVisibilityChangeRequest(bool isVisible)
 		return;
 	}
 
-	QWidget *inspector(m_webWidget->getInspector());
+	QWidget *inspectorWidget(m_webWidget->getInspector());
 
-	if (!inspector)
+	if (!inspectorWidget)
 	{
 		return;
 	}
 
 	if (isVisible)
 	{
-		if (m_splitter->indexOf(inspector) < 0)
+		if (m_splitter->indexOf(inspectorWidget) < 0)
 		{
-			m_splitter->addWidget(inspector);
+			m_splitter->addWidget(inspectorWidget);
 
 			if (height() > 500)
 			{
@@ -968,11 +998,11 @@ void WebContentsWidget::handleInspectorVisibilityChangeRequest(bool isVisible)
 			}
 		}
 
-		inspector->show();
+		inspectorWidget->show();
 	}
 	else
 	{
-		inspector->hide();
+		inspectorWidget->hide();
 	}
 }
 
@@ -1016,41 +1046,6 @@ void WebContentsWidget::handleLoadingStateChange(WebWidget::LoadingState state)
 void WebContentsWidget::handleFindInPageQueryChanged()
 {
 	findInPage(m_searchBarWidget ? m_searchBarWidget->getFlags() : WebWidget::HighlightAllFind);
-}
-
-void WebContentsWidget::notifyPermissionChanged(WebWidget::PermissionPolicies policies)
-{
-	PermissionBarWidget *widget(qobject_cast<PermissionBarWidget*>(sender()));
-
-	if (widget)
-	{
-		m_webWidget->setPermission(widget->getFeature(), widget->getUrl(), policies);
-
-		m_permissionBarWidgets.removeAll(widget);
-
-		m_layout->removeWidget(widget);
-
-		widget->deleteLater();
-	}
-}
-
-void WebContentsWidget::notifyRequestedNewWindow(WebWidget *widget, SessionsManager::OpenHints hints, const QVariantMap &parameters)
-{
-	if (isPrivate())
-	{
-		hints |= SessionsManager::PrivateOpen;
-	}
-
-	emit requestedNewWindow(new WebContentsWidget({{QLatin1String("hints"), QVariant(hints)}}, widget->getOptions(), widget, nullptr, nullptr), hints, parameters);
-}
-
-void WebContentsWidget::updateFindHighlight(WebWidget::FindFlags flags)
-{
-	if (m_searchBarWidget)
-	{
-		m_webWidget->findInPage({}, (flags | WebWidget::HighlightAllFind));
-		m_webWidget->findInPage(m_searchBarWidget->getQuery(), flags);
-	}
 }
 
 void WebContentsWidget::setScrollMode(ScrollMode mode)
@@ -1196,7 +1191,15 @@ void WebContentsWidget::setWidget(WebWidget *widget, const QVariantMap &paramete
 	connect(m_webWidget, &WebWidget::aboutToNavigate, this, &WebContentsWidget::aboutToNavigate);
 	connect(m_webWidget, &WebWidget::aboutToNavigate, this, &WebContentsWidget::closePopupsBar);
 	connect(m_webWidget, &WebWidget::needsAttention, this, &WebContentsWidget::needsAttention);
-	connect(m_webWidget, &WebWidget::requestedNewWindow, this, &WebContentsWidget::notifyRequestedNewWindow);
+	connect(m_webWidget, &WebWidget::requestedNewWindow, this, [&](WebWidget *widget, SessionsManager::OpenHints hints, const QVariantMap &parameters)
+	{
+		if (isPrivate())
+		{
+			hints |= SessionsManager::PrivateOpen;
+		}
+
+		emit requestedNewWindow(new WebContentsWidget({{QLatin1String("hints"), QVariant(hints)}}, widget->getOptions(), widget, nullptr, nullptr), hints, parameters);
+	});
 	connect(m_webWidget, &WebWidget::requestedPopupWindow, this, &WebContentsWidget::handlePopupWindowRequest);
 	connect(m_webWidget, &WebWidget::requestedPermission, this, &WebContentsWidget::handlePermissionRequest);
 	connect(m_webWidget, &WebWidget::requestedSavePassword, this, &WebContentsWidget::handleSavePasswordRequest);

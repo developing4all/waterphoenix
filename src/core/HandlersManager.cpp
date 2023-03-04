@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -19,19 +19,17 @@
 
 #include "HandlersManager.h"
 #include "AdblockContentFiltersProfile.h"
+#include "Application.h"
 #include "IniSettings.h"
 #include "SessionsManager.h"
 #include "SettingsManager.h"
 #include "Utils.h"
-#include "../ui/ContentBlockingProfileDialog.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMimeDatabase>
 #include <QtCore/QUrlQuery>
 #include <QtGui/QDesktopServices>
-#include <QtWidgets/QApplication>
-#include <QtWidgets/QMessageBox>
 
 namespace Otter
 {
@@ -159,8 +157,45 @@ QVector<HandlersManager::MimeTypeHandlerDefinition> HandlersManager::getMimeType
 	return handlers;
 }
 
+HandlersManager::HandlerTypes HandlersManager::getHandlerType(const QUrl &url)
+{
+	if (AddonsManager::isSpecialPage(url) || url.scheme() == QLatin1String("feed") || url.scheme() == QLatin1String("view-feed"))
+	{
+		return (InternalHandler | IsWindowedHandler);
+	}
+
+	if (url.scheme() == QLatin1String("abp") && url.path() == QLatin1String("subscribe"))
+	{
+		return InternalHandler;
+	}
+
+	if (url.scheme() == QLatin1String("mailto"))
+	{
+		return ExternalHandler;
+	}
+
+	return NoHandler;
+}
+
+bool HandlersManager::canHandleUrl(const QUrl &url)
+{
+	return (getHandlerType(url) != NoHandler);
+}
+
+bool HandlersManager::canViewUrl(const QUrl &url)
+{
+	return getHandlerType(url).testFlag(IsWindowedHandler);
+}
+
 bool HandlersManager::handleUrl(const QUrl &url)
 {
+	if (canViewUrl(url))
+	{
+		Application::getInstance()->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}});
+
+		return true;
+	}
+
 	if (url.scheme() == QLatin1String("abp"))
 	{
 		const QUrlQuery query(url.query());
@@ -168,41 +203,7 @@ bool HandlersManager::handleUrl(const QUrl &url)
 
 		if (location.isValid())
 		{
-			if (ContentFiltersManager::getProfile(location))
-			{
-				QMessageBox::critical(QApplication::activeWindow(), tr("Error"), tr("Profile with this address already exists."), QMessageBox::Close);
-			}
-			else if (QMessageBox::question(QApplication::activeWindow(), tr("Question"), tr("Do you want to add this content blocking profile?"), QMessageBox::Yes, QMessageBox::No) == QMessageBox::Yes)
-			{
-				ContentFiltersProfile::ProfileSummary profileSummary;
-				profileSummary.updateUrl = location;
-
-				ContentBlockingProfileDialog dialog(profileSummary, {}, QApplication::activeWindow());
-
-				if (dialog.exec() == QDialog::Accepted)
-				{
-					profileSummary = dialog.getProfile();
-
-					QFile file(dialog.getRulesPath());
-
-					if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-					{
-						QMessageBox::critical(QApplication::activeWindow(), tr("Error"), tr("Failed to create profile file."), QMessageBox::Close);
-
-						return false;
-					}
-
-					profileSummary.name = Utils::createIdentifier(QFileInfo(location.path()).baseName(), ContentFiltersManager::getProfileNames());
-
-					if (!AdblockContentFiltersProfile::create(profileSummary, &file))
-					{
-						QMessageBox::critical(QApplication::activeWindow(), tr("Error"), tr("Failed to create profile file."), QMessageBox::Close);
-					}
-
-					file.close();
-					file.remove();
-				}
-			}
+			AdblockContentFiltersProfile::create(location);
 		}
 
 		return true;
@@ -216,11 +217,6 @@ bool HandlersManager::handleUrl(const QUrl &url)
 	}
 
 	return false;
-}
-
-bool HandlersManager::canHandleUrl(const QUrl &url)
-{
-	return (url.scheme() == QLatin1String("abp") || url.scheme() == QLatin1String("mailto"));
 }
 
 }

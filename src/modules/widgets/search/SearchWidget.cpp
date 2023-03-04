@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -19,17 +19,17 @@
 **************************************************************************/
 
 #include "SearchWidget.h"
+#include "../../../core/Application.h"
 #include "../../../core/SearchEnginesManager.h"
 #include "../../../core/SearchSuggester.h"
 #include "../../../core/SettingsManager.h"
 #include "../../../core/ThemesManager.h"
+#include "../../../ui/Action.h"
 #include "../../../ui/MainWindow.h"
 #include "../../../ui/ToolBarWidget.h"
 #include "../../../ui/Window.h"
 
 #include <QtGui/QPainter>
-#include <QtWidgets/QApplication>
-#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QToolTip>
 
 namespace Otter
@@ -160,8 +160,27 @@ SearchWidget::SearchWidget(Window *window, QWidget *parent) : LineEditWidget(par
 		connect(toolBar, &ToolBarWidget::windowChanged, this, &SearchWidget::setWindow);
 	}
 
-	connect(SearchEnginesManager::getInstance(), &SearchEnginesManager::searchEnginesModified, this, &SearchWidget::storeCurrentSearchEngine);
-	connect(SearchEnginesManager::getInstance(), &SearchEnginesManager::searchEnginesModelModified, this, &SearchWidget::restoreCurrentSearchEngine);
+	connect(SearchEnginesManager::getInstance(), &SearchEnginesManager::searchEnginesModified, this, [&]()
+	{
+		hidePopup();
+
+		disconnect(this, &SearchWidget::textChanged, this, &SearchWidget::setQuery);
+	});
+	connect(SearchEnginesManager::getInstance(), &SearchEnginesManager::searchEnginesModelModified, this, [&]()
+	{
+		if (!m_searchEngine.isEmpty())
+		{
+			setSearchEngine(m_searchEngine);
+
+			m_searchEngine.clear();
+		}
+
+		handleLoadingStateChanged();
+		updateGeometries();
+		setText(m_query);
+
+		connect(this, &SearchWidget::textChanged, this, &SearchWidget::setQuery);
+	});
 	connect(SettingsManager::getInstance(), &SettingsManager::optionChanged, this, &SearchWidget::handleOptionChanged);
 	connect(this, &SearchWidget::textChanged, this, &SearchWidget::setQuery);
 	connect(this, &SearchWidget::textDropped, this, &SearchWidget::sendRequest);
@@ -305,16 +324,19 @@ void SearchWidget::mouseReleaseEvent(QMouseEvent *event)
 		{
 			QMenu menu(this);
 			const QVector<WebWidget::LinkUrl> searchEngines((m_window && m_window->getWebWidget()) ? m_window->getWebWidget()->getSearchEngines() : QVector<WebWidget::LinkUrl>());
+			ActionExecutor::Object executor(Application::getInstance(), Application::getInstance());
 
 			for (int i = 0; i < searchEngines.count(); ++i)
 			{
 				if (!SearchEnginesManager::hasSearchEngine(searchEngines.at(i).url))
 				{
-					menu.addAction(tr("Add %1").arg(searchEngines.at(i).title.isEmpty() ? tr("(untitled)") : searchEngines.at(i).title))->setData(searchEngines.at(i).url);
+					Action *action(new Action(ActionsManager::AddSearchAction, {{QLatin1String("url"), searchEngines.at(i).url}}, executor, this));
+					action->setTextOverride(tr("Add %1").arg(searchEngines.at(i).title.isEmpty() ? tr("(untitled)") : searchEngines.at(i).title));
+					action->setIconOverride(m_window->getIcon());
+
+					menu.addAction(action);
 				}
 			}
-
-			connect(&menu, &QMenu::triggered, this, &SearchWidget::addSearchEngine);
 
 			menu.exec(mapToGlobal(m_addButtonRectangle.bottomLeft()));
 		}
@@ -427,47 +449,6 @@ void SearchWidget::sendRequest(const QString &query)
 	}
 }
 
-void SearchWidget::addSearchEngine(QAction *action)
-{
-	if (action)
-	{
-		SearchEngineFetchJob *job(new SearchEngineFetchJob(action->data().toUrl(), {}, true, this));
-
-		connect(job, &SearchEngineFetchJob::jobFinished, this, [&](bool isSuccess)
-		{
-			if (!isSuccess)
-			{
-				QMessageBox::warning(this, tr("Error"), tr("Failed to add search engine."), QMessageBox::Close);
-			}
-		});
-
-		job->start();
-	}
-}
-
-void SearchWidget::storeCurrentSearchEngine()
-{
-	hidePopup();
-
-	disconnect(this, &SearchWidget::textChanged, this, &SearchWidget::setQuery);
-}
-
-void SearchWidget::restoreCurrentSearchEngine()
-{
-	if (!m_searchEngine.isEmpty())
-	{
-		setSearchEngine(m_searchEngine);
-
-		m_searchEngine.clear();
-	}
-
-	handleLoadingStateChanged();
-	updateGeometries();
-	setText(m_query);
-
-	connect(this, &SearchWidget::textChanged, this, &SearchWidget::setQuery);
-}
-
 void SearchWidget::handleOptionChanged(int identifier, const QVariant &value)
 {
 	switch (identifier)
@@ -478,15 +459,15 @@ void SearchWidget::handleOptionChanged(int identifier, const QVariant &value)
 
 				if (dropAction == QLatin1String("pasteAndGo"))
 				{
-					setDropMode(LineEditWidget::ReplaceAndNotifyDropMode);
+					setDropMode(ReplaceAndNotifyDropMode);
 				}
 				else if (dropAction == QLatin1String("replace"))
 				{
-					setDropMode(LineEditWidget::ReplaceDropMode);
+					setDropMode(ReplaceDropMode);
 				}
 				else
 				{
-					setDropMode(LineEditWidget::PasteDropMode);
+					setDropMode(PasteDropMode);
 				}
 			}
 
@@ -672,7 +653,9 @@ void SearchWidget::setSearchEngine(const QString &searchEngine)
 
 void SearchWidget::setSearchEngine(const QModelIndex &index, bool canSendRequest)
 {
-	if (index.data(Qt::AccessibleDescriptionRole).toString().isEmpty())
+	const QString accessibleDescription(index.data(Qt::AccessibleDescriptionRole).toString());
+
+	if (accessibleDescription.isEmpty())
 	{
 		m_searchEngine = index.data(SearchEnginesManager::IdentifierRole).toString();
 
@@ -712,7 +695,7 @@ void SearchWidget::setSearchEngine(const QModelIndex &index, bool canSendRequest
 	setEnabled(true);
 	hidePopup();
 
-	if (index.data(Qt::AccessibleDescriptionRole).toString() == QLatin1String("configure"))
+	if (accessibleDescription == QLatin1String("configure"))
 	{
 		MainWindow *mainWindow(m_window ? MainWindow::findMainWindow(m_window) : MainWindow::findMainWindow(this));
 

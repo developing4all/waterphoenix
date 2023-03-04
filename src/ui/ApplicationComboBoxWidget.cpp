@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -18,10 +18,10 @@
 **************************************************************************/
 
 #include "ApplicationComboBoxWidget.h"
+#include "../core/ItemModel.h"
 #include "../core/Utils.h"
 
 #include <QtCore/QEvent>
-#include <QtCore/QStandardPaths>
 #include <QtWidgets/QFileDialog>
 
 namespace Otter
@@ -57,7 +57,7 @@ void ApplicationComboBoxWidget::handleIndexChanged(int index)
 
 		setCurrentIndex(m_previousIndex);
 
-		const QString path(QFileDialog::getOpenFileName(this, tr("Select Application"), QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation).value(0)));
+		const QString path(QFileDialog::getOpenFileName(this, tr("Select Application"), Utils::getStandardLocation(QStandardPaths::ApplicationsLocation)));
 
 		if (!path.isEmpty())
 		{
@@ -135,7 +135,7 @@ void ApplicationComboBoxWidget::setMimeType(const QMimeType &mimeType)
 
 			if (applications.at(i).icon.isNull())
 			{
-				model()->setData(model()->index((count() - 1), 0), QColor(Qt::transparent), Qt::DecorationRole);
+				model()->setData(model()->index((count() - 1), 0), ItemModel::createDecoration(), Qt::DecorationRole);
 			}
 		}
 	}

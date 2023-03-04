@@ -167,6 +167,14 @@ QString Speller::language() const
     return d->dict->language();
 }
 
+QStringList Speller::paths() const
+{
+    if (!d->isValid()) {
+        return QStringList();
+    }
+    return d->dict->paths();
+}
+
 void Speller::save()
 {
     if (d->settings) {
@@ -269,17 +277,9 @@ void Speller::setLanguage(const QString &lang)
     d->updateDict();
 }
 
-QMap<QString, QString> Sonnet::Speller::availableDictionaries() const
+QVector<Speller::Dictionary> Sonnet::Speller::availableDictionaries() const
 {
-    Loader *l = Loader::openLoader();
-    QStringList lst = l->languages();
-    QMap<QString, QString> langs;
-
-    Q_FOREACH (const QString &tag, lst) {
-        langs.insert(l->languageNameForCode(tag), tag);
-    }
-
-    return langs;
+    return Loader::openLoader()->dictionaries();
 }
 
 }

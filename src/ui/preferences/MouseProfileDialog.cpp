@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -21,6 +21,7 @@
 #include "MouseProfileDialog.h"
 #include "../ActionComboBoxWidget.h"
 #include "../../core/ActionsManager.h"
+#include "../../core/ItemModel.h"
 #include "../../core/ThemesManager.h"
 
 #include "ui_MouseProfileDialog.h"
@@ -39,25 +40,19 @@ void GestureActionDelegate::setModelData(QWidget *editor, QAbstractItemModel *mo
 {
 	ActionComboBoxWidget *widget(qobject_cast<ActionComboBoxWidget*>(editor));
 
-	if (widget && widget->getActionIdentifier() >= 0)
+	if (!widget || widget->getActionIdentifier() == 0)
 	{
-		const ActionsManager::ActionDefinition definition(ActionsManager::getActionDefinition(widget->getActionIdentifier()));
-		const QString name(widget->getActionIdentifier());
-
-		model->setData(index, definition.getText(true), Qt::DisplayRole);
-		model->setData(index, QStringLiteral("%1 (%2)").arg(definition.getText(true), name), Qt::ToolTipRole);
-		model->setData(index, widget->getActionIdentifier(), MouseProfileDialog::IdentifierRole);
-		model->setData(index, name, MouseProfileDialog::NameRole);
-
-		if (definition.defaultState.icon.isNull())
-		{
-			model->setData(index, QColor(Qt::transparent), Qt::DecorationRole);
-		}
-		else
-		{
-			model->setData(index, definition.defaultState.icon, Qt::DecorationRole);
-		}
+		return;
 	}
+
+	const ActionsManager::ActionDefinition definition(ActionsManager::getActionDefinition(widget->getActionIdentifier()));
+	const QString name(widget->getActionIdentifier());
+
+	model->setData(index, definition.getText(true), Qt::DisplayRole);
+	model->setData(index, QStringLiteral("%1 (%2)").arg(definition.getText(true), name), Qt::ToolTipRole);
+	model->setData(index, ItemModel::createDecoration(definition.defaultState.icon), Qt::DecorationRole);
+	model->setData(index, widget->getActionIdentifier(), MouseProfileDialog::IdentifierRole);
+	model->setData(index, name, MouseProfileDialog::NameRole);
 }
 
 QWidget* GestureActionDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const
@@ -97,20 +92,16 @@ MouseProfileDialog::MouseProfileDialog(const QString &profile, const QHash<QStri
 				const ActionsManager::ActionDefinition action(ActionsManager::getActionDefinition(gestures.at(j).action));
 				const QString name(ActionsManager::getActionName(gestures.at(j).action));
 				const QString parameters(gestures.at(j).parameters.isEmpty() ? QString() : QString::fromLatin1(QJsonDocument(QJsonObject::fromVariantMap(gestures.at(j).parameters)).toJson(QJsonDocument::Compact)));
-				QString steps;
+				QStringList steps;
+				steps.reserve(gestures.at(j).steps.count());
 
 				for (int k = 0; k < gestures.at(j).steps.count(); ++k)
 				{
-					if (k > 0)
-					{
-						steps += QLatin1String(", ");
-					}
-
-					steps += gestures.at(j).steps.at(k).toString();
+					steps.append(gestures.at(j).steps.at(k).toString());
 				}
 
-				QList<QStandardItem*> items({new QStandardItem(action.getText(true)), new QStandardItem(parameters), new QStandardItem(steps)});
-				items[0]->setData(QColor(Qt::transparent), Qt::DecorationRole);
+				QList<QStandardItem*> items({new QStandardItem(action.getText(true)), new QStandardItem(parameters), new QStandardItem(steps.join(QLatin1String(", ")))});
+				items[0]->setData(ItemModel::createDecoration(action.defaultState.icon), Qt::DecorationRole);
 				items[0]->setData(action.identifier, IdentifierRole);
 				items[0]->setData(name, NameRole);
 				items[0]->setData(gestures.at(j).parameters, ParametersRole);
@@ -119,11 +110,6 @@ MouseProfileDialog::MouseProfileDialog(const QString &profile, const QHash<QStri
 				items[1]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
 				items[2]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
 				items[2]->setToolTip(parameters);
-
-				if (!action.defaultState.icon.isNull())
-				{
-					items[0]->setIcon(action.defaultState.icon);
-				}
 
 				item->appendRow(items);
 			}
@@ -205,7 +191,7 @@ void MouseProfileDialog::addGesture()
 	if (item)
 	{
 		QList<QStandardItem*> items({new QStandardItem(tr("Select Action")), new QStandardItem(), new QStandardItem()});
-		items[0]->setData(QColor(Qt::transparent), Qt::DecorationRole);
+		items[0]->setData(ItemModel::createDecoration(), Qt::DecorationRole);
 		items[0]->setData(-1, IdentifierRole);
 		items[0]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren | Qt::ItemIsEditable);
 		items[1]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
@@ -263,23 +249,25 @@ void MouseProfileDialog::updateStepsActions()
 	m_ui->addStepButton->setEnabled(isGesture);
 	m_ui->removeStepButton->setEnabled(isGesture && item);
 
-	if (isGesture && item)
+	if (!isGesture || !item)
 	{
-		QStringList steps;
-		steps.reserve(m_ui->stepsViewWidget->getRowCount());
-
-		for (int i = 0; i < m_ui->stepsViewWidget->getRowCount(); ++i)
-		{
-			const QString step(m_ui->stepsViewWidget->getIndex(i, 0).data().toString());
-
-			if (!step.isEmpty())
-			{
-				steps.append(step);
-			}
-		}
-
-		m_ui->gesturesViewWidget->setData(item->index().sibling(item->index().row(), 2), steps.join(QLatin1String(", ")), Qt::DisplayRole);
+		return;
 	}
+
+	QStringList steps;
+	steps.reserve(m_ui->stepsViewWidget->getRowCount());
+
+	for (int i = 0; i < m_ui->stepsViewWidget->getRowCount(); ++i)
+	{
+		const QString step(m_ui->stepsViewWidget->getIndex(i, 0).data().toString());
+
+		if (!step.isEmpty())
+		{
+			steps.append(step);
+		}
+	}
+
+	m_ui->gesturesViewWidget->setData(item->index().sibling(item->index().row(), 2), steps.join(QLatin1String(", ")), Qt::DisplayRole);
 }
 
 MouseProfile MouseProfileDialog::getProfile() const
@@ -297,38 +285,40 @@ MouseProfile MouseProfileDialog::getProfile() const
 		const QModelIndex contextIndex(m_ui->gesturesViewWidget->getIndex(i, 0));
 		const int gestureAmount(m_ui->gesturesViewWidget->getRowCount(contextIndex));
 
-		if (gestureAmount > 0)
+		if (gestureAmount == 0)
 		{
-			QVector<MouseProfile::Gesture> gestures;
-			gestures.reserve(gestureAmount);
+			continue;
+		}
 
-			for (int j = 0; j < gestureAmount; ++j)
+		QVector<MouseProfile::Gesture> gestures;
+		gestures.reserve(gestureAmount);
+
+		for (int j = 0; j < gestureAmount; ++j)
+		{
+			const QModelIndex actionIndex(m_ui->gesturesViewWidget->getIndex(j, 0, contextIndex));
+			const QStringList steps(actionIndex.sibling(actionIndex.row(), 2).data(Qt::DisplayRole).toString().split(QLatin1String(", "), QString::SkipEmptyParts));
+			const int action(actionIndex.data(IdentifierRole).toInt());
+
+			if (!steps.isEmpty() && action >= 0)
 			{
-				const QModelIndex actionIndex(m_ui->gesturesViewWidget->getIndex(j, 0, contextIndex));
-				const QStringList steps(actionIndex.sibling(actionIndex.row(), 2).data(Qt::DisplayRole).toString().split(QLatin1String(", "), QString::SkipEmptyParts));
-				const int action(actionIndex.data(IdentifierRole).toInt());
+				MouseProfile::Gesture gesture;
+				gesture.action = action;
+				gesture.parameters = actionIndex.data(ParametersRole).toMap();
 
-				if (!steps.isEmpty() && action >= 0)
+				for (int k = 0; k < steps.count(); ++k)
 				{
-					MouseProfile::Gesture gesture;
-					gesture.action = action;
-					gesture.parameters = actionIndex.data(ParametersRole).toMap();
-
-					for (int k = 0; k < steps.count(); ++k)
-					{
-						gesture.steps.append(MouseProfile::Gesture::Step::fromString(steps.at(k)));
-					}
-
-					gestures.append(gesture);
+					gesture.steps.append(MouseProfile::Gesture::Step::fromString(steps.at(k)));
 				}
-			}
 
-			gestures.squeeze();
-
-			if (gestures.count() > 0)
-			{
-				definitions[static_cast<GesturesManager::GesturesContext>(contextIndex.data(ContextRole).toInt())] = gestures;
+				gestures.append(gesture);
 			}
+		}
+
+		gestures.squeeze();
+
+		if (gestures.count() > 0)
+		{
+			definitions[static_cast<GesturesManager::GesturesContext>(contextIndex.data(ContextRole).toInt())] = gestures;
 		}
 	}
 

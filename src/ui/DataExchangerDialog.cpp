@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2016 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,6 +20,8 @@
 
 #include "DataExchangerDialog.h"
 #include "../core/ThemesManager.h"
+#include "../core/Utils.h"
+#include "../modules/exporters/html/HtmlBookmarksExportDataExchanger.h"
 #include "../modules/exporters/xbel/XbelBookmarksExportDataExchanger.h"
 #include "../modules/importers/html/HtmlBookmarksImportDataExchanger.h"
 #include "../modules/importers/opera/OperaBookmarksImportDataExchanger.h"
@@ -44,7 +46,8 @@ DataExchangerDialog::DataExchangerDialog(ExportDataExchanger *exporter, QWidget 
 	m_ui->setupUi(this);
 	m_ui->stackedWidget->setCurrentWidget(m_ui->exportOptionsPage);
 	m_ui->exportPathWidget->setFilters(exporter->getFileFilters());
-	m_ui->exportPathWidget->setPath(exporter->getSuggestedPath());
+	m_ui->exportPathWidget->setPath(exporter->getSuggestedPath(Utils::getStandardLocation(QStandardPaths::HomeLocation)));
+	m_ui->exportPathWidget->setOpenMode(FilePathWidget::NewFileMode);
 
 	exporter->setParent(this);
 
@@ -57,15 +60,24 @@ DataExchangerDialog::DataExchangerDialog(ExportDataExchanger *exporter, QWidget 
 	setObjectName(exporter->metaObject()->className());
 	adjustSize();
 
-	connect(m_ui->exportPathWidget, &FilePathWidget::pathChanged, this, [&](const QString &path)
-	{
-		m_path = path;
-	});
 	connect(m_ui->buttonBox, &QDialogButtonBox::accepted, this, [&]()
 	{
-		setupResults(m_exporter);
+		const QString path(m_ui->exportPathWidget->getPath());
+		const bool isManuallySpecified(m_ui->exportPathWidget->isManuallySpecified());
+		const bool exists(QFile::exists(path));
+		bool canExport(isManuallySpecified || !exists);
 
-		m_exporter->exportData(m_path);
+		if (exists && !isManuallySpecified)
+		{
+			canExport = QMessageBox::warning(this, tr("Warning"), tr("%1 already exists.\nDo you want to replace it?").arg(QFileInfo(path).fileName()), (QMessageBox::Yes | QMessageBox::No), QMessageBox::No) == QMessageBox::Yes;
+		}
+
+		if (canExport)
+		{
+			setupResults(m_exporter);
+
+			m_exporter->exportData(path, true);
+		}
 	});
 	connect(m_ui->buttonBox, &QDialogButtonBox::rejected, this, &DataExchangerDialog::reject);
 }
@@ -79,6 +91,7 @@ DataExchangerDialog::DataExchangerDialog(ImportDataExchanger *importer, QWidget 
 	m_ui->stackedWidget->setCurrentWidget(m_ui->importOptionsPage);
 	m_ui->importPathWidget->setFilters(importer->getFileFilters());
 	m_ui->importPathWidget->setPath(importer->getSuggestedPath());
+	m_ui->importPathWidget->setOpenMode(FilePathWidget::ExistingFileMode);
 
 	importer->setParent(this);
 
@@ -91,15 +104,11 @@ DataExchangerDialog::DataExchangerDialog(ImportDataExchanger *importer, QWidget 
 	setObjectName(importer->metaObject()->className());
 	adjustSize();
 
-	connect(m_ui->importPathWidget, &FilePathWidget::pathChanged, this, [&](const QString &path)
-	{
-		m_path = path;
-	});
 	connect(m_ui->buttonBox, &QDialogButtonBox::accepted, this, [&]()
 	{
 		setupResults(m_importer);
 
-		m_importer->importData(m_path);
+		m_importer->importData(m_ui->importPathWidget->getPath());
 	});
 	connect(m_ui->buttonBox, &QDialogButtonBox::rejected, this, &DataExchangerDialog::reject);
 }
@@ -143,7 +152,11 @@ void DataExchangerDialog::createDialog(const QString &exchangerName, QWidget *pa
 	ExportDataExchanger *exportExchanger(nullptr);
 	ImportDataExchanger *importExchanger(nullptr);
 
-	if (exchangerName == QLatin1String("XbelBookmarksExport"))
+	if (exchangerName == QLatin1String("HtmlBookmarksExport"))
+	{
+		exportExchanger = new HtmlBookmarksExportDataExchanger();
+	}
+	else if (exchangerName == QLatin1String("XbelBookmarksExport"))
 	{
 		exportExchanger = new XbelBookmarksExportDataExchanger();
 	}
@@ -277,10 +290,18 @@ void DataExchangerDialog::setupResults(DataExchanger *exchanger)
 	m_ui->buttonBox->addButton(QDialogButtonBox::Abort)->setEnabled(exchanger->canCancel());
 	m_ui->stackedWidget->setCurrentWidget(m_ui->resultsPage);
 
+	if (exchanger->getExchangeDirection() == DataExchanger::ImportDirection)
+	{
+		connect(exchanger, &DataExchanger::exchangeFinished, this, &DataExchangerDialog::handleImportFinished);
+	}
+	else
+	{
+		connect(exchanger, &DataExchanger::exchangeFinished, this, &DataExchangerDialog::handleExportFinished);
+	}
+
 	connect(m_ui->buttonBox, &QDialogButtonBox::rejected, exchanger, &DataExchanger::cancel);
 	connect(exchanger, &DataExchanger::exchangeStarted, this, &DataExchangerDialog::handleExchangeStarted);
 	connect(exchanger, &DataExchanger::exchangeProgress, this, &DataExchangerDialog::handleExchangeProgress);
-	connect(exchanger, &DataExchanger::exchangeFinished, this, &DataExchangerDialog::handleExportFinished);
 	disconnect(m_ui->buttonBox, &QDialogButtonBox::rejected, this, &DataExchangerDialog::reject);
 }
 

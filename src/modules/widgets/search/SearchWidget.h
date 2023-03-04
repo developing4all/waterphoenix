@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -73,9 +73,6 @@ protected slots:
 	void sendRequest(const QString &query = {});
 	void showSearchEngines();
 	void showSearchSuggestions();
-	void addSearchEngine(QAction *action);
-	void storeCurrentSearchEngine();
-	void restoreCurrentSearchEngine();
 	void handleOptionChanged(int identifier, const QVariant &value);
 	void handleWindowOptionChanged(int identifier, const QVariant &value);
 	void handleWatchedDataChanged(WebWidget::ChangeWatcher watcher);

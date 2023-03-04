@@ -55,6 +55,10 @@ public:
      * Returns language supported by this speller.
      */
     QString language() const;
+    /**
+     * Returns dictionary paths of this speller.
+     */
+    QStringList paths() const;
 
     /**
      * Checks the given word.
@@ -107,6 +111,13 @@ public: // Configuration API
         SkipRunTogether,
         AutoDetectLanguage
     };
+
+    struct Dictionary {
+        QString langCode;
+        QString name;
+        QStringList paths;
+    };
+
     void save();
     void restore();
 
@@ -129,10 +140,10 @@ public: // Configuration API
      static QStringList availableLanguageNames();
 
     /**
-     * Returns a map of all available language descriptions and their
+     * Returns a list of all available language dictionaries
      * codes
      */
-    QMap<QString, QString> availableDictionaries() const;
+    QVector<Dictionary> availableDictionaries() const;
 
     void setDefaultLanguage(const QString &lang);
     QString defaultLanguage() const;

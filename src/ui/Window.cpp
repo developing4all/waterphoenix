@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2016 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -23,6 +23,7 @@
 #include "MainWindow.h"
 #include "WidgetFactory.h"
 #include "../core/Application.h"
+#include "../core/HandlersManager.h"
 #include "../core/HistoryManager.h"
 #include "../core/SettingsManager.h"
 #include "../core/Utils.h"
@@ -81,7 +82,13 @@ Window::Window(const QVariantMap &parameters, ContentsWidget *widget, MainWindow
 	}
 
 	connect(this, &Window::titleChanged, this, &Window::setWindowTitle);
-	connect(mainWindow, &MainWindow::toolBarStateChanged, this, &Window::handleToolBarStateChanged);
+	connect(mainWindow, &MainWindow::toolBarStateChanged, this, [&](int identifier, const Session::MainWindow::ToolBarState &state)
+	{
+		if (m_addressBarWidget && identifier == ToolBarsManager::AddressBar)
+		{
+			m_addressBarWidget->setState(state);
+		}
+	});
 }
 
 void Window::timerEvent(QTimerEvent *event)
@@ -256,34 +263,6 @@ void Window::markAsActive(bool updateLastActivity)
 	emit activated();
 }
 
-void Window::handleSearchRequest(const QString &query, const QString &searchEngine, SessionsManager::OpenHints hints)
-{
-	if ((getType() == QLatin1String("web") && Utils::isUrlEmpty(getUrl())) || (hints == SessionsManager::DefaultOpen || hints == SessionsManager::CurrentTabOpen))
-	{
-		search(query, searchEngine);
-	}
-	else
-	{
-		emit requestedSearch(query, searchEngine, hints);
-	}
-}
-
-void Window::handleGeometryChangeRequest(const QRect &geometry)
-{
-	setWindowFlags(Qt::SubWindow);
-	showNormal();
-	resize(geometry.size() + (this->geometry().size() - m_contentsWidget->size()));
-	move(geometry.topLeft());
-}
-
-void Window::handleToolBarStateChanged(int identifier, const Session::MainWindow::ToolBarState &state)
-{
-	if (m_addressBarWidget && identifier == ToolBarsManager::AddressBar)
-	{
-		m_addressBarWidget->setState(state);
-	}
-}
-
 void Window::updateFocus()
 {
 	QTimer::singleShot(100, this, [&]()
@@ -344,7 +323,7 @@ void Window::setUrl(const QUrl &url, bool isTypedIn)
 {
 	ContentsWidget *newWidget(nullptr);
 
-	if (url.scheme() == QLatin1String("about") || url.scheme() == QLatin1String("view-feed"))
+	if (HandlersManager::canViewUrl(url))
 	{
 		if (m_session.history.index < 0 && !Utils::isUrlEmpty(getUrl()) && SessionsManager::hasUrl(url, true))
 		{
@@ -353,7 +332,7 @@ void Window::setUrl(const QUrl &url, bool isTypedIn)
 			return;
 		}
 
-		newWidget = WidgetFactory::createContentsWidget(((url.scheme() == QLatin1String("view-feed")) ? QLatin1String("feeds") : url.path()), {}, this, this);
+		newWidget = WidgetFactory::createContentsWidget(url, {{QLatin1String("url"), url}}, this, this);
 
 		if (newWidget)
 		{
@@ -497,7 +476,13 @@ void Window::setContentsWidget(ContentsWidget *widget)
 	connect(m_contentsWidget, &ContentsWidget::needsAttention, this, &Window::needsAttention);
 	connect(m_contentsWidget, &ContentsWidget::requestedNewWindow, this, &Window::requestedNewWindow);
 	connect(m_contentsWidget, &ContentsWidget::requestedSearch, this, &Window::requestedSearch);
-	connect(m_contentsWidget, &ContentsWidget::requestedGeometryChange, this, &Window::handleGeometryChangeRequest);
+	connect(m_contentsWidget, &ContentsWidget::requestedGeometryChange, this, [&](const QRect &geometry)
+	{
+		setWindowFlags(Qt::SubWindow);
+		showNormal();
+		resize(geometry.size() + (this->geometry().size() - m_contentsWidget->size()));
+		move(geometry.topLeft());
+	});
 	connect(m_contentsWidget, &ContentsWidget::statusMessageChanged, this, &Window::statusMessageChanged);
 	connect(m_contentsWidget, &ContentsWidget::titleChanged, this, &Window::titleChanged);
 	connect(m_contentsWidget, &ContentsWidget::urlChanged, this, [&](const QUrl &url)

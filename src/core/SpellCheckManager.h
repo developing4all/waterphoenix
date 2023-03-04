@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 #ifndef OTTER_SPELLCHECKMANAGER_H
 #define OTTER_SPELLCHECKMANAGER_H
 
-#include <QtCore/QObject>
+#include "AddonsManager.h"
 
 namespace Otter
 {
@@ -32,13 +32,22 @@ class SpellCheckManager final : public QObject
 public:
 	struct DictionaryInformation final
 	{
-		QString name;
+		QString language;
 		QString title;
+		QStringList paths;
+		bool isLocalDictionary = true;
+
+		bool isValid()
+		{
+			return !language.isEmpty();
+		}
 	};
 
 	static void createInstance();
 	static SpellCheckManager* getInstance();
 	static QString getDefaultDictionary();
+	static QString getDictionariesPath();
+	static DictionaryInformation getDictionary(const QString &language);
 	static QVector<DictionaryInformation> getDictionaries();
 	bool event(QEvent *event) override;
 
@@ -46,11 +55,33 @@ protected:
 	explicit SpellCheckManager(QObject *parent);
 
 	static void updateDefaultDictionary();
+	static void loadDictionaries();
 
 private:
 	static SpellCheckManager *m_instance;
 	static QString m_defaultDictionary;
-	static QMap<QString, QString> m_dictionaries;
+	static QVector<DictionaryInformation> m_dictionaries;
+
+signals:
+	void dictionariesChanged();
+};
+
+class Dictionary final : public QObject, public Addon
+{
+public:
+	explicit Dictionary(const SpellCheckManager::DictionaryInformation &information, QObject *parent);
+
+	QString getLanguage() const;
+	QString getName() const override;
+	QString getTitle() const override;
+	QStringList getPaths() const;
+	AddonType getType() const override;
+	bool isEnabled() const override;
+	bool canRemove() const override;
+	bool remove() override;
+
+private:
+	SpellCheckManager::DictionaryInformation m_information;
 };
 
 }

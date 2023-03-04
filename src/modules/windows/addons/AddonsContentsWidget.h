@@ -1,7 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
-* Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
+* Copyright (C) 2016 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -34,25 +33,22 @@ namespace Ui
 	class AddonsContentsWidget;
 }
 
-class Window;
+class AddonsPage;
 
 class AddonsContentsWidget final : public ContentsWidget
 {
 	Q_OBJECT
 
 public:
-	enum DataRole
+	enum TabIndex
 	{
-		TypeRole = Qt::UserRole,
-		NameRole
+		UserScriptsTab = 0,
+		UserStylesTab = 1,
+		DictionariesTab = 2,
+		TranslationsTab = 3
 	};
 
-	enum ReplaceMode
-	{
-		UnknownMode = 0,
-		ReplaceAllMode,
-		IgnoreAllMode
-	};
+	Q_ENUM(TabIndex)
 
 	explicit AddonsContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent);
 	~AddonsContentsWidget();
@@ -64,31 +60,18 @@ public:
 	QIcon getIcon() const override;
 	ActionsManager::ActionDefinition::State getActionState(int identifier, const QVariantMap &parameters = {}) const override;
 	WebWidget::LoadingState getLoadingState() const override;
-	bool eventFilter(QObject *object, QEvent *event) override;
 
 public slots:
 	void triggerAction(int identifier, const QVariantMap &parameters = {}, ActionsManager::TriggerType trigger = ActionsManager::UnknownTrigger) override;
+	void setUrl(const QUrl &url, bool isTypedIn = true) override;
 
 protected:
 	void changeEvent(QEvent *event) override;
-	QVector<Addon*> getSelectedAddons() const;
-	QIcon getAddonIcon(Addon *addon) const;
-
-protected slots:
-	void populateAddons();
-	void addAddon();
-	void addAddon(Addon *addon);
-	void updateAddon(const QString &name);
-	void openAddon();
-	void reloadAddon();
-	void removeAddons();
-	void save();
-	void showContextMenu(const QPoint &position);
+	void addPage(AddonsPage *page);
 
 private:
-	QStandardItemModel *m_model;
-	QHash<Addon::AddonType, int> m_types;
-	bool m_isLoading;
+	AddonsPage *m_currentPage;
+	int m_tabIndexEnumerator;
 	Ui::AddonsContentsWidget *m_ui;
 };
 

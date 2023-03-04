@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -51,7 +51,15 @@ ToolBarsManager::ToolBarsManager(QObject *parent) : QObject(parent),
 	Q_UNUSED(QT_TRANSLATE_NOOP("actions", "Status Bar"))
 	Q_UNUSED(QT_TRANSLATE_NOOP("actions", "Error Console"))
 
-	connect(SettingsManager::getInstance(), &SettingsManager::optionChanged, this, &ToolBarsManager::handleOptionChanged);
+	connect(SettingsManager::getInstance(), &SettingsManager::optionChanged, this, [&](int identifier, const QVariant &value)
+	{
+		if (identifier == SettingsManager::Interface_LockToolBarsOption)
+		{
+			m_areToolBarsLocked = value.toBool();
+
+			emit toolBarsLockedChanged(m_areToolBarsLocked);
+		}
+	});
 }
 
 void ToolBarsManager::createInstance()
@@ -82,38 +90,40 @@ void ToolBarsManager::timerEvent(QTimerEvent *event)
 
 		for (int i = 0; i < m_definitions.count(); ++i)
 		{
-			if (m_definitions.at(i).isDefault || m_definitions.at(i).wasRemoved)
+			const ToolBarDefinition definition(m_definitions.at(i));
+
+			if (definition.isDefault || definition.wasRemoved)
 			{
 				continue;
 			}
 
-			const QString identifier(getToolBarName(m_definitions.at(i).identifier));
+			const QString identifier(getToolBarName(definition.identifier));
 
 			if (identifier.isEmpty())
 			{
 				continue;
 			}
 
-			QJsonObject definitionObject({{QLatin1String("identifier"), QJsonValue(identifier)}, {QLatin1String("title"), QJsonValue(m_definitions.at(i).title)}, {QLatin1String("normalVisibility"), QJsonValue(visibilityModes.value(m_definitions.at(i).normalVisibility))}, {QLatin1String("fullScreenVisibility"), QJsonValue(visibilityModes.value(m_definitions.at(i).fullScreenVisibility))}});
+			QJsonObject definitionObject({{QLatin1String("identifier"), QJsonValue(identifier)}, {QLatin1String("title"), QJsonValue(definition.title)}, {QLatin1String("normalVisibility"), QJsonValue(visibilityModes.value(definition.normalVisibility))}, {QLatin1String("fullScreenVisibility"), QJsonValue(visibilityModes.value(definition.fullScreenVisibility))}});
 			QString location;
 			QString buttonStyle;
 
-			switch (m_definitions.at(i).type)
+			switch (definition.type)
 			{
 				case BookmarksBarType:
-					definitionObject.insert(QLatin1String("bookmarksPath"), QJsonValue(m_definitions.at(i).bookmarksPath));
+					definitionObject.insert(QLatin1String("bookmarksPath"), QJsonValue(definition.bookmarksPath));
 
 					break;
 				case SideBarType:
-					definitionObject.insert(QLatin1String("currentPanel"), QJsonValue(m_definitions.at(i).currentPanel));
-					definitionObject.insert(QLatin1String("panels"), QJsonArray::fromStringList(m_definitions.at(i).panels));
+					definitionObject.insert(QLatin1String("currentPanel"), QJsonValue(definition.currentPanel));
+					definitionObject.insert(QLatin1String("panels"), QJsonArray::fromStringList(definition.panels));
 
 					break;
 				default:
 					break;
 			}
 
-			switch (m_definitions.at(i).location)
+			switch (definition.location)
 			{
 				case Qt::LeftToolBarArea:
 					location = QLatin1String("left");
@@ -140,7 +150,7 @@ void ToolBarsManager::timerEvent(QTimerEvent *event)
 				definitionObject.insert(QLatin1String("location"), location);
 			}
 
-			switch (m_definitions.at(i).buttonStyle)
+			switch (definition.buttonStyle)
 			{
 				case Qt::ToolButtonTextOnly:
 					buttonStyle = QLatin1String("textOnly");
@@ -166,35 +176,35 @@ void ToolBarsManager::timerEvent(QTimerEvent *event)
 
 			definitionObject.insert(QLatin1String("buttonStyle"), buttonStyle);
 
-			if (m_definitions.at(i).iconSize > 0)
+			if (definition.iconSize > 0)
 			{
-				definitionObject.insert(QLatin1String("iconSize"), QJsonValue(m_definitions.at(i).iconSize));
+				definitionObject.insert(QLatin1String("iconSize"), QJsonValue(definition.iconSize));
 			}
 
-			if (m_definitions.at(i).maximumButtonSize > 0)
+			if (definition.maximumButtonSize > 0)
 			{
-				definitionObject.insert(QLatin1String("maximumButtonSize"), QJsonValue(m_definitions.at(i).maximumButtonSize));
+				definitionObject.insert(QLatin1String("maximumButtonSize"), QJsonValue(definition.maximumButtonSize));
 			}
 
-			if (m_definitions.at(i).panelSize > 0)
+			if (definition.panelSize > 0)
 			{
-				definitionObject.insert(QLatin1String("panelSize"), QJsonValue(m_definitions.at(i).panelSize));
+				definitionObject.insert(QLatin1String("panelSize"), QJsonValue(definition.panelSize));
 			}
 
-			definitionObject.insert(QLatin1String("row"), QJsonValue(m_definitions.at(i).row));
+			definitionObject.insert(QLatin1String("row"), QJsonValue(definition.row));
 
-			if (m_definitions.at(i).hasToggle)
+			if (definition.hasToggle)
 			{
 				definitionObject.insert(QLatin1String("hasToggle"), QJsonValue(true));
 			}
 
-			if (!m_definitions.at(i).entries.isEmpty())
+			if (!definition.entries.isEmpty())
 			{
 				QJsonArray actionsArray;
 
-				for (int j = 0; j < m_definitions.at(i).entries.count(); ++j)
+				for (int j = 0; j < definition.entries.count(); ++j)
 				{
-					actionsArray.append(encodeEntry(m_definitions.at(i).entries.at(j)));
+					actionsArray.append(encodeEntry(definition.entries.at(j)));
 				}
 
 				definitionObject.insert(QLatin1String("actions"), actionsArray);
@@ -242,21 +252,10 @@ void ToolBarsManager::ensureInitialized()
 			{
 				int identifier(getToolBarIdentifier(iterator.key()));
 
-//TODO Drop after migration
-				if (identifier < 0 && iterator.key() == QLatin1String("NavigationBar") && !localDefinitions.contains(QLatin1String("AddressBar")))
-				{
-					identifier = AddressBar;
-				}
-
 				if (identifier >= 0)
 				{
 					ToolBarDefinition definition(iterator.value());
 					definition.identifier = identifier;
-
-					if (m_definitions[identifier] == definition)
-					{
-						continue;
-					}
 
 					m_definitions[identifier] = definition;
 				}
@@ -281,11 +280,12 @@ void ToolBarsManager::ensureInitialized()
 		}
 	}
 
+	const QVector<ToolBarDefinition::Entry> menuBarEntries(m_definitions[MenuBar].entries);
 	bool hasMenuBar(false);
 
-	for (int i = 0; i < m_definitions[MenuBar].entries.count(); ++i)
+	for (int i = 0; i < menuBarEntries.count(); ++i)
 	{
-		if (m_definitions[MenuBar].entries.at(i).action == QLatin1String("MenuBarWidget"))
+		if (menuBarEntries.at(i).action == QLatin1String("MenuBarWidget"))
 		{
 			hasMenuBar = true;
 
@@ -301,11 +301,12 @@ void ToolBarsManager::ensureInitialized()
 		m_definitions[MenuBar].entries.prepend(definition);
 	}
 
+	const QVector<ToolBarDefinition::Entry> tabBarEntries(m_definitions[TabBar].entries);
 	bool hasTabBar(false);
 
-	for (int i = 0; i < m_definitions[TabBar].entries.count(); ++i)
+	for (int i = 0; i < tabBarEntries.count(); ++i)
 	{
-		if (m_definitions[TabBar].entries.at(i).action == QLatin1String("TabBarWidget"))
+		if (tabBarEntries.at(i).action == QLatin1String("TabBarWidget"))
 		{
 			hasTabBar = true;
 
@@ -377,9 +378,7 @@ void ToolBarsManager::removeToolBar(int identifier)
 {
 	if (identifier >= 0 && identifier < m_definitions.count() && identifier >= OtherToolBar && QMessageBox::question(nullptr, tr("Remove Toolbar"), tr("Do you really want to remove this toolbar?"), QMessageBox::Yes, QMessageBox::No) == QMessageBox::Yes)
 	{
-		m_definitions[identifier].wasRemoved = true;
-		m_definitions[identifier].title.clear();
-		m_definitions[identifier].entries.clear();
+		m_definitions[identifier].markAsRemoved();
 
 		m_instance->scheduleSave();
 
@@ -421,16 +420,6 @@ void ToolBarsManager::resetToolBars()
 	m_instance->scheduleSave();
 }
 
-void ToolBarsManager::handleOptionChanged(int identifier, const QVariant &value)
-{
-	if (identifier == SettingsManager::Interface_LockToolBarsOption)
-	{
-		m_areToolBarsLocked = value.toBool();
-
-		emit toolBarsLockedChanged(m_areToolBarsLocked);
-	}
-}
-
 void ToolBarsManager::setToolBar(ToolBarsManager::ToolBarDefinition definition)
 {
 	ensureInitialized();
@@ -461,19 +450,16 @@ void ToolBarsManager::setToolBar(ToolBarsManager::ToolBarDefinition definition)
 		m_identifiers[identifier] = Utils::createIdentifier(QLatin1String("CustomBar"), toolBars, false);
 
 		definition.identifier = identifier;
+		definition.location = Qt::TopToolBarArea;
 
 		m_definitions.append(definition);
-
-		if (m_definitions[identifier].location == Qt::NoToolBarArea)
-		{
-			m_definitions[identifier].location = Qt::TopToolBarArea;
-		}
 
 		emit m_instance->toolBarAdded(identifier);
 	}
 	else
 	{
-		const bool wasMoved(definition.location != m_definitions[identifier].location || definition.row != m_definitions[identifier].row);
+		const ToolBarsManager::ToolBarDefinition oldDefinition(m_definitions[identifier]);
+		const bool wasMoved(definition.location != oldDefinition.location || definition.row != oldDefinition.row);
 
 		m_definitions[identifier] = definition;
 

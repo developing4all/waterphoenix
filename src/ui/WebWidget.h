@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piktas Zuikis <piktas.zuikis@inbox.lt>
@@ -98,7 +98,7 @@ public:
 	{
 		DeniedPermission = 0,
 		GrantedPermission,
-		KeepAskingPermission
+		KeepAskingForPermission
 	};
 
 	Q_DECLARE_FLAGS(PermissionPolicies, PermissionPolicy)
@@ -152,7 +152,7 @@ public:
 
 	Q_ENUM(ToolTipEntry)
 
-	struct HitTestResult
+	struct HitTestResult final
 	{
 		enum HitTestFlag
 		{
@@ -295,6 +295,7 @@ protected:
 	QString getSavePath(const QVector<SaveFormat> &allowedFormats, SaveFormat *selectedFormat) const;
 	QString getOpenActionText(SessionsManager::OpenHints hints) const;
 	static QString getFastForwardScript(bool isSelectingTheBestLink);
+	QUrl extractUrl(const QVariantMap &parameters) const;
 	HitTestResult getCurrentHitTestResult() const;
 	PermissionPolicy getPermission(FeaturePermission feature, const QUrl &url) const;
 	static SessionsManager::OpenHints mapOpenActionToOpenHints(int identifier);

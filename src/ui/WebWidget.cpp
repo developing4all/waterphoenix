@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piktas Zuikis <piktas.zuikis@inbox.lt>
@@ -544,7 +544,7 @@ void WebWidget::showContextMenu(const QPoint &position)
 		return;
 	}
 
-	ActionExecutor::Object executor;
+	ActionExecutor::Object executor(this, this);
 
 	if (m_parent)
 	{
@@ -556,10 +556,6 @@ void WebWidget::showContextMenu(const QPoint &position)
 		{
 			executor = ActionExecutor::Object(m_parent, m_parent);
 		}
-	}
-	else
-	{
-		executor = ActionExecutor::Object(this, this);
 	}
 
 	Menu menu(this);
@@ -619,7 +615,7 @@ void WebWidget::setStatusMessageOverride(const QString &message)
 
 void WebWidget::setPermission(FeaturePermission feature, const QUrl &url, PermissionPolicies policies)
 {
-	if (policies.testFlag(KeepAskingPermission))
+	if (policies.testFlag(KeepAskingForPermission))
 	{
 		return;
 	}
@@ -829,7 +825,7 @@ QString WebWidget::suggestSaveFileName(const QString &extension) const
 		fileName = QLatin1String("file") + extension;
 	}
 
-	if (!fileName.contains(QLatin1Char('.')) && !extension.isEmpty())
+	if (!extension.isEmpty() && !fileName.contains(QLatin1Char('.')))
 	{
 		fileName.append(extension);
 	}
@@ -1010,6 +1006,16 @@ QVariant WebWidget::getPageInformation(PageInformation key) const
 	return {};
 }
 
+QUrl WebWidget::extractUrl(const QVariantMap &parameters) const
+{
+	if (parameters.contains(QLatin1String("url")))
+	{
+		return parameters[QLatin1String("url")].toUrl();
+	}
+
+	return m_hitResult.linkUrl;
+}
+
 QUrl WebWidget::getRequestedUrl() const
 {
 	return ((getUrl().isEmpty() || getLoadingState() == OngoingLoadingState) ? m_requestedUrl : getUrl());
@@ -1017,9 +1023,10 @@ QUrl WebWidget::getRequestedUrl() const
 
 QPixmap WebWidget::createThumbnail(const QSize &size)
 {
-	Q_UNUSED(size)
+	QPixmap pixmap(size);
+	pixmap.fill(Qt::white);
 
-	return {};
+	return pixmap;
 }
 
 QPoint WebWidget::getClickPosition() const
@@ -1064,27 +1071,37 @@ ActionsManager::ActionDefinition::State WebWidget::getActionState(int identifier
 		case ActionsManager::OpenLinkInNewPrivateWindowAction:
 		case ActionsManager::OpenLinkInNewPrivateWindowBackgroundAction:
 		case ActionsManager::CopyLinkToClipboardAction:
-		case ActionsManager::ShowLinkAsQrCodeAction:
+		case ActionsManager::BookmarkLinkAction:
+		case ActionsManager::ShowLinkAsQuickResponseCodeAction:
 		case ActionsManager::SaveLinkToDiskAction:
 		case ActionsManager::SaveLinkToDownloadsAction:
-			state.isEnabled = m_hitResult.linkUrl.isValid();
-
-			if (identifier == ActionsManager::OpenLinkAction && parameters.contains(QLatin1String("hints")))
 			{
-				const SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints(parameters));
+				const QUrl url(extractUrl(parameters));
 
-				state.text = getOpenActionText(hints);
+				state.isEnabled = url.isValid();
 
-				if (hints != SessionsManager::DefaultOpen)
+				switch (identifier)
 				{
-					state.icon = {};
+					case ActionsManager::BookmarkLinkAction:
+						state.text = (BookmarksManager::hasBookmark(url) ? QCoreApplication::translate("actions", "Edit Link Bookmark…") : QCoreApplication::translate("actions", "Bookmark Link…"));
+
+						break;
+					case ActionsManager::OpenLinkAction:
+						if (parameters.contains(QLatin1String("hints")))
+						{
+							const SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints(parameters));
+
+							state.text = getOpenActionText(hints);
+
+							if (hints != SessionsManager::DefaultOpen)
+							{
+								state.icon = {};
+							}
+						}
+
+						break;
 				}
 			}
-
-			break;
-		case ActionsManager::BookmarkLinkAction:
-			state.text = (BookmarksManager::hasBookmark(m_hitResult.linkUrl) ? QCoreApplication::translate("actions", "Edit Link Bookmark…") : QCoreApplication::translate("actions", "Bookmark Link…"));
-			state.isEnabled = m_hitResult.linkUrl.isValid();
 
 			break;
 		case ActionsManager::OpenFrameAction:
@@ -1272,7 +1289,7 @@ ActionsManager::ActionDefinition::State WebWidget::getActionState(int identifier
 				if (parameters.value(QLatin1String("clearGlobalHistory"), false).toBool())
 				{
 					state.text = QCoreApplication::translate("actions", "Purge History Entry");
-					state.isEnabled = (m_backend->getCapabilityScopes(WebBackend::HistoryMetadataCapability).testFlag(WebBackend::TabScope) && getGlobalHistoryEntryIdentifier(index) > 0);
+					state.isEnabled = (m_backend->getCapabilityScopes(WebBackend::HistoryMetaDataCapability).testFlag(WebBackend::TabScope) && getGlobalHistoryEntryIdentifier(index) > 0);
 				}
 				else if (index >= 0 && index < getHistory().entries.count())
 				{
@@ -1396,7 +1413,7 @@ ActionsManager::ActionDefinition::State WebWidget::getActionState(int identifier
 
 					for (int i = 0; i < dictionaries.count(); ++i)
 					{
-						if (dictionaries.at(i).name == dictionary)
+						if (dictionaries.at(i).language == dictionary)
 						{
 							state.text = dictionaries.at(i).title;
 
@@ -1635,7 +1652,7 @@ WebWidget::PermissionPolicy WebWidget::getPermission(FeaturePermission feature, 
 				}
 			}
 
-			return KeepAskingPermission;
+			return KeepAskingForPermission;
 		case PlaybackAudioFeature:
 			value = getOption(SettingsManager::Permissions_EnableMediaPlaybackAudioOption, url).toString();
 
@@ -1654,7 +1671,7 @@ WebWidget::PermissionPolicy WebWidget::getPermission(FeaturePermission feature, 
 		return DeniedPermission;
 	}
 
-	return KeepAskingPermission;
+	return KeepAskingForPermission;
 }
 
 SessionsManager::OpenHints WebWidget::mapOpenActionToOpenHints(int identifier)

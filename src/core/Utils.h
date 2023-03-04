@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 #include <QtCore/QMetaEnum>
 #include <QtCore/QMimeData>
 #include <QtCore/QMimeType>
+#include <QtCore/QStandardPaths>
 #include <QtCore/QUrl>
 #include <QtGui/QIcon>
 
@@ -121,10 +122,13 @@ QString formatUnit(qint64 value, bool isSpeed = false, int precision = 1, bool a
 QString formatFileTypes(const QStringList &filters = {});
 QString normalizeObjectName(QString name, const QString &suffix = {});
 QString normalizePath(const QString &path);
+QString getStandardLocation(QStandardPaths::StandardLocation type);
 QUrl expandUrl(const QUrl &url);
 QUrl normalizeUrl(QUrl url);
+QColor createColor(const QUrl &url);
 QLocale createLocale(const QString &name);
 QPixmap loadPixmapFromDataUri(const QString &data);
+QFont multiplyFontSize(QFont font, qreal multiplier);
 SaveInformation getSavePath(const QString &fileName, const QString &directory = {}, QStringList filters = {}, bool forceAsk = false);
 QStringList getOpenPaths(const QStringList &fileNames = {}, QStringList filters = {}, bool selectMultiple = false);
 QVector<QUrl> extractUrls(const QMimeData *mimeData);

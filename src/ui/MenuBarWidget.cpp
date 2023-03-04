@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -228,7 +228,7 @@ void MenuBarWidget::updateGeometries()
 		}
 	}
 
-	if (m_rightToolBar && width() > (size + (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0) + (m_rightToolBar ? m_rightToolBar->sizeHint().width() : 0)))
+	if (m_rightToolBar && width() > (size + (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0) + m_rightToolBar->sizeHint().width()))
 	{
 		const int offset(size - (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0));
 		ToolBarWidget *toolBar(qobject_cast<ToolBarWidget*>(m_rightToolBar));

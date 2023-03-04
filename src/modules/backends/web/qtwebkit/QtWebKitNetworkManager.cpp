@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -64,11 +64,16 @@ QtWebKitNetworkManager::QtWebKitNetworkManager(bool isPrivate, QtWebKitCookieJar
 	m_bytesReceivedDifference(0),
 	m_loadingSpeedTimer(0),
 	m_areImagesEnabled(true),
-	m_canSendReferrer(true)
+	m_canSendReferrer(true),
+	m_isWorkingOffline(false)
 {
 	NetworkManagerFactory::initialize();
 
-	if (!isPrivate)
+	if (isPrivate)
+	{
+		m_cookieJar = new CookieJar({}, this);
+	}
+	else
 	{
 		m_cookieJar = NetworkManagerFactory::getCookieJar();
 		m_cookieJar->setParent(QCoreApplication::instance());
@@ -78,10 +83,6 @@ QtWebKitNetworkManager::QtWebKitNetworkManager(bool isPrivate, QtWebKitCookieJar
 		setCache(cache);
 
 		cache->setParent(QCoreApplication::instance());
-	}
-	else
-	{
-		m_cookieJar = new CookieJar({}, this);
 	}
 
 	if (m_cookieJarProxy)
@@ -113,6 +114,10 @@ void QtWebKitNetworkManager::timerEvent(QTimerEvent *event)
 	if (event->timerId() == m_loadingSpeedTimer)
 	{
 		updateLoadingSpeed();
+	}
+	else
+	{
+		QNetworkAccessManager::timerEvent(event);
 	}
 }
 
@@ -172,7 +177,12 @@ void QtWebKitNetworkManager::handleDownloadProgress(qint64 bytesReceived, qint64
 {
 	QNetworkReply *reply(qobject_cast<QNetworkReply*>(sender()));
 
-	if (reply && reply == m_baseReply)
+	if (!reply || !m_replies.contains(reply))
+	{
+		return;
+	}
+
+	if (reply == m_baseReply)
 	{
 		if (bytesTotal == 0 || m_baseReply->hasRawHeader(QByteArrayLiteral("Location")))
 		{
@@ -186,11 +196,6 @@ void QtWebKitNetworkManager::handleDownloadProgress(qint64 bytesReceived, qint64
 		}
 	}
 
-	if (!reply || !m_replies.contains(reply))
-	{
-		return;
-	}
-
 	const QUrl url(reply->url());
 
 	if (url.isValid() && url.scheme() != QLatin1String("data"))
@@ -198,25 +203,23 @@ void QtWebKitNetworkManager::handleDownloadProgress(qint64 bytesReceived, qint64
 		setPageInformation(WebWidget::LoadingMessageInformation, tr("Receiving data from %1…").arg(Utils::extractHost(reply->url())));
 	}
 
-	const qint64 difference(bytesReceived - m_replies[reply].first);
+	const qint64 difference(bytesReceived - m_replies[reply].bytesReceived);
 
-	m_replies[reply].first = bytesReceived;
+	m_replies[reply].bytesReceived = bytesReceived;
 
-	if (!m_replies[reply].second && bytesTotal > 0)
+	if (!m_replies[reply].hasTotalBytes && bytesTotal > 0)
 	{
-		m_replies[reply].second = true;
+		m_replies[reply].hasTotalBytes = true;
 
 		m_pageInformation[WebWidget::TotalBytesTotalInformation] = (m_pageInformation[WebWidget::TotalBytesTotalInformation].toLongLong() + bytesTotal);
 	}
 
-	if (difference <= 0)
+	if (difference > 0)
 	{
-		return;
+		m_bytesReceivedDifference += difference;
+
+		setPageInformation(WebWidget::TotalBytesReceivedInformation, (m_pageInformation[WebWidget::TotalBytesReceivedInformation].toLongLong() + difference));
 	}
-
-	m_bytesReceivedDifference += difference;
-
-	setPageInformation(WebWidget::TotalBytesReceivedInformation, (m_pageInformation[WebWidget::TotalBytesReceivedInformation].toLongLong() + difference));
 }
 
 void QtWebKitNetworkManager::handleRequestFinished(QNetworkReply *reply)
@@ -277,22 +280,24 @@ void QtWebKitNetworkManager::handleTransferFinished()
 {
 	QNetworkReply *reply(qobject_cast<QNetworkReply*>(sender()));
 
-	if (reply)
+	if (!reply)
 	{
-		m_transfers.removeAll(reply);
+		return;
+	}
 
-		reply->deleteLater();
+	m_transfers.removeAll(reply);
 
-		if (m_transfers.isEmpty())
+	reply->deleteLater();
+
+	if (m_transfers.isEmpty())
+	{
+		if (m_widget)
 		{
-			if (m_widget)
-			{
-				setParent(m_widget);
-			}
-			else
-			{
-				deleteLater();
-			}
+			setParent(m_widget);
+		}
+		else
+		{
+			deleteLater();
 		}
 	}
 }
@@ -350,15 +355,15 @@ void QtWebKitNetworkManager::handleProxyAuthenticationRequired(const QNetworkPro
 
 void QtWebKitNetworkManager::handleSslErrors(QNetworkReply *reply, const QList<QSslError> &errors)
 {
-	if (!m_widget)
-	{
-		return;
-	}
-
 	if (errors.isEmpty())
 	{
 		reply->ignoreSslErrors(errors);
 
+		return;
+	}
+
+	if (!m_widget)
+	{
 		return;
 	}
 
@@ -468,6 +473,7 @@ void QtWebKitNetworkManager::updateOptions(const QUrl &url)
 
 	m_areImagesEnabled = (getOption(SettingsManager::Permissions_EnableImagesOption, url).toString() != QLatin1String("disabled"));
 	m_canSendReferrer = getOption(SettingsManager::Network_EnableReferrerOption, url).toBool();
+	m_isWorkingOffline = getOption(SettingsManager::Network_WorkOfflineOption, url).toBool();
 
 	const QString generalCookiesPolicyValue(getOption(SettingsManager::Network_CookiesPolicyOption, url).toString());
 	CookieJar::CookiesPolicy generalCookiesPolicy(CookieJar::AcceptAllCookies);
@@ -580,10 +586,10 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 	{
 		if (QString::fromLatin1(request.rawHeader(QByteArrayLiteral("X-Otter-Token"))) == m_widget->getMessageToken())
 		{
-			const QString type(QString::fromLatin1(request.rawHeader(QByteArrayLiteral("X-Otter-Type"))));
+			const QString action(QString::fromLatin1(request.rawHeader(QByteArrayLiteral("X-Otter-Action"))));
 			const QJsonObject payloadObject(QJsonDocument::fromJson(QByteArray::fromBase64(request.rawHeader(QByteArrayLiteral("X-Otter-Data")))).object());
 
-			if (type == QLatin1String("add-ssl-error-exception"))
+			if (action == QLatin1String("add-ssl-error-exception"))
 			{
 				const QString digest(payloadObject.value(QLatin1String("digest")).toString());
 				const QUrl url(m_widget->getUrl());
@@ -596,7 +602,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 					SettingsManager::setOption(SettingsManager::Security_IgnoreSslErrorsOption, exceptions, Utils::extractHost(url));
 				}
 			}
-			else if (type == QLatin1String("add-content-blocking-exception"))
+			else if (action == QLatin1String("add-content-blocking-exception"))
 			{
 				const QUrl url(m_widget->getUrl());
 				const QString host(Utils::extractHost(url));
@@ -614,7 +620,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 					m_widget->setOption(SettingsManager::ContentBlocking_IgnoreHostsOption, ignoredHosts);
 				}
 			}
-			else if (type == QLatin1String("save-password"))
+			else if (action == QLatin1String("save-password"))
 			{
 				const QJsonArray fieldsArray(payloadObject.value(QLatin1String("fields")).toArray());
 				PasswordsManager::PasswordInformation password;
@@ -701,7 +707,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 		mutableRequest.setHeader(QNetworkRequest::ContentTypeHeader, QLatin1String("application/x-www-form-urlencoded"));
 	}
 
-	if (NetworkManagerFactory::isWorkingOffline())
+	if (m_isWorkingOffline)
 	{
 		mutableRequest.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysCache);
 	}
@@ -787,7 +793,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 		}
 	}
 
-	m_replies[reply] = {0, false};
+	m_replies[reply] = {};
 
 	connect(reply, &QNetworkReply::downloadProgress, this, &QtWebKitNetworkManager::handleDownloadProgress);
 

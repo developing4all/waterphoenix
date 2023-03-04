@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ class Window;
 class ConfigurationOptionDelegate final : public ItemDelegate
 {
 public:
-	explicit ConfigurationOptionDelegate(QObject *parent);
+	explicit ConfigurationOptionDelegate(bool shouldMarkAsModified, QObject *parent);
 
 	void setEditorData(QWidget *editor, const QModelIndex &index) const override;
 	void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override;
@@ -46,6 +46,9 @@ public:
 
 protected:
 	void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override;
+
+private:
+	bool m_shouldMarkAsModified;
 };
 
 class ConfigurationContentsWidget final : public ContentsWidget
@@ -75,16 +78,15 @@ public slots:
 	void triggerAction(int identifier, const QVariantMap &parameters = {}, ActionsManager::TriggerType trigger = ActionsManager::UnknownTrigger) override;
 
 protected:
-	void closeEvent(QCloseEvent *event) override;
 	void changeEvent(QEvent *event) override;
 	void saveAll(bool reset);
+	bool canClose() override;
 
 protected slots:
 	void resetOption();
 	void saveOption();
 	void handleOptionChanged(int identifier, const QVariant &value);
-	void handleCurrentIndexChanged(const QModelIndex &currentIndex, const QModelIndex &previousIndex);
-	void handleIndexClicked(const QModelIndex &index);
+	void handleHostOptionChanged(int identifier);
 	void showContextMenu(const QPoint &position);
 	void updateActions();
 

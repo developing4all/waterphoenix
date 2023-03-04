@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #include "QtWebKitWebWidget.h"
 #include "QtWebKitNetworkManager.h"
 #include "QtWebKitPage.h"
-#include "QtWebKitPluginWidget.h"
+#include "QtWebKitPluginFactory.h"
 #include "QtWebKitWebBackend.h"
 #include "../../../../core/Application.h"
 #include "../../../../core/BookmarksManager.h"
@@ -250,6 +250,7 @@ void QtWebKitWebWidget::focusInEvent(QFocusEvent *event)
 void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &parameters, ActionsManager::TriggerType trigger)
 {
 	const HitTestResult hitResult(getCurrentHitTestResult());
+	const QUrl url(extractUrl(parameters));
 
 	switch (identifier)
 	{
@@ -353,33 +354,33 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 
 					setClickPosition({});
 				}
-				else if (hitResult.linkUrl.isValid())
+				else if (url.isValid())
 				{
-					openUrl(hitResult.linkUrl, hints);
+					openUrl(url, hints);
 				}
 			}
 
 			break;
 		case ActionsManager::CopyLinkToClipboardAction:
-			if (!hitResult.linkUrl.isEmpty())
+			if (!url.isEmpty())
 			{
-				Application::clipboard()->setText(hitResult.linkUrl.toString(QUrl::EncodeReserved | QUrl::EncodeSpaces));
+				Application::clipboard()->setText(url.toString(QUrl::EncodeReserved | QUrl::EncodeSpaces));
 			}
 
 			break;
 		case ActionsManager::BookmarkLinkAction:
-			if (hitResult.linkUrl.isValid())
+			if (url.isValid())
 			{
 				const QString title(hitResult.title);
 
-				Application::triggerAction(ActionsManager::BookmarkPageAction, {{QLatin1String("url"), hitResult.linkUrl}, {QLatin1String("title"), (title.isEmpty() ? m_page->mainFrame()->hitTestContent(hitResult.hitPosition).element().toPlainText() : title)}}, parentWidget(), trigger);
+				Application::triggerAction(ActionsManager::BookmarkPageAction, {{QLatin1String("url"), url}, {QLatin1String("title"), (title.isEmpty() ? m_page->mainFrame()->hitTestContent(hitResult.hitPosition).element().toPlainText() : title)}}, parentWidget(), trigger);
 			}
 
 			break;
 		case ActionsManager::SaveLinkToDiskAction:
-			if (hitResult.linkUrl.isValid())
+			if (url.isValid())
 			{
-				handleDownloadRequested(QNetworkRequest(hitResult.linkUrl));
+				handleDownloadRequested(QNetworkRequest(url));
 			}
 			else
 			{
@@ -388,7 +389,7 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 
 			break;
 		case ActionsManager::SaveLinkToDownloadsAction:
-			TransfersManager::addTransfer(TransfersManager::startTransfer(hitResult.linkUrl.toString(), {}, (Transfer::CanNotifyOption | Transfer::CanAskForPathOption | Transfer::IsQuickTransferOption | (isPrivate() ? Transfer::IsPrivateOption : Transfer::NoOption))));
+			TransfersManager::addTransfer(TransfersManager::startTransfer(url.toString(), {}, (Transfer::CanNotifyOption | Transfer::CanAskForPathOption | Transfer::IsQuickTransferOption | (isPrivate() ? Transfer::IsPrivateOption : Transfer::NoOption))));
 
 			break;
 		case ActionsManager::OpenFrameAction:
@@ -513,21 +514,20 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 
 					element.setAttribute(QLatin1String("src"), src);
 
-					m_page->mainFrame()->documentElement().evaluateJavaScript(QStringLiteral("var images = document.querySelectorAll('img[src=\"%1\"]'); for (var i = 0; i < images.length; ++i) { images[i].src = ''; images[i].src = '%1'; }").arg(src));
+					m_page->mainFrame()->documentElement().evaluateJavaScript(QStringLiteral("let images = document.querySelectorAll('img[src=\"%1\"]'); for (let i = 0; i < images.length; ++i) { images[i].src = ''; images[i].src = '%1'; }").arg(src));
 				}
 			}
 
 			break;
 		case ActionsManager::ImagePropertiesAction:
 			{
-				QVariantMap properties({{QLatin1String("alternativeText"), hitResult.alternateText}, {QLatin1String("longDescription"), hitResult.longDescription}});
+				QMap<ImagePropertiesDialog::ImageProperty, QVariant> properties({{ImagePropertiesDialog::AlternativeTextProperty, hitResult.alternateText}, {ImagePropertiesDialog::LongDescriptionProperty, hitResult.longDescription}});
 				const QPixmap pixmap(m_page->mainFrame()->hitTestContent(hitResult.hitPosition).pixmap());
 
 				if (!pixmap.isNull())
 				{
-					properties[QLatin1String("width")] = pixmap.width();
-					properties[QLatin1String("height")] = pixmap.height();
-					properties[QLatin1String("depth")] = pixmap.depth();
+					properties[ImagePropertiesDialog::SizeProperty] = pixmap.size();
+					properties[ImagePropertiesDialog::DepthProperty] = pixmap.depth();
 				}
 
 				ImagePropertiesDialog *imagePropertiesDialog(new ImagePropertiesDialog(hitResult.imageUrl, properties, (m_networkManager->cache() ? m_networkManager->cache()->data(hitResult.imageUrl) : nullptr), this));
@@ -772,6 +772,10 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 				m_page->triggerAction(QWebPage::Paste);
 
 				Application::clipboard()->setMimeData(mimeData);
+			}
+			else if (parameters.value(QLatin1String("mode")) == QLatin1String("plainText"))
+			{
+				m_page->triggerAction(QWebPage::PasteAndMatchStyle);
 			}
 			else
 			{
@@ -1286,13 +1290,15 @@ void QtWebKitWebWidget::handleDownloadRequested(const QNetworkRequest &request)
 
 				QFile file(path);
 
-				if (!file.open(QIODevice::WriteOnly))
+				if (file.open(QIODevice::WriteOnly))
+				{
+					file.write(device->readAll());
+					file.close();
+				}
+				else
 				{
 					QMessageBox::critical(this, tr("Error"), tr("Failed to open file for writing."), QMessageBox::Close);
 				}
-
-				file.write(device->readAll());
-				file.close();
 
 				device->deleteLater();
 
@@ -2017,7 +2023,7 @@ QString QtWebKitWebWidget::getDescription() const
 
 QString QtWebKitWebWidget::getActiveStyleSheet() const
 {
-	if (m_page->mainFrame()->documentElement().evaluateJavaScript(QLatin1String("var isDefault = true; for (var i = 0; i < document.styleSheets.length; ++i) { if (document.styleSheets[i].ownerNode.rel.indexOf('alt') >= 0) { isDefault = false; break; } } isDefault")).toBool())
+	if (m_page->mainFrame()->documentElement().evaluateJavaScript(QLatin1String("let isDefault = true; for (let i = 0; i < document.styleSheets.length; ++i) { if (document.styleSheets[i].ownerNode.rel.indexOf('alt') >= 0) { isDefault = false; break; } } isDefault")).toBool())
 	{
 		return {};
 	}
@@ -2765,6 +2771,7 @@ bool QtWebKitWebWidget::eventFilter(QObject *object, QEvent *event)
 
 					const HitTestResult hitResult(getCurrentHitTestResult());
 					QVector<GesturesManager::GesturesContext> contexts;
+					contexts.reserve(1);
 
 					if (hitResult.flags.testFlag(HitTestResult::IsContentEditableTest))
 					{

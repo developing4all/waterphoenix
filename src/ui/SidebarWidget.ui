@@ -78,6 +78,12 @@
         <property name="orientation">
          <enum>Qt::Vertical</enum>
         </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>0</width>
+          <height>0</height>
+         </size>
+        </property>
        </spacer>
       </item>
      </layout>
@@ -85,7 +91,7 @@
    </item>
    <item>
     <widget class="QWidget" name="containerWidget" native="true">
-     <layout class="QVBoxLayout" name="panelLayout">
+     <layout class="QVBoxLayout" name="containerLayout">
       <property name="spacing">
        <number>0</number>
       </property>

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #ifndef OTTER_CONTENTPREFERENCESPAGE_H
 #define OTTER_CONTENTPREFERENCESPAGE_H
 
-#include "PreferencesPage.h"
+#include "../../../ui/CategoriesTabWidget.h"
 #include "../../../ui/ItemDelegate.h"
 
 namespace Otter
@@ -56,13 +56,16 @@ protected:
 	void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override;
 };
 
-class ContentPreferencesPage final : public PreferencesPage
+class ContentPreferencesPage final : public CategoryPage
 {
 	Q_OBJECT
 
 public:
 	explicit ContentPreferencesPage(QWidget *parent);
 	~ContentPreferencesPage();
+
+	void load() override;
+	QString getTitle() const override;
 
 public slots:
 	void save() override;

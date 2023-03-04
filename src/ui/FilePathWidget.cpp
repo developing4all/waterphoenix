@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,6 @@
 #include "../core/Utils.h"
 
 #include <QtCore/QEvent>
-#include <QtCore/QStandardPaths>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QHBoxLayout>
 
@@ -50,7 +49,8 @@ FilePathWidget::FilePathWidget(QWidget *parent) : QWidget(parent),
 	m_browseButton(new QPushButton(tr("Browse…"), this)),
 	m_lineEditWidget(new LineEditWidget(this)),
 	m_completer(nullptr),
-	m_openMode(FileMode)
+	m_openMode(ExistingFileMode),
+	m_isManuallySpecified(false)
 {
 	QHBoxLayout *layout(new QHBoxLayout(this));
 	layout->addWidget(m_lineEditWidget);
@@ -65,12 +65,29 @@ FilePathWidget::FilePathWidget(QWidget *parent) : QWidget(parent),
 	connect(m_lineEditWidget, &LineEditWidget::textChanged, this, &FilePathWidget::pathChanged);
 	connect(m_browseButton, &QPushButton::clicked, this, [&]()
 	{
-		QString path(m_lineEditWidget->text().isEmpty() ? QStandardPaths::standardLocations(QStandardPaths::HomeLocation).value(0) : m_lineEditWidget->text());
-		path = ((m_openMode == FileMode) ? QFileDialog::getOpenFileName(this, tr("Select File"), path, m_filter) : QFileDialog::getExistingDirectory(this, tr("Select Directory"), path));
+		const QString directory(m_lineEditWidget->text().isEmpty() ? Utils::getStandardLocation(QStandardPaths::HomeLocation) : m_lineEditWidget->text());
+		QString path;
+
+		switch (m_openMode)
+		{
+			case ExistingDirectoryMode:
+				path = QFileDialog::getExistingDirectory(this, tr("Select Directory"), directory);
+
+				break;
+			case ExistingFileMode:
+				path = QFileDialog::getOpenFileName(this, tr("Select File"), directory, m_filter);
+
+				break;
+			case NewFileMode:
+				path = QFileDialog::getSaveFileName(this, tr("Select File"), directory, m_filter);
+
+				break;
+		}
 
 		if (!path.isEmpty())
 		{
 			m_lineEditWidget->setText(QDir::toNativeSeparators(path));
+			m_isManuallySpecified = true;
 		}
 	});
 }
@@ -105,21 +122,23 @@ void FilePathWidget::focusOutEvent(QFocusEvent *event)
 
 void FilePathWidget::updateCompleter()
 {
-	if (!m_completer)
+	if (m_completer)
 	{
-		m_completer = new QCompleter(this);
-
-		FileSystemCompleterModel *model(new FileSystemCompleterModel(m_completer));
-		model->setFilter((m_openMode == FileMode) ? (QDir::AllDirs | QDir::Files) : QDir::AllDirs);
-
-		m_completer->setModel(model);
-
-		m_lineEditWidget->setCompleter(m_completer);
-
-		m_completer->complete();
-
-		disconnect(m_lineEditWidget, &LineEditWidget::textEdited, this, &FilePathWidget::updateCompleter);
+		return;
 	}
+
+	m_completer = new QCompleter(this);
+
+	FileSystemCompleterModel *model(new FileSystemCompleterModel(m_completer));
+	model->setFilter((m_openMode == ExistingFileMode) ? (QDir::AllDirs | QDir::Files) : QDir::AllDirs);
+
+	m_completer->setModel(model);
+
+	m_lineEditWidget->setCompleter(m_completer);
+
+	m_completer->complete();
+
+	disconnect(m_lineEditWidget, &LineEditWidget::textEdited, this, &FilePathWidget::updateCompleter);
 }
 
 void FilePathWidget::setFilters(const QStringList &filters)
@@ -134,14 +153,18 @@ void FilePathWidget::setOpenMode(OpenMode mode)
 
 void FilePathWidget::setPath(const QString &path)
 {
-	if (path != m_lineEditWidget->text())
+	if (path == m_lineEditWidget->text())
 	{
-		m_lineEditWidget->blockSignals(true);
-		m_lineEditWidget->setText(path);
-		m_lineEditWidget->blockSignals(false);
-
-		emit pathChanged(path);
+		return;
 	}
+
+	m_lineEditWidget->blockSignals(true);
+	m_lineEditWidget->setText(path);
+	m_lineEditWidget->blockSignals(false);
+
+	m_isManuallySpecified = false;
+
+	emit pathChanged(path);
 }
 
 QString FilePathWidget::getPath() const
@@ -152,6 +175,11 @@ QString FilePathWidget::getPath() const
 FilePathWidget::OpenMode FilePathWidget::getOpenMode() const
 {
 	return m_openMode;
+}
+
+bool FilePathWidget::isManuallySpecified() const
+{
+	return m_isManuallySpecified;
 }
 
 }

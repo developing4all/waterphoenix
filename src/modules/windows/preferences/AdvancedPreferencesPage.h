@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -22,8 +22,8 @@
 #ifndef OTTER_ADVANCEDPREFERENCESPAGE_H
 #define OTTER_ADVANCEDPREFERENCESPAGE_H
 
-#include "PreferencesPage.h"
 #include "../../../core/NetworkManagerFactory.h"
+#include "../../../ui/CategoriesTabWidget.h"
 
 #include <QtGui/QStandardItem>
 
@@ -35,10 +35,9 @@ namespace Ui
 	class AdvancedPreferencesPage;
 }
 
-class KeyboardProfile;
 class MouseProfile;
 
-class AdvancedPreferencesPage final : public PreferencesPage
+class AdvancedPreferencesPage final : public CategoryPage
 {
 	Q_OBJECT
 
@@ -57,13 +56,15 @@ public:
 	explicit AdvancedPreferencesPage(QWidget *parent);
 	~AdvancedPreferencesPage();
 
+	void load() override;
+	QString getTitle() const override;
+
 public slots:
 	void save() override;
 
 protected:
 	void changeEvent(QEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
-	void updateReaddKeyboardProfileMenu();
 	void updateReaddMouseProfileMenu();
 	void updateStyle();
 	QString createProfileIdentifier(QStandardItemModel *model, const QString &base = {}) const;
@@ -89,12 +90,6 @@ protected slots:
 	void removeCipher();
 	void updateCiphersActions();
 	void updateUpdateChannelsActions();
-	void addKeyboardProfile();
-	void readdKeyboardProfile(QAction *action);
-	void editKeyboardProfile();
-	void cloneKeyboardProfile();
-	void removeKeyboardProfile();
-	void updateKeyboardProfileActions();
 	void addMouseProfile();
 	void readdMouseProfile(QAction *action);
 	void editMouseProfile();
@@ -105,7 +100,6 @@ protected slots:
 
 private:
 	QStringList m_filesToRemove;
-	QHash<QString, KeyboardProfile> m_keyboardProfiles;
 	QHash<QString, MouseProfile> m_mouseProfiles;
 	QHash<QString, ProxyDefinition> m_proxies;
 	Ui::AdvancedPreferencesPage *m_ui;

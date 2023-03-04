@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2021 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -29,42 +29,24 @@
 namespace Otter
 {
 
-WebsitesPreferencesPage::WebsitesPreferencesPage(QWidget *parent) : PreferencesPage(parent),
-	m_ui(new Ui::WebsitesPreferencesPage)
+WebsitesPreferencesPage::WebsitesPreferencesPage(QWidget *parent) : CategoryPage(parent),
+	m_ui(nullptr)
 {
-	m_ui->setupUi(this);
-
-	QStandardItemModel *overridesModel(new QStandardItemModel(this));
-	const QStringList overrideHosts(SettingsManager::getOverrideHosts());
-
-	for (int i = 0; i < overrideHosts.count(); ++i)
-	{
-		QStandardItem *item(new QStandardItem(HistoryManager::getIcon(overrideHosts.at(i)), overrideHosts.at(i)));
-		item->setFlags(item->flags() | Qt::ItemNeverHasChildren);
-
-		overridesModel->appendRow(item);
-	}
-
-	m_ui->websitesFilterLineEditWidget->setClearOnEscape(true);
-	m_ui->websitesItemView->setModel(overridesModel);
-
-	connect(m_ui->websitesFilterLineEditWidget, &LineEditWidget::textChanged, m_ui->websitesItemView, &ItemViewWidget::setFilterString);
-	connect(m_ui->websitesItemView, &ItemViewWidget::needsActionsUpdate, this, &WebsitesPreferencesPage::updateWebsiteActions);
-	connect(m_ui->websitesAddButton, &QPushButton::clicked, this, &WebsitesPreferencesPage::addWebsite);
-	connect(m_ui->websitesEditButton, &QPushButton::clicked, this, &WebsitesPreferencesPage::editWebsite);
-	connect(m_ui->websitesRemoveButton, &QPushButton::clicked, this, &WebsitesPreferencesPage::removeWebsite);
 }
 
 WebsitesPreferencesPage::~WebsitesPreferencesPage()
 {
-	delete m_ui;
+	if (wasLoaded())
+	{
+		delete m_ui;
+	}
 }
 
 void WebsitesPreferencesPage::changeEvent(QEvent *event)
 {
 	QWidget::changeEvent(event);
 
-	if (event->type() == QEvent::LanguageChange)
+	if (event->type() == QEvent::LanguageChange && wasLoaded())
 	{
 		m_ui->retranslateUi(this);
 	}
@@ -122,8 +104,42 @@ void WebsitesPreferencesPage::updateWebsiteActions()
 	m_ui->websitesRemoveButton->setEnabled(index.isValid());
 }
 
-void WebsitesPreferencesPage::save()
+void WebsitesPreferencesPage::load()
 {
+	if (wasLoaded())
+	{
+		return;
+	}
+
+	m_ui = new Ui::WebsitesPreferencesPage;
+	m_ui->setupUi(this);
+
+	QStandardItemModel *overridesModel(new QStandardItemModel(this));
+	const QStringList overrideHosts(SettingsManager::getOverrideHosts());
+
+	for (int i = 0; i < overrideHosts.count(); ++i)
+	{
+		QStandardItem *item(new QStandardItem(HistoryManager::getIcon(overrideHosts.at(i)), overrideHosts.at(i)));
+		item->setFlags(item->flags() | Qt::ItemNeverHasChildren);
+
+		overridesModel->appendRow(item);
+	}
+
+	m_ui->websitesFilterLineEditWidget->setClearOnEscape(true);
+	m_ui->websitesItemView->setModel(overridesModel);
+
+	connect(m_ui->websitesFilterLineEditWidget, &LineEditWidget::textChanged, m_ui->websitesItemView, &ItemViewWidget::setFilterString);
+	connect(m_ui->websitesItemView, &ItemViewWidget::needsActionsUpdate, this, &WebsitesPreferencesPage::updateWebsiteActions);
+	connect(m_ui->websitesAddButton, &QPushButton::clicked, this, &WebsitesPreferencesPage::addWebsite);
+	connect(m_ui->websitesEditButton, &QPushButton::clicked, this, &WebsitesPreferencesPage::editWebsite);
+	connect(m_ui->websitesRemoveButton, &QPushButton::clicked, this, &WebsitesPreferencesPage::removeWebsite);
+
+	markAsLoaded();
+}
+
+QString WebsitesPreferencesPage::getTitle() const
+{
+	return tr("Websites");
 }
 
 }

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #ifndef OTTER_SEARCHPREFERENCESPAGE_H
 #define OTTER_SEARCHPREFERENCESPAGE_H
 
-#include "PreferencesPage.h"
+#include "../../../ui/CategoriesTabWidget.h"
 #include "../../../ui/ItemDelegate.h"
 #include "../../../core/SearchEnginesManager.h"
 
@@ -53,7 +53,7 @@ public:
 	QWidget* createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 };
 
-class SearchPreferencesPage final : public PreferencesPage
+class SearchPreferencesPage final : public CategoryPage
 {
 	Q_OBJECT
 
@@ -70,10 +70,25 @@ public:
 	static Animation* getUpdateAnimation();
 	static QStringList getKeywords(const QAbstractItemModel *model, int excludeRow = -1);
 
+	void load() override;
+	QString getTitle() const override;
+
 public slots:
 	void save() override;
 
 protected:
+	struct SearchEngine final
+	{
+		explicit SearchEngine(const SearchEnginesManager::SearchEngineDefinition &definitionValue = {}, bool isModifiedValue = false)
+		{
+			definition = definitionValue;
+			isModified = isModifiedValue;
+		}
+
+		SearchEnginesManager::SearchEngineDefinition definition;
+		bool isModified = false;
+	};
+
 	void changeEvent(QEvent *event) override;
 	void addSearchEngine(const QString &path, const QString &identifier, bool isReadding);
 	void updateReaddSearchEngineMenu();
@@ -91,7 +106,7 @@ protected slots:
 private:
 	QStringList m_filesToRemove;
 	QHash<QString, SearchEngineFetchJob*> m_updateJobs;
-	QHash<QString, QPair<bool, SearchEnginesManager::SearchEngineDefinition> > m_searchEngines;
+	QHash<QString, SearchEngine> m_searchEngines;
 	Ui::SearchPreferencesPage *m_ui;
 
 	static Animation* m_updateAnimation;

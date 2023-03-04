@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -181,16 +181,11 @@ ToolBarDialog::ToolBarDialog(const ToolBarsManager::ToolBarDefinition &definitio
 
 		const QString name(ActionsManager::getActionName(actions.at(i).identifier) + QLatin1String("Action"));
 		QStandardItem *item(new QStandardItem(actions.at(i).getText(true)));
-		item->setData(QColor(Qt::transparent), Qt::DecorationRole);
+		item->setData(ItemModel::createDecoration(actions.at(i).defaultState.icon), Qt::DecorationRole);
 		item->setData(name, IdentifierRole);
 		item->setData(true, HasOptionsRole);
 		item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled | Qt::ItemNeverHasChildren);
 		item->setToolTip(QStringLiteral("%1 (%2)").arg(item->text(), name));
-
-		if (!actions.at(i).defaultState.icon.isNull())
-		{
-			item->setIcon(actions.at(i).defaultState.icon);
-		}
 
 		availableEntriesModel->appendRow(item);
 	}
@@ -480,22 +475,24 @@ void ToolBarDialog::editEntry()
 	{
 		QLayoutItem *item(formLayout->itemAt(i, QFormLayout::FieldRole));
 
-		if (item)
+		if (!item)
 		{
-			const OptionWidget *widget(qobject_cast<OptionWidget*>(item->widget()));
+			continue;
+		}
 
-			if (widget)
+		const OptionWidget *widget(qobject_cast<OptionWidget*>(item->widget()));
+
+		if (widget)
+		{
+			const QString option(widget->objectName());
+
+			if (widget->isDefault())
 			{
-				const QString option(widget->objectName());
-
-				if (widget->isDefault())
-				{
-					options.remove(option);
-				}
-				else
-				{
-					options[option] = widget->getValue();
-				}
+				options.remove(option);
+			}
+			else
+			{
+				options[option] = widget->getValue();
 			}
 		}
 	}
@@ -624,7 +621,7 @@ ToolBarsManager::ToolBarDefinition ToolBarDialog::getDefinition() const
 			{
 				const QStandardItem *item(m_ui->panelsViewWidget->getItem(i));
 
-				if (item->data(Qt::CheckStateRole).toInt() == Qt::Checked)
+				if (static_cast<Qt::CheckState>(item->data(Qt::CheckStateRole).toInt()) == Qt::Checked)
 				{
 					definition.panels.append(item->data(ItemModel::UserRole).toString());
 				}
@@ -652,7 +649,7 @@ ToolBarsManager::ToolBarDefinition ToolBarDialog::getDefinition() const
 
 QMap<int, QVariant> ToolBarDialog::createEntryData(const QString &identifier, const QVariantMap &options, const QVariantMap &parameters) const
 {
-	QMap<int, QVariant> entryData({{Qt::DecorationRole, QColor(Qt::transparent)}, {IdentifierRole, identifier}, {OptionsRole, options}, {ParametersRole, parameters}});
+	QMap<int, QVariant> entryData({{Qt::DecorationRole, ItemModel::createDecoration()}, {IdentifierRole, identifier}, {OptionsRole, options}, {ParametersRole, parameters}});
 
 	if (identifier == QLatin1String("separator"))
 	{
@@ -834,16 +831,7 @@ QMap<int, QVariant> ToolBarDialog::createEntryData(const QString &identifier, co
 
 	if (options.contains(QLatin1String("icon")))
 	{
-		const QIcon icon(ThemesManager::createIcon(options[QLatin1String("icon")].toString()));
-
-		if (icon.isNull())
-		{
-			entryData[Qt::DecorationRole] = QColor(Qt::transparent);
-		}
-		else
-		{
-			entryData[Qt::DecorationRole] = icon;
-		}
+		entryData[Qt::DecorationRole] = ItemModel::createDecoration(ThemesManager::createIcon(options[QLatin1String("icon")].toString()));
 	}
 
 	if (options.contains(QLatin1String("text")))

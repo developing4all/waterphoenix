@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -76,6 +76,11 @@ QIcon HistoryModel::Entry::getIcon() const
 quint64 HistoryModel::Entry::getIdentifier() const
 {
 	return data(IdentifierRole).toULongLong();
+}
+
+bool HistoryModel::Entry::isValid() const
+{
+	return (!data(IdentifierRole).isNull() && data(IdentifierRole).toULongLong() != 0);
 }
 
 HistoryModel::HistoryModel(const QString &path, HistoryType type, QObject *parent) : QStandardItemModel(parent),
@@ -196,33 +201,32 @@ HistoryModel::Entry* HistoryModel::addEntry(const QUrl &url, const QString &titl
 {
 	blockSignals(true);
 
-	if (m_type == TypedHistory)
+	if (m_type == TypedHistory && hasEntry(url))
 	{
-		if (hasEntry(url))
-		{
-			const QUrl normalizedUrl(Utils::normalizeUrl(url));
+		const QVector<Entry*> entries(m_urls[Utils::normalizeUrl(url)]);
 
-			for (int i = 0; i < m_urls[normalizedUrl].count(); ++i)
-			{
-				removeEntry(m_urls[normalizedUrl].at(i)->getIdentifier());
-			}
+		for (int i = 0; i < entries.count(); ++i)
+		{
+			removeEntry(entries.at(i)->getIdentifier());
 		}
 	}
 
 	Entry *entry(new Entry());
 	entry->setIcon(icon);
 
+	const QModelIndex index(entry->index());
+
 	insertRow(0, entry);
-	setData(entry->index(), url, UrlRole);
-	setData(entry->index(), title, TitleRole);
-	setData(entry->index(), date, TimeVisitedRole);
+	setData(index, url, UrlRole);
+	setData(index, title, TitleRole);
+	setData(index, date, TimeVisitedRole);
 
 	if (identifier == 0 || m_identifiers.contains(identifier))
 	{
 		identifier = (m_identifiers.isEmpty() ? 1 : (m_identifiers.lastKey() + 1));
 	}
 
-	setData(entry->index(), identifier, IdentifierRole);
+	setData(index, identifier, IdentifierRole);
 
 	m_identifiers[identifier] = entry;
 
@@ -337,7 +341,7 @@ bool HistoryModel::save(const QString &path) const
 
 		if (index.isValid())
 		{
-			historyArray.prepend(QJsonObject({{QLatin1String("url"), index.data(UrlRole).toUrl().toString()}, {QLatin1String("title"), index.data(TitleRole).toString()}, {QLatin1String("time"), index.data(TimeVisitedRole).toDateTime().toString(Qt::ISODate)}}));
+			historyArray.prepend({{{QLatin1String("url"), index.data(UrlRole).toUrl().toString()}, {QLatin1String("title"), index.data(TitleRole).toString()}, {QLatin1String("time"), index.data(TimeVisitedRole).toDateTime().toString(Qt::ISODate)}}});
 		}
 	}
 
@@ -375,7 +379,7 @@ bool HistoryModel::setData(const QModelIndex &index, const QVariant &value, int 
 		{
 			if (!m_urls.contains(newUrl))
 			{
-				m_urls[newUrl] = QVector<Entry*>();
+				m_urls[newUrl] = {};
 			}
 
 			m_urls[newUrl].append(entry);

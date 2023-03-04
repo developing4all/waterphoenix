@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -142,7 +142,7 @@ void CookiesContentsWidget::removeCookies()
 
 			for (int j = 0; j < domainItem->rowCount(); ++j)
 			{
-				cookies.append(getCookie(ItemModel::getItemData(domainItem->child(j, 0), Qt::UserRole)));
+				cookies.append(getCookie(ItemModel::getItemData(domainItem->child(j, 0), CookieRole)));
 			}
 		}
 		else
@@ -151,7 +151,7 @@ void CookiesContentsWidget::removeCookies()
 
 			if (cookieItem)
 			{
-				cookies.append(getCookie(cookieItem->index().data(Qt::UserRole)));
+				cookies.append(getCookie(cookieItem->index().data(CookieRole)));
 			}
 		}
 	}
@@ -182,7 +182,7 @@ void CookiesContentsWidget::removeDomainCookies()
 		{
 			for (int j = 0; j < domainItem->rowCount(); ++j)
 			{
-				const QNetworkCookie cookie(getCookie(ItemModel::getItemData(domainItem->child(j, 0), Qt::UserRole)));
+				const QNetworkCookie cookie(getCookie(ItemModel::getItemData(domainItem->child(j, 0), CookieRole)));
 
 				if (!cookies.contains(cookie))
 				{
@@ -234,7 +234,7 @@ void CookiesContentsWidget::removeAllCookies()
 
 void CookiesContentsWidget::cookieProperties()
 {
-	CookiePropertiesDialog dialog(getCookie(m_ui->cookiesViewWidget->currentIndex().data(Qt::UserRole)), this);
+	CookiePropertiesDialog dialog(getCookie(m_ui->cookiesViewWidget->currentIndex().data(CookieRole)), this);
 
 	if (dialog.exec() == QDialog::Accepted && dialog.isModified())
 	{
@@ -254,7 +254,7 @@ void CookiesContentsWidget::handleCookieAdded(const QNetworkCookie &cookie)
 		{
 			QStandardItem *childItem(domainItem->child(i, 0));
 
-			if (childItem && cookie.hasSameIdentifier(getCookie(childItem->index().data(Qt::UserRole))))
+			if (childItem && cookie.hasSameIdentifier(getCookie(childItem->index().data(CookieRole))))
 			{
 				childItem->setData(cookie.toRawForm());
 
@@ -278,7 +278,7 @@ void CookiesContentsWidget::handleCookieAdded(const QNetworkCookie &cookie)
 	}
 
 	QStandardItem *cookieItem(new QStandardItem(QString::fromLatin1(cookie.name())));
-	cookieItem->setData(cookie.toRawForm(), Qt::UserRole);
+	cookieItem->setData(cookie.toRawForm(), CookieRole);
 	cookieItem->setToolTip(QString::fromLatin1(cookie.name()));
 	cookieItem->setFlags(cookieItem->flags() | Qt::ItemNeverHasChildren);
 
@@ -291,43 +291,45 @@ void CookiesContentsWidget::handleCookieRemoved(const QNetworkCookie &cookie)
 	const QString domain(cookie.domain().startsWith(QLatin1Char('.')) ? cookie.domain().mid(1) : cookie.domain());
 	QStandardItem *domainItem(findDomainItem(domain));
 
-	if (domainItem)
+	if (!domainItem)
 	{
-		QPoint point;
+		return;
+	}
 
-		for (int j = 0; j < domainItem->rowCount(); ++j)
+	QPoint point;
+
+	for (int i = 0; i < domainItem->rowCount(); ++i)
+	{
+		if (cookie.hasSameIdentifier(getCookie(ItemModel::getItemData(domainItem->child(i, 0), CookieRole))))
 		{
-			if (cookie.hasSameIdentifier(getCookie(ItemModel::getItemData(domainItem->child(j, 0), Qt::UserRole))))
+			const QStandardItem *cookieItem(domainItem->child(i, 0));
+
+			if (cookieItem)
 			{
-				const QStandardItem *cookieItem(domainItem->child(j, 0));
-
-				if (cookieItem)
-				{
-					point = m_ui->cookiesViewWidget->visualRect(cookieItem->index()).center();
-				}
-
-				domainItem->removeRow(j);
-
-				break;
+				point = m_ui->cookiesViewWidget->visualRect(cookieItem->index()).center();
 			}
-		}
 
-		if (domainItem->rowCount() == 0)
-		{
-			m_model->invisibleRootItem()->removeRow(domainItem->row());
-		}
-		else
-		{
-			domainItem->setText(QStringLiteral("%1 (%2)").arg(domain).arg(domainItem->rowCount()));
-		}
+			domainItem->removeRow(i);
 
-		if (!point.isNull())
-		{
-			const QModelIndex index(m_ui->cookiesViewWidget->indexAt(point));
-
-			m_ui->cookiesViewWidget->setCurrentIndex(index);
-			m_ui->cookiesViewWidget->selectionModel()->select(index, QItemSelectionModel::Select);
+			break;
 		}
+	}
+
+	if (domainItem->rowCount() == 0)
+	{
+		m_model->invisibleRootItem()->removeRow(domainItem->row());
+	}
+	else
+	{
+		domainItem->setText(QStringLiteral("%1 (%2)").arg(domain).arg(domainItem->rowCount()));
+	}
+
+	if (!point.isNull())
+	{
+		const QModelIndex index(m_ui->cookiesViewWidget->indexAt(point));
+
+		m_ui->cookiesViewWidget->setCurrentIndex(index);
+		m_ui->cookiesViewWidget->selectionModel()->select(index, QItemSelectionModel::Select);
 	}
 }
 
@@ -409,7 +411,7 @@ void CookiesContentsWidget::updateActions()
 
 	if (indexes.count() == 1)
 	{
-		const QNetworkCookie cookie(getCookie(indexes.value(0).data(Qt::UserRole)));
+		const QNetworkCookie cookie(getCookie(indexes.value(0).data(CookieRole)));
 
 		if (!cookie.name().isEmpty())
 		{

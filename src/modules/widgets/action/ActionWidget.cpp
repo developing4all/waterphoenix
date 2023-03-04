@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -99,7 +99,8 @@ void ActionWidget::mouseReleaseEvent(QMouseEvent *event)
 		case ActionsManager::NewWindowAction:
 		case ActionsManager::NewWindowPrivateAction:
 			{
-				SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints(((identifier == ActionsManager::NewWindowAction || identifier == ActionsManager::NewWindowPrivateAction) ? SessionsManager::NewWindowOpen : SessionsManager::NewTabOpen), event->button(), event->modifiers()));
+				const bool isNewWindow(identifier == ActionsManager::NewWindowAction || identifier == ActionsManager::NewWindowPrivateAction);
+				SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints((isNewWindow ? SessionsManager::NewWindowOpen : SessionsManager::NewTabOpen), event->button(), event->modifiers()));
 
 				if (identifier == ActionsManager::NewTabPrivateAction || identifier == ActionsManager::NewWindowPrivateAction)
 				{
@@ -217,7 +218,10 @@ NavigationActionWidget::NavigationActionWidget(Window *window, const ToolBarsMan
 
 	if (toolBar && toolBar->getDefinition().isGlobal())
 	{
-		connect(toolBar, &ToolBarWidget::windowChanged, this, &NavigationActionWidget::setWindow);
+		connect(toolBar, &ToolBarWidget::windowChanged, this, [&](Window *window)
+		{
+			m_window = window;
+		});
 	}
 
 	connect(menu(), &QMenu::aboutToShow, this, &NavigationActionWidget::updateMenu);
@@ -256,11 +260,6 @@ void NavigationActionWidget::updateMenu()
 			addMenuEntry(i, history.entries.at(i));
 		}
 	}
-}
-
-void NavigationActionWidget::setWindow(Window *window)
-{
-	m_window = window;
 }
 
 bool NavigationActionWidget::event(QEvent *event)

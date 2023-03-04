@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -39,6 +39,12 @@ class CacheContentsWidget final : public ContentsWidget
 	Q_OBJECT
 
 public:
+	enum DataRole
+	{
+		UrlRole = Qt::UserRole,
+		SizeRole
+	};
+
 	explicit CacheContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent);
 	~CacheContentsWidget();
 
@@ -61,12 +67,11 @@ protected:
 
 protected slots:
 	void populateCache();
-	void removeEntry();
 	void removeDomainEntries();
 	void removeDomainEntriesOrEntry();
 	void openEntry();
-	void handleEntryAdded(const QUrl &entry);
-	void handleEntryRemoved(const QUrl &entry);
+	void handleEntryAdded(const QUrl &url);
+	void handleEntryRemoved(const QUrl &url);
 	void showContextMenu(const QPoint &position);
 	void updateActions();
 

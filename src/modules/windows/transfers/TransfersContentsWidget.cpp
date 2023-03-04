@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@ ProgressBarDelegate::ProgressBarDelegate(QObject *parent) : ItemDelegate(parent)
 
 void ProgressBarDelegate::setEditorData(QWidget *editor, const QModelIndex &index) const
 {
-	ProgressBarWidget *progressBar(qobject_cast<ProgressBarWidget*>(editor));
+	ProgressBarWidget *progressBar(qobject_cast<ProgressBarWidget*>(editor->findChild<ProgressBarWidget*>()));
 
 	if (progressBar)
 	{
@@ -62,12 +62,20 @@ QWidget* ProgressBarDelegate::createEditor(QWidget *parent, const QStyleOptionVi
 {
 	Q_UNUSED(option)
 
-	ProgressBarWidget *editor(new ProgressBarWidget(parent));
+	QWidget *widget(new QWidget(parent));
+	QHBoxLayout *layout(new QHBoxLayout(widget));
+	layout->setContentsMargins(0, 3, 0, 3);
+
+	widget->setLayout(layout);
+
+	ProgressBarWidget *editor(new ProgressBarWidget(widget));
 	editor->setAlignment(Qt::AlignCenter);
+
+	layout->addWidget(editor);
 
 	setEditorData(editor, index);
 
-	return editor;
+	return widget;
 }
 
 TransfersContentsWidget::TransfersContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
@@ -176,16 +184,6 @@ void TransfersContentsWidget::openTransfer()
 	}
 }
 
-void TransfersContentsWidget::openTransferFolder()
-{
-	const Transfer *transfer(getTransfer(m_ui->transfersViewWidget->currentIndex()));
-
-	if (transfer)
-	{
-		Utils::runApplication({}, QUrl::fromLocalFile(QFileInfo(transfer->getTarget()).dir().canonicalPath()));
-	}
-}
-
 void TransfersContentsWidget::copyTransferInformation()
 {
 	const QModelIndex index(m_ui->transfersViewWidget->currentIndex());
@@ -248,7 +246,7 @@ void TransfersContentsWidget::handleTransferAdded(Transfer *transfer)
 
 	m_model->appendRow(items);
 
-	m_ui->transfersViewWidget->openPersistentEditor(items[3]->index());
+	m_ui->transfersViewWidget->openPersistentEditor(items[ProgressColumn]->index());
 
 	handleTransferChanged(transfer);
 }
@@ -289,41 +287,41 @@ void TransfersContentsWidget::handleTransferChanged(Transfer *transfer)
 
 		switch (i)
 		{
-			case 0:
+			case DecorationColumn:
 				m_model->setData(index, ThemesManager::createIcon(iconName), Qt::DecorationRole);
 				m_model->setData(index, transfer->getState(), StateRole);
 
 				break;
-			case 1:
+			case FilenameColumn:
 				m_model->setData(index, QFileInfo(transfer->getTarget()).fileName(), Qt::DisplayRole);
 
 				break;
-			case 2:
+			case SizeColumn:
 				m_model->setData(index, Utils::formatUnit(transfer->getBytesTotal(), false, 1), Qt::DisplayRole);
 				m_model->setData(index, transfer->getBytesTotal(), BytesTotalRole);
 
 				break;
-			case 3:
+			case ProgressColumn:
 				m_model->setData(index, transfer->getBytesReceived(), BytesReceivedRole);
 				m_model->setData(index, transfer->getBytesTotal(), BytesTotalRole);
 				m_model->setData(index, ((transfer->getBytesTotal() > 0) ? qFloor(Utils::calculatePercent(transfer->getBytesReceived(), transfer->getBytesTotal())) : -1), ProgressRole);
 				m_model->setData(index, transfer->getState(), StateRole);
 
 				break;
-			case 4:
+			case TimeElapsedColumn:
 				m_model->setData(index, ((isIndeterminate || transfer->getRemainingTime() <= 0) ? QString() : Utils::formatElapsedTime(transfer->getRemainingTime())), Qt::DisplayRole);
 
 				break;
-			case 5:
+			case SpeedColumn:
 				m_model->setData(index, ((transfer->getState() == Transfer::RunningState) ? Utils::formatUnit(transfer->getSpeed(), true, 1) : QString()), Qt::DisplayRole);
 
 				break;
-			case 6:
+			case TimeStartedColumn:
 				m_model->setData(index, Utils::formatDateTime(transfer->getTimeStarted()), Qt::DisplayRole);
 				m_model->setData(index, transfer->getTimeStarted(), TimeStartedRole);
 
 				break;
-			case 7:
+			case TimeFinishedColumn:
 				m_model->setData(index, Utils::formatDateTime(transfer->getTimeFinished()), Qt::DisplayRole);
 				m_model->setData(index, transfer->getTimeFinished(), TimeFinishedRole);
 
@@ -375,7 +373,15 @@ void TransfersContentsWidget::showContextMenu(const QPoint &position)
 		openWithMenu->setMenuOptions({{QLatin1String("mimeType"), transfer->getMimeType().name()}});
 
 		menu.addMenu(openWithMenu);
-		menu.addAction(tr("Open Folder"), this, &TransfersContentsWidget::openTransferFolder)->setEnabled(canOpen || QFileInfo(transfer->getTarget()).dir().exists());
+		menu.addAction(tr("Open Folder"), this, [&]()
+		{
+			const Transfer *transfer(getTransfer(m_ui->transfersViewWidget->currentIndex()));
+
+			if (transfer)
+			{
+				Utils::runApplication({}, QUrl::fromLocalFile(QFileInfo(transfer->getTarget()).dir().canonicalPath()));
+			}
+		})->setEnabled(canOpen || QFileInfo(transfer->getTarget()).dir().exists());
 		menu.addSeparator();
 		menu.addAction(((transfer->getState() == Transfer::ErrorState) ? tr("Resume") : tr("Stop")), this, &TransfersContentsWidget::stopResumeTransfer)->setEnabled(transfer->getState() == Transfer::RunningState || transfer->getState() == Transfer::ErrorState);
 		menu.addAction(tr("Redownload"), this, &TransfersContentsWidget::redownloadTransfer);

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -449,7 +449,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 
 	if (!QSslSocket::supportsSsl() || (webBackend && !webBackend->hasSslSupport()))
 	{
-		QMessageBox::warning(nullptr, tr("Warning"), tr("SSL support is not available or incomplete.\nSome websites may work incorrectly or do not work at all."), QMessageBox::Close);
+		QMessageBox::warning(nullptr, tr("Warning"), tr("SSL support is not available or is incomplete.\nSome websites may work incorrectly or do not work at all."), QMessageBox::Close);
 	}
 
 	if (SettingsManager::getOption(SettingsManager::Browser_EnableTrayIconOption).toBool())
@@ -482,13 +482,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 	{
 		connect(new UpdateChecker(this), &UpdateChecker::finished, this, &Application::handleUpdateCheckResult);
 
-		if (!m_updateCheckTimer)
-		{
-			m_updateCheckTimer = new LongTermTimer(this);
-			m_updateCheckTimer->start(static_cast<quint64>(updateCheckInterval * 1000 * SECONDS_IN_DAY));
-
-			connect(m_updateCheckTimer, &LongTermTimer::timeout, this, &Application::periodicUpdateCheck);
-		}
+		scheduleUpdateCheck(updateCheckInterval);
 	}
 
 	Style *style(ThemesManager::createStyle(SettingsManager::getOption(SettingsManager::Interface_WidgetStyleOption).toString()));
@@ -510,6 +504,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 	setStyle(style);
 	setStyleSheet(styleSheet);
 
+	QDesktopServices::setUrlHandler(QLatin1String("feed"), this, "openUrl");
 	QDesktopServices::setUrlHandler(QLatin1String("ftp"), this, "openUrl");
 	QDesktopServices::setUrlHandler(QLatin1String("http"), this, "openUrl");
 	QDesktopServices::setUrlHandler(QLatin1String("https"), this, "openUrl");
@@ -702,6 +697,23 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 			}
 
 			return;
+		case ActionsManager::AddSearchAction:
+			if (parameters.contains(QLatin1String("url")))
+			{
+				SearchEngineFetchJob *job(new SearchEngineFetchJob(parameters[QLatin1String("url")].toUrl(), {}, true, m_instance));
+
+				connect(job, &SearchEngineFetchJob::jobFinished, m_instance, [&](bool isSuccess)
+				{
+					if (!isSuccess)
+					{
+						QMessageBox::warning(m_activeWindow, tr("Error"), tr("Failed to add search engine."), QMessageBox::Close);
+					}
+				});
+
+				job->start();
+			}
+
+			break;
 		case ActionsManager::ActivateWindowAction:
 			{
 				const quint64 windowIdentifier(parameters.value(QLatin1String("window")).toULongLong());
@@ -890,20 +902,26 @@ void Application::removeWindow(MainWindow *mainWindow)
 	}
 }
 
-void Application::periodicUpdateCheck()
+void Application::scheduleUpdateCheck(int interval)
 {
-	UpdateChecker *updateChecker(new UpdateChecker(this));
-
-	connect(updateChecker, &UpdateChecker::finished, this, &Application::handleUpdateCheckResult);
-
-	const int interval(SettingsManager::getOption(SettingsManager::Updates_CheckIntervalOption).toInt());
-
-	if (!m_updateCheckTimer && interval > 0 && !SettingsManager::getOption(SettingsManager::Updates_ActiveChannelsOption).toStringList().isEmpty())
+	if (!m_updateCheckTimer)
 	{
 		m_updateCheckTimer = new LongTermTimer(this);
 		m_updateCheckTimer->start(static_cast<quint64>(interval * 1000 * SECONDS_IN_DAY));
 
-		connect(m_updateCheckTimer, &LongTermTimer::timeout, this, &Application::periodicUpdateCheck);
+		connect(m_updateCheckTimer, &LongTermTimer::timeout, this, [&]()
+		{
+			UpdateChecker *updateChecker(new UpdateChecker(this));
+
+			connect(updateChecker, &UpdateChecker::finished, this, &Application::handleUpdateCheckResult);
+
+			const int interval(SettingsManager::getOption(SettingsManager::Updates_CheckIntervalOption).toInt());
+
+			if (interval > 0 && !SettingsManager::getOption(SettingsManager::Updates_ActiveChannelsOption).toStringList().isEmpty())
+			{
+				scheduleUpdateCheck(interval);
+			}
+		});
 	}
 }
 
@@ -911,6 +929,10 @@ void Application::handleOptionChanged(int identifier, const QVariant &value)
 {
 	switch (identifier)
 	{
+		case SettingsManager::Backends_WebOption:
+			emit arbitraryActionsStateChanged({ActionsManager::ExchangeDataAction});
+
+			break;
 		case SettingsManager::Browser_EnableTrayIconOption:
 			if (!m_trayIcon && value.toBool())
 			{
@@ -1162,7 +1184,7 @@ void Application::handleUpdateCheckResult(const QVector<UpdateChecker::UpdateInf
 	}
 
 	Notification::Message message;
-	message.message = tr("New update %1 from %2 channel is available!").arg(availableUpdates.at(latestVersionIndex).version, availableUpdates.at(latestVersionIndex).channel);
+	message.message = tr("New update %1 from %2 channel is available.").arg(availableUpdates.at(latestVersionIndex).version, availableUpdates.at(latestVersionIndex).channel);
 	message.icon = windowIcon();
 	message.event = NotificationsManager::UpdateAvailableEvent;
 
@@ -1354,7 +1376,7 @@ QString Application::createReport(ReportOptions options)
 	stream.setFieldWidth(20);
 	stream << QLatin1String("Weekly Number");
 
-	if (QString(OTTER_VERSION_WEEKLY).trimmed().isEmpty())
+	if (QStringLiteral(OTTER_VERSION_WEEKLY).trimmed().isEmpty())
 	{
 		stream << QLatin1Char('-');
 	}
@@ -1374,10 +1396,40 @@ QString Application::createReport(ReportOptions options)
 	stream << QLatin1String("Web Backend");
 	stream << (webBackend ? QStringLiteral("%1 %2").arg(webBackend->getTitle(), webBackend->getEngineVersion()) : QLatin1String("none"));
 	stream.setFieldWidth(0);
+	stream << QLatin1String("\n\t");
+	stream.setFieldWidth(20);
+	stream << QLatin1String("Git Branch");
+
+	if (QStringLiteral(OTTER_GIT_BRANCH).trimmed().isEmpty() || QStringLiteral(OTTER_GIT_BRANCH) == QLatin1String("unknown"))
+	{
+		stream << QLatin1Char('-');
+	}
+	else
+	{
+		stream << OTTER_GIT_BRANCH;
+	}
+
+	stream.setFieldWidth(0);
+	stream << QLatin1String("\n\t");
+	stream.setFieldWidth(20);
+	stream << QLatin1String("Git Revision");
+
+	if (QStringLiteral(OTTER_GIT_REVISION).trimmed().isEmpty() || QStringLiteral(OTTER_GIT_REVISION) == QLatin1String("unknown"))
+	{
+		stream << QLatin1Char('-');
+	}
+	else
+	{
+		stream << QStringLiteral("%1 (%2)").arg(OTTER_GIT_REVISION).arg(OTTER_GIT_DATETIME);
+	}
+
+	stream.setFieldWidth(0);
 	stream << QLatin1String("\n\n");
 
 	if (options.testFlag(EnvironmentReport))
 	{
+		const QString sslVersion(webBackend ? webBackend->getSslVersion() : QString());
+
 		stream << QLatin1String("Environment:\n\t");
 		stream.setFieldWidth(30);
 		stream << QLatin1String("System Name");
@@ -1407,6 +1459,11 @@ QString Application::createReport(ReportOptions options)
 		stream.setFieldWidth(30);
 		stream << QLatin1String("Current Qt Version");
 		stream << qVersion();
+		stream.setFieldWidth(0);
+		stream << QLatin1String("\n\t");
+		stream.setFieldWidth(30);
+		stream << QLatin1String("SSL Library Version");
+		stream << (sslVersion.isEmpty() ? QLatin1String("unavailable") : sslVersion);
 		stream.setFieldWidth(0);
 		stream << QLatin1String("\n\t");
 		stream.setFieldWidth(30);
@@ -1622,7 +1679,10 @@ ActionsManager::ActionDefinition::State Application::getActionState(int identifi
 
 				if (exchanger == QLatin1String("HtmlBookmarksImport"))
 				{
+					const WebBackend *webBackend(AddonsManager::getWebBackend());
+
 					state.text = translate("actions", "Import HTML Bookmarks…");
+					state.isEnabled = (webBackend && webBackend->hasCapability(WebBackend::BookmarksImportCapability));
 				}
 				else if (exchanger == QLatin1String("OperaBookmarksImport"))
 				{
@@ -1643,6 +1703,10 @@ ActionsManager::ActionDefinition::State Application::getActionState(int identifi
 				else if (exchanger == QLatin1String("OpmlFeedsImport"))
 				{
 					state.text = translate("actions", "Import OPML Feeds…");
+				}
+				else if (exchanger == QLatin1String("HtmlBookmarksExport"))
+				{
+					state.text = translate("actions", "Export Bookmarks as HTML…");
 				}
 				else if (exchanger == QLatin1String("XbelBookmarksExport"))
 				{

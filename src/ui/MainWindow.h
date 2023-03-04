@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -109,7 +109,6 @@ protected:
 	void mouseReleaseEvent(QMouseEvent *event) override;
 	void beginToolBarDragging(bool isSidebar = false);
 	void endToolBarDragging();
-	void openSpecialPage(const QUrl &url, ActionsManager::TriggerType trigger);
 	QWidget* findVisibleWidget(const QVector<QPointer<QWidget> > &widgets) const;
 	TabBarWidget* getTabBar() const;
 	QVector<quint64> createOrderedWindowList(bool includeMinimized) const;

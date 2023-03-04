@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -26,7 +26,6 @@
 #include "../core/Utils.h"
 
 #include <QtCore/QFileInfo>
-#include <QtCore/QStandardPaths>
 #include <QtCore/QTimer>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QFileDialog>
@@ -401,7 +400,7 @@ void ContentFiltersViewWidget::addProfile()
 
 void ContentFiltersViewWidget::importProfileFromFile()
 {
-	const QString path(QFileDialog::getOpenFileName(this, tr("Select File"), QStandardPaths::standardLocations(QStandardPaths::HomeLocation).value(0), tr("AdBlock files (*.txt)")));
+	const QString path(QFileDialog::getOpenFileName(this, tr("Select File"), Utils::getStandardLocation(QStandardPaths::HomeLocation), tr("AdBlock files (*.txt)")));
 
 	if (path.isEmpty())
 	{
@@ -852,6 +851,11 @@ void ContentFiltersViewWidget::save()
 		{
 			const QModelIndex entryIndex(getIndex(j, 0, categoryIndex));
 
+			if (static_cast<Qt::CheckState>(entryIndex.data(Qt::CheckStateRole).toInt()) == Qt::Checked)
+			{
+				profiles.append(entryIndex.data(NameRole).toString());
+			}
+
 			if (!entryIndex.data(IsModifiedRole).toBool())
 			{
 				continue;
@@ -907,11 +911,6 @@ void ContentFiltersViewWidget::save()
 			}
 
 			m_model->setData(entryIndex, false, IsModifiedRole);
-
-			if (entryIndex.data(Qt::CheckStateRole).toBool())
-			{
-				profiles.append(profileSummary.name);
-			}
 		}
 	}
 

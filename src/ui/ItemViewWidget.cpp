@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2015 - 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -73,23 +73,25 @@ void ViewportWidget::updateDirtyIndexesList()
 
 	m_dirtyIndexes = m_view->model()->match(m_view->model()->index(0, 0), m_updateDataRole, true, -1, (Qt::MatchExactly | Qt::MatchRecursive)).toVector();
 
-	if (previousDirtyIndexes != m_dirtyIndexes)
+	if (previousDirtyIndexes == m_dirtyIndexes)
 	{
-		update();
+		return;
+	}
 
-		if (m_dirtyIndexes.isEmpty() && m_updateTimer > 0)
-		{
-			killTimer(m_recheckTimer);
-			killTimer(m_updateTimer);
+	update();
 
-			m_recheckTimer = 0;
-			m_updateTimer = 0;
-		}
-		else if (previousDirtyIndexes.isEmpty() && m_updateTimer == 0)
-		{
-			m_recheckTimer = startTimer(1000);
-			m_updateTimer = startTimer(15);
-		}
+	if (m_dirtyIndexes.isEmpty() && m_updateTimer > 0)
+	{
+		killTimer(m_recheckTimer);
+		killTimer(m_updateTimer);
+
+		m_recheckTimer = 0;
+		m_updateTimer = 0;
+	}
+	else if (previousDirtyIndexes.isEmpty() && m_updateTimer == 0)
+	{
+		m_recheckTimer = startTimer(1000);
+		m_updateTimer = startTimer(15);
 	}
 }
 
@@ -270,7 +272,9 @@ void HeaderViewWidget::mouseReleaseEvent(QMouseEvent *event)
 
 	if (column == m_clickedCheckBox && model()->headerData(column, orientation(), IsShowingCheckBoxIndicatorRole).toBool() && getCheckBoxRectangle(column).contains(event->pos()))
 	{
-		model()->setHeaderData(column, orientation(), ((model()->headerData(column, orientation(), Qt::CheckStateRole).toInt() == Qt::Checked) ? Qt::Unchecked : Qt::Checked), Qt::CheckStateRole);
+		const bool wasChecked((static_cast<Qt::CheckState>(model()->headerData(column, orientation(), Qt::CheckStateRole).toInt()) == Qt::Checked));
+
+		model()->setHeaderData(column, orientation(), (wasChecked ? Qt::Unchecked : Qt::Checked), Qt::CheckStateRole);
 
 		updateSection(column);
 	}
@@ -297,7 +301,7 @@ void HeaderViewWidget::paintSection(QPainter *painter, const QRect &rectangle, i
 	checkBoxOption.initFrom(this);
 	checkBoxOption.rect = getCheckBoxRectangle(column);
 
-	switch (model()->headerData(column, orientation(), Qt::CheckStateRole).toInt())
+	switch (static_cast<Qt::CheckState>(model()->headerData(column, orientation(), Qt::CheckStateRole).toInt()))
 	{
 		case Qt::Checked:
 			checkBoxOption.state = QStyle::State_On;
@@ -983,6 +987,28 @@ void ItemViewWidget::setRowsMovable(bool areMovable)
 	m_areRowsMovable = areMovable;
 }
 
+void ItemViewWidget::paintEvent(QPaintEvent *event)
+{
+	QTreeView::paintEvent(event);
+
+	if (indexAt({5, 5}).isValid())
+	{
+		return;
+	}
+
+	QPainter painter(viewport());
+#if QT_VERSION >= 0x050C00
+	painter.setPen(palette().placeholderText().color());
+#else
+	QColor placeholderColor(palette().text().color());
+	placeholderColor.setAlpha(128);
+
+	painter.setPen(placeholderColor);
+#endif
+	painter.setFont(Utils::multiplyFontSize(font(), 2));
+	painter.drawText(rect(), Qt::AlignCenter, tr("No items"));
+}
+
 void ItemViewWidget::setData(const QModelIndex &index, const QVariant &value, int role)
 {
 	if (m_sourceModel)
@@ -1064,7 +1090,12 @@ void ItemViewWidget::setViewMode(ItemViewWidget::ViewMode mode)
 
 void ItemViewWidget::setModified(bool isModified)
 {
-	m_isModified = isModified;
+	if (m_isModified != isModified)
+	{
+		m_isModified = isModified;
+
+		emit isModifiedChanged(isModified);
+	}
 
 	if (isModified)
 	{
@@ -1110,7 +1141,7 @@ QModelIndex ItemViewWidget::getCheckedIndex(const QModelIndex &parent) const
 	{
 		const QModelIndex index(m_sourceModel->index(i, 0, parent));
 
-		if (index.data(Qt::CheckStateRole).toInt() == Qt::Checked)
+		if (static_cast<Qt::CheckState>(index.data(Qt::CheckStateRole).toInt()) == Qt::Checked)
 		{
 			return index;
 		}

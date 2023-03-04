@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -224,6 +224,8 @@ void QtWebEngineWebWidget::ensureInitialized()
 
 void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &parameters, ActionsManager::TriggerType trigger)
 {
+	const QUrl url(extractUrl(parameters));
+
 	switch (identifier)
 	{
 		case ActionsManager::SaveAction:
@@ -299,33 +301,33 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 
 					setClickPosition({});
 				}
-				else if (m_hitResult.linkUrl.isValid())
+				else if (url.isValid())
 				{
-					openUrl(m_hitResult.linkUrl, hints);
+					openUrl(url, hints);
 				}
 			}
 
 			break;
 		case ActionsManager::CopyLinkToClipboardAction:
-			if (!m_hitResult.linkUrl.isEmpty())
+			if (!url.isEmpty())
 			{
-				Application::clipboard()->setText(m_hitResult.linkUrl.toString(QUrl::EncodeReserved | QUrl::EncodeSpaces));
+				Application::clipboard()->setText(url.toString(QUrl::EncodeReserved | QUrl::EncodeSpaces));
 			}
 
 			break;
 		case ActionsManager::BookmarkLinkAction:
-			if (m_hitResult.linkUrl.isValid())
+			if (url.isValid())
 			{
-				Application::triggerAction(ActionsManager::BookmarkPageAction, {{QLatin1String("url"), m_hitResult.linkUrl}, {QLatin1String("title"), m_hitResult.title}}, parentWidget(), trigger);
+				Application::triggerAction(ActionsManager::BookmarkPageAction, {{QLatin1String("url"), url}, {QLatin1String("title"), m_hitResult.title}}, parentWidget(), trigger);
 			}
 
 			break;
 		case ActionsManager::SaveLinkToDiskAction:
-			startTransfer(TransfersManager::startTransfer(m_hitResult.linkUrl.toString(), {}, (Transfer::CanNotifyOption | (isPrivate() ? Transfer::IsPrivateOption : Transfer::NoOption))));
+			startTransfer(TransfersManager::startTransfer(url.toString(), {}, (Transfer::CanNotifyOption | (isPrivate() ? Transfer::IsPrivateOption : Transfer::NoOption))));
 
 			break;
 		case ActionsManager::SaveLinkToDownloadsAction:
-			TransfersManager::startTransfer(m_hitResult.linkUrl.toString(), {}, (Transfer::CanNotifyOption | Transfer::CanAskForPathOption | Transfer::IsQuickTransferOption | (isPrivate() ? Transfer::IsPrivateOption : Transfer::NoOption)));
+			TransfersManager::startTransfer(url.toString(), {}, (Transfer::CanNotifyOption | Transfer::CanAskForPathOption | Transfer::IsQuickTransferOption | (isPrivate() ? Transfer::IsPrivateOption : Transfer::NoOption)));
 
 			break;
 		case ActionsManager::OpenFrameAction:
@@ -348,7 +350,7 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 		case ActionsManager::ReloadFrameAction:
 			if (m_hitResult.frameUrl.isValid())
 			{
-///TODO Add support for subframes
+//TODO Add support for subframes
 				m_page->runJavaScript(QStringLiteral("var frames = document.querySelectorAll('iframe[src=\"%1\"], frame[src=\"%1\"]'); for (var i = 0; i < frames.length; ++i) { frames[i].contentWindow.location.replace('%1'); }").arg(m_hitResult.frameUrl.toString()));
 			}
 
@@ -447,7 +449,7 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 		case ActionsManager::ImagePropertiesAction:
 			if (m_hitResult.imageUrl.scheme() == QLatin1String("data"))
 			{
-				ImagePropertiesDialog *imagePropertiesDialog(new ImagePropertiesDialog(m_hitResult.imageUrl, {{QLatin1String("alternativeText"), m_hitResult.alternateText}, {QLatin1String("longDescription"), m_hitResult.longDescription}}, nullptr, this));
+				ImagePropertiesDialog *imagePropertiesDialog(new ImagePropertiesDialog(m_hitResult.imageUrl, {{ImagePropertiesDialog::AlternativeTextProperty, m_hitResult.alternateText}, {ImagePropertiesDialog::LongDescriptionProperty, m_hitResult.longDescription}}, nullptr, this));
 				imagePropertiesDialog->setButtonsVisible(false);
 
 				ContentsDialog *dialog(new ContentsDialog(ThemesManager::createIcon(QLatin1String("dialog-information")), imagePropertiesDialog->windowTitle(), {}, {}, QDialogButtonBox::Close, imagePropertiesDialog, this));
@@ -461,12 +463,13 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 			{
 				m_page->runJavaScript(parsePosition(QStringLiteral("var element = ((%1 >= 0) ? document.elementFromPoint((%1 + window.scrollX), (%2 + window.scrollX)) : document.activeElement); if (element && element.tagName && element.tagName.toLowerCase() == 'img') { [element.naturalWidth, element.naturalHeight]; }"), getClickPosition()), [&](const QVariant &result)
 				{
-					QVariantMap properties({{QLatin1String("alternativeText"), m_hitResult.alternateText}, {QLatin1String("longDescription"), m_hitResult.longDescription}});
+					QMap<ImagePropertiesDialog::ImageProperty, QVariant> properties({{ImagePropertiesDialog::AlternativeTextProperty, m_hitResult.alternateText}, {ImagePropertiesDialog::LongDescriptionProperty, m_hitResult.longDescription}});
 
 					if (result.isValid())
 					{
-						properties[QLatin1String("width")] = result.toList()[0].toInt();
-						properties[QLatin1String("height")] = result.toList()[1].toInt();
+						const QVariantList size(result.toList());
+
+						properties[ImagePropertiesDialog::SizeProperty] = QSize(size[0].toInt(), size[1].toInt());
 					}
 
 					ImagePropertiesDialog *imagePropertiesDialog(new ImagePropertiesDialog(m_hitResult.imageUrl, properties, nullptr, this));
@@ -673,6 +676,10 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 				m_page->triggerAction(QWebEnginePage::Paste);
 
 				Application::clipboard()->setMimeData(mimeData);
+			}
+			else if (parameters.value(QLatin1String("mode")) == QLatin1String("plainText"))
+			{
+				m_page->triggerAction(QWebEnginePage::PasteAndMatchStyle);
 			}
 			else
 			{
@@ -955,22 +962,25 @@ void QtWebEngineWebWidget::handleLoadFinished()
 	notifyNavigationActionsChanged();
 	startReloadTimer();
 
-	m_page->runJavaScript(getFastForwardScript(false), [&](const QVariant &result)
+	QTimer::singleShot(250, this, [&]()
 	{
-		m_canGoForwardValue = (result.toBool() ? TrueValue : FalseValue);
-
-		emit arbitraryActionsStateChanged({ActionsManager::FastForwardAction});
-	});
-
-	const QVector<ChangeWatcher> watchers({FeedsWatcher, LinksWatcher, MetaDataWatcher, SearchEnginesWatcher, StylesheetsWatcher});
-
-	for (int i = 0; i < watchers.count(); ++i)
-	{
-		if (isWatchingChanges(watchers.at(i)))
+		m_page->runJavaScript(getFastForwardScript(false), [&](const QVariant &result)
 		{
-			updateWatchedData(watchers.at(i));
+			m_canGoForwardValue = (result.toBool() ? TrueValue : FalseValue);
+
+			emit arbitraryActionsStateChanged({ActionsManager::FastForwardAction});
+		});
+
+		const QVector<ChangeWatcher> watchers({FeedsWatcher, LinksWatcher, MetaDataWatcher, SearchEnginesWatcher, StylesheetsWatcher});
+
+		for (int i = 0; i < watchers.count(); ++i)
+		{
+			if (isWatchingChanges(watchers.at(i)))
+			{
+				updateWatchedData(watchers.at(i));
+			}
 		}
-	}
+	});
 
 	emit contentStateChanged(getContentState());
 	emit loadingStateChanged(FinishedLoadingState);
@@ -1702,7 +1712,23 @@ Session::Window::History QtWebEngineWebWidget::getHistory() const
 
 WebWidget::HitTestResult QtWebEngineWebWidget::getHitTestResult(const QPoint &position)
 {
-	m_hitResult = QtWebEngineHitTestResult(m_page->runScriptFile(QLatin1String("hitTest"), {QString::number(position.x() / m_page->zoomFactor()), QString::number(position.y() / m_page->zoomFactor())}));
+	const QVariantMap map(m_page->runScriptFile(QLatin1String("hitTest"), {QString::number(position.x() / m_page->zoomFactor()), QString::number(position.y() / m_page->zoomFactor())}).toMap());
+	const QVariantMap geometryMap(map.value(QLatin1String("geometry")).toMap());
+
+	m_hitResult = {};
+	m_hitResult.title = map.value(QLatin1String("title")).toString();
+	m_hitResult.tagName = map.value(QLatin1String("tagName")).toString();
+	m_hitResult.alternateText = map.value(QLatin1String("alternateText")).toString();
+	m_hitResult.longDescription = map.value(QLatin1String("longDescription")).toString();
+	m_hitResult.formUrl = QUrl(map.value(QLatin1String("formUrl")).toString());
+	m_hitResult.frameUrl = QUrl(map.value(QLatin1String("frameUrl")).toString());
+	m_hitResult.imageUrl = QUrl(map.value(QLatin1String("imageUrl")).toString());
+	m_hitResult.linkUrl = QUrl(map.value(QLatin1String("linkUrl")).toString());
+	m_hitResult.mediaUrl = QUrl(map.value(QLatin1String("mediaUrl")).toString());
+	m_hitResult.elementGeometry = {geometryMap.value(QLatin1String("x")).toInt(), geometryMap.value(QLatin1String("y")).toInt(), geometryMap.value(QLatin1String("w")).toInt(), geometryMap.value(QLatin1String("h")).toInt()};
+	m_hitResult.hitPosition = map.value(QLatin1String("position")).toPoint();
+	m_hitResult.playbackRate = map.value(QLatin1String("playbackRate")).toReal();
+	m_hitResult.flags = static_cast<HitTestResult::HitTestFlags>(map.value(QLatin1String("flags")).toInt());
 
 	if (m_hitResult.flags.testFlag(HitTestResult::IsSelectedTest) && !m_hitResult.linkUrl.isValid() && Utils::isUrl(m_page->selectedText()))
 	{
@@ -1917,6 +1943,7 @@ bool QtWebEngineWebWidget::eventFilter(QObject *object, QEvent *event)
 				}
 
 				QVector<GesturesManager::GesturesContext> contexts;
+				contexts.reserve(1);
 
 				if (getCurrentHitTestResult().flags.testFlag(HitTestResult::IsContentEditableTest))
 				{

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -26,6 +26,7 @@
 
 #include <QtCore/QBuffer>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QCryptographicHash>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
@@ -62,7 +63,7 @@ void runApplication(const QString &command, const QUrl &url)
 	}
 	else
 	{
-		QDesktopServices::openUrl(QUrl(url));
+		QDesktopServices::openUrl(url);
 	}
 }
 
@@ -277,6 +278,7 @@ QString createErrorPage(const ErrorPageInformation &information)
 			ErrorPageInformation::PageAction action;
 			action.name = QLatin1String("advanced");
 			action.title = QCoreApplication::translate("utils", "Advanced");
+			action.type = ErrorPageInformation::OtherAction;
 
 			actions.append(action);
 		}
@@ -461,7 +463,9 @@ QString formatDateTime(const QDateTime &dateTime, QString format, bool allowFanc
 		format = SettingsManager::getOption(SettingsManager::Interface_DateTimeFormatOption).toString();
 	}
 
-	return (format.isEmpty() ? QLocale().toString(localDateTime, QLocale::ShortFormat) : QLocale().toString(localDateTime, format));
+	QLocale locale;
+
+	return (format.isEmpty() ? locale.toString(localDateTime, QLocale::ShortFormat) : locale.toString(localDateTime, format));
 }
 
 QString formatUnit(qint64 value, bool isSpeed, int precision, bool appendRaw)
@@ -528,18 +532,25 @@ QString normalizePath(const QString &path)
 	return path;
 }
 
+QString getStandardLocation(QStandardPaths::StandardLocation type)
+{
+	const QStringList paths(QStandardPaths::standardLocations(type));
+
+	return (paths.isEmpty() ? QString() : paths.value(0));
+}
+
 QUrl expandUrl(const QUrl &url)
 {
-	if (url.isValid() && url.scheme().isEmpty() && !url.path().startsWith(QLatin1Char('/')))
+	if (url.isValid() && url.scheme().isEmpty())
 	{
-		QUrl httpUrl(url);
-		httpUrl.setScheme(QLatin1String("http"));
+		if (!url.path().startsWith(QLatin1Char('/')))
+		{
+			QUrl httpUrl(url);
+			httpUrl.setScheme(QLatin1String("http"));
 
-		return httpUrl;
-	}
+			return httpUrl;
+		}
 
-	if (url.isValid() && (url.scheme().isEmpty() || url.scheme() == QLatin1String("file")))
-	{
 		QUrl localUrl(url);
 		localUrl.setScheme(QLatin1String("file"));
 
@@ -561,19 +572,40 @@ QUrl normalizeUrl(QUrl url)
 	return url;
 }
 
+QColor createColor(const QUrl &url)
+{
+	QByteArray hash(QCryptographicHash::hash(url.host().toUtf8(), QCryptographicHash::Md5));
+
+	return QColor(hash.at(0), hash.at(1), hash.at(2));
+}
+
 QLocale createLocale(const QString &name)
 {
 	if (name == QLatin1String("pt"))
 	{
-		return QLocale(QLocale::Portuguese, QLocale::Portugal);
+		return {QLocale::Portuguese, QLocale::Portugal};
 	}
 
-	return QLocale(name);
+	return {name};
 }
 
 QPixmap loadPixmapFromDataUri(const QString &data)
 {
 	return QPixmap::fromImage(QImage::fromData(QByteArray::fromBase64(data.mid(data.indexOf(QLatin1String("base64,")) + 7).toUtf8())));
+}
+
+QFont multiplyFontSize(QFont font, qreal multiplier)
+{
+	if (font.pixelSize() > 0)
+	{
+		font.setPixelSize(font.pixelSize() * 2);
+	}
+	else
+	{
+		font.setPointSize(font.pointSize() * 2);
+	}
+
+	return font;
 }
 
 QStringList getOpenPaths(const QStringList &fileNames, QStringList filters, bool selectMultiple)

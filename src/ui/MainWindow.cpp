@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -584,7 +584,7 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 
 			return;
 		case ActionsManager::BookmarksAction:
-			openSpecialPage(QUrl(QLatin1String("about:bookmarks")), trigger);
+			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), QUrl(QLatin1String("about:bookmarks"))}}, trigger);
 
 			return;
 		case ActionsManager::QuickBookmarkAccessAction:
@@ -661,6 +661,11 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 				{
 					Utils::runApplication(parameters[QLatin1String("application")].toString(), url);
 
+					return;
+				}
+
+				if (AddonsManager::isSpecialPage(url) && SessionsManager::hasUrl(url, true))
+				{
 					return;
 				}
 
@@ -1067,7 +1072,7 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 			return;
 		case ActionsManager::OpenPanelAction:
 			{
-				ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(parameters.value(QLatin1String("sidebar"), ToolBarsManager::SideBar).toInt()));
+				const ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(parameters.value(QLatin1String("sidebar"), ToolBarsManager::SideBar).toInt()));
 
 				if (definition.isValid() && !definition.currentPanel.isEmpty())
 				{
@@ -1077,11 +1082,11 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 
 			return;
 		case ActionsManager::ContentBlockingAction:
-			openSpecialPage(QUrl(QLatin1String("about:content-filters")), trigger);
+			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), QUrl(QLatin1String("about:content-filters"))}}, trigger);
 
 			return;
 		case ActionsManager::HistoryAction:
-			openSpecialPage(QUrl(QLatin1String("about:history")), trigger);
+			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), QUrl(QLatin1String("about:history"))}}, trigger);
 
 			return;
 		case ActionsManager::ClearHistoryAction:
@@ -1092,23 +1097,23 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 
 			return;
 		case ActionsManager::AddonsAction:
-			openSpecialPage(QUrl(QLatin1String("about:addons")), trigger);
+			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), QUrl(QLatin1String("about:addons"))}}, trigger);
 
 			return;
 		case ActionsManager::NotesAction:
-			openSpecialPage(QUrl(QLatin1String("about:notes")), trigger);
+			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), QUrl(QLatin1String("about:notes"))}}, trigger);
 
 			return;
 		case ActionsManager::PasswordsAction:
-			openSpecialPage(QUrl(QLatin1String("about:passwords")), trigger);
+			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), QUrl(QLatin1String("about:passwords"))}}, trigger);
 
 			return;
 		case ActionsManager::TransfersAction:
-			openSpecialPage(QUrl(QLatin1String("about:transfers")), trigger);
+			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), QUrl(QLatin1String("about:transfers"))}}, trigger);
 
 			return;
 		case ActionsManager::CookiesAction:
-			openSpecialPage(QUrl(QLatin1String("about:cookies")), trigger);
+			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), QUrl(QLatin1String("about:cookies"))}}, trigger);
 
 			return;
 		case ActionsManager::FullScreenAction:
@@ -1617,14 +1622,6 @@ void MainWindow::endToolBarDragging()
 	m_isDraggingToolBar = false;
 }
 
-void MainWindow::openSpecialPage(const QUrl &url, ActionsManager::TriggerType trigger)
-{
-	if (!SessionsManager::hasUrl(url, true))
-	{
-		triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}}, trigger);
-	}
-}
-
 void MainWindow::handleRequestedCloseWindow(Window *window)
 {
 	const int index(window ? getWindowIndex(window->getIdentifier()) : -1);
@@ -1860,7 +1857,7 @@ void MainWindow::handleTransferStarted()
 	{
 		const QUrl url(QLatin1String("about:transfers"));
 
-		if (!SessionsManager::hasUrl(url, false))
+		if (!SessionsManager::hasUrl(url))
 		{
 			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen)}});
 		}
@@ -2260,7 +2257,7 @@ ActionsManager::ActionDefinition::State MainWindow::getActionState(int identifie
 			{
 				const QUrl url(parameters[QLatin1String("url")].toUrl());
 
-				if (url.scheme() == QLatin1String("about") && AddonsManager::getSpecialPages().contains(url.path()))
+				if (AddonsManager::isSpecialPage(url))
 				{
 					const AddonsManager::SpecialPageInformation information(AddonsManager::getSpecialPage(url.path()));
 
@@ -2633,16 +2630,18 @@ int MainWindow::getWindowIndex(quint64 identifier) const
 bool MainWindow::hasUrl(const QUrl &url, bool activate)
 {
 	const QVector<quint64> windows(createOrderedWindowList(true));
+	QVector<quint64>::const_reverse_iterator iterator;
 
-	for (int i = (windows.count() - 1); i >= 0; --i)
+	for (iterator = windows.rbegin(); iterator != windows.rend(); ++iterator)
 	{
-		const Window *window(getWindowByIdentifier(windows.at(i)));
+		const quint64 identifier(*iterator);
+		const Window *window(getWindowByIdentifier(identifier));
 
 		if (window && window->getUrl() == url)
 		{
 			if (activate)
 			{
-				setActiveWindowByIdentifier(windows.at(i));
+				setActiveWindowByIdentifier(identifier);
 			}
 
 			return true;

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2016 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -97,11 +97,6 @@ protected:
 	void focusInEvent(QFocusEvent *event) override;
 	void updateFocus();
 	void setContentsWidget(ContentsWidget *widget);
-
-protected slots:
-	void handleSearchRequest(const QString &query, const QString &searchEngine, SessionsManager::OpenHints hints = SessionsManager::DefaultOpen);
-	void handleGeometryChangeRequest(const QRect &geometry);
-	void handleToolBarStateChanged(int identifier, const Session::MainWindow::ToolBarState &state);
 
 private:
 	Q_DISABLE_COPY(Window)

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,6 +20,8 @@
 #include "FeedsContentsWidget.h"
 #include "../../../core/Application.h"
 #include "../../../core/BookmarksManager.h"
+#include "../../../core/HandlersManager.h"
+#include "../../../core/ItemModel.h"
 #include "../../../core/ThemesManager.h"
 #include "../../../ui/Action.h"
 #include "../../../ui/Animation.h"
@@ -28,7 +30,6 @@
 
 #include "ui_FeedsContentsWidget.h"
 
-#include <QtGui/QDesktopServices>
 #include <QtWidgets/QDesktopWidget>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
@@ -39,11 +40,11 @@
 namespace Otter
 {
 
-EntryDelegate::EntryDelegate(QObject *parent) : ItemDelegate(parent)
+FeedEntryDelegate::FeedEntryDelegate(QObject *parent) : ItemDelegate(parent)
 {
 }
 
-void EntryDelegate::initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const
+void FeedEntryDelegate::initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const
 {
 	ItemDelegate::initStyleOption(option, index);
 
@@ -53,7 +54,7 @@ void EntryDelegate::initStyleOption(QStyleOptionViewItem *option, const QModelIn
 	}
 }
 
-FeedDelegate::FeedDelegate(QObject *parent) : ItemDelegate({{ItemDelegate::ProgressHasErrorRole, FeedsModel::HasErrorRole}, {ItemDelegate::ProgressHasIndicatorRole, FeedsModel::IsShowingProgressIndicatorRole}, {ItemDelegate::ProgressValueRole, FeedsModel::UpdateProgressValueRole}}, parent)
+FeedDelegate::FeedDelegate(QObject *parent) : ItemDelegate({{ProgressHasErrorRole, FeedsModel::HasErrorRole}, {ProgressHasIndicatorRole, FeedsModel::IsShowingProgressIndicatorRole}, {ProgressValueRole, FeedsModel::UpdateProgressValueRole}}, parent)
 {
 }
 
@@ -83,7 +84,7 @@ FeedsContentsWidget::FeedsContentsWidget(const QVariantMap &parameters, QWidget 
 	m_ui->subscribeFeedWidget->hide();
 	m_ui->feedsHorizontalSplitterWidget->setSizes({300, qMax(500, (width() - 300))});
 	m_ui->entriesFilterLineEditWidget->setClearOnEscape(true);
-	m_ui->entriesViewWidget->setItemDelegate(new EntryDelegate(this));
+	m_ui->entriesViewWidget->setItemDelegate(new FeedEntryDelegate(this));
 	m_ui->entriesViewWidget->installEventFilter(this);
 	m_ui->entriesViewWidget->viewport()->installEventFilter(this);
 	m_ui->entriesViewWidget->viewport()->setMouseTracking(true);
@@ -121,7 +122,7 @@ FeedsContentsWidget::FeedsContentsWidget(const QVariantMap &parameters, QWidget 
 	{
 		const QModelIndex index(m_ui->entriesViewWidget->currentIndex());
 
-		QDesktopServices::openUrl(QLatin1String("mailto:") + index.sibling(index.row(), 0).data(EmailRole).toString());
+		HandlersManager::handleUrl(QLatin1String("mailto:") + index.sibling(index.row(), 0).data(EmailRole).toString());
 	});
 	connect(m_ui->urlButton, &QToolButton::clicked, [&]()
 	{
@@ -149,6 +150,11 @@ void FeedsContentsWidget::changeEvent(QEvent *event)
 			m_feedModel->setHorizontalHeaderLabels({tr("Title"), tr("From"), tr("Published")});
 		}
 	}
+}
+
+void FeedsContentsWidget::print(QPrinter *printer)
+{
+	m_ui->textBrowserWidget->print(printer);
 }
 
 void FeedsContentsWidget::triggerAction(int identifier, const QVariantMap &parameters, ActionsManager::TriggerType trigger)
@@ -274,18 +280,20 @@ void FeedsContentsWidget::feedProperties()
 {
 	FeedsModel::Entry *entry(FeedsManager::getModel()->getEntry(m_ui->feedsViewWidget->currentIndex()));
 
-	if (entry)
+	if (!entry)
 	{
-		FeedsModel::Entry *folder(findFolder(m_ui->feedsViewWidget->currentIndex()));
-		FeedPropertiesDialog dialog(entry->getFeed(), folder, this);
-
-		if (dialog.exec() == QDialog::Accepted && dialog.getFolder() != folder)
-		{
-			FeedsManager::getModel()->moveEntry(entry, dialog.getFolder());
-		}
-
-		updateActions();
+		return;
 	}
+
+	FeedsModel::Entry *folder(findFolder(m_ui->feedsViewWidget->currentIndex()));
+	FeedPropertiesDialog dialog(entry->getFeed(), folder, this);
+
+	if (dialog.exec() == QDialog::Accepted && dialog.getFolder() != folder)
+	{
+		FeedsManager::getModel()->moveEntry(entry, dialog.getFolder());
+	}
+
+	updateActions();
 }
 
 void FeedsContentsWidget::openEntry()
@@ -295,7 +303,10 @@ void FeedsContentsWidget::openEntry()
 
 	if (mainWindow && index.isValid() && !index.data(UrlRole).isNull())
 	{
-		mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), index.data(UrlRole)}});
+		const QAction *action(qobject_cast<QAction*>(sender()));
+		const SessionsManager::OpenHints hints(action ? static_cast<SessionsManager::OpenHints>(action->data().toInt()) : SessionsManager::DefaultOpen);
+
+		mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), index.data(UrlRole)}, {QLatin1String("hints"), QVariant(hints)}});
 	}
 }
 
@@ -314,17 +325,6 @@ void FeedsContentsWidget::removeEntry()
 	}
 }
 
-void FeedsContentsWidget::selectCategory()
-{
-	const QToolButton *toolButton(qobject_cast<QToolButton*>(sender()));
-
-	if (toolButton)
-	{
-		m_categories = QStringList({toolButton->objectName()});
-
-		updateFeedModel();
-	}
-}
 
 void FeedsContentsWidget::handleFeedModified(const QUrl &url)
 {
@@ -351,14 +351,14 @@ void FeedsContentsWidget::handleFeedModified(const QUrl &url)
 
 void FeedsContentsWidget::showEntriesContextMenu(const QPoint &position)
 {
-	const QModelIndex index(m_ui->entriesViewWidget->indexAt(position).sibling(m_ui->entriesViewWidget->indexAt(position).row(), 0));
 	ActionExecutor::Object executor(this, this);
 	QMenu menu(this);
-	Action *openAction(new Action(ActionsManager::OpenUrlAction, {{QLatin1String("url"), index.data(UrlRole)}}, executor, &menu));
-	openAction->setTextOverride(QT_TRANSLATE_NOOP("actions", "Open"));
-	openAction->setEnabled(!index.data(UrlRole).isNull());
-
-	menu.addAction(openAction);
+	menu.addAction(ThemesManager::createIcon(QLatin1String("document-open")), QCoreApplication::translate("actions", "Open"), this, &FeedsContentsWidget::openEntry);
+	menu.addAction(QCoreApplication::translate("actions", "Open in New Tab"), this, &FeedsContentsWidget::openEntry)->setData(SessionsManager::NewTabOpen);
+	menu.addAction(QCoreApplication::translate("actions", "Open in New Background Tab"), this, &FeedsContentsWidget::openEntry)->setData(static_cast<int>(SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen));
+	menu.addSeparator();
+	menu.addAction(QCoreApplication::translate("actions", "Open in New Window"), this, &FeedsContentsWidget::openEntry)->setData(SessionsManager::NewWindowOpen);
+	menu.addAction(QCoreApplication::translate("actions", "Open in New Background Window"), this, &FeedsContentsWidget::openEntry)->setData(static_cast<int>(SessionsManager::NewWindowOpen | SessionsManager::BackgroundOpen));
 	menu.addSeparator();
 	menu.addAction(new Action(ActionsManager::DeleteAction, {}, executor, &menu));
 	menu.exec(m_ui->entriesViewWidget->mapToGlobal(position));
@@ -394,6 +394,16 @@ void FeedsContentsWidget::showFeedsContextMenu(const QPoint &position)
 						menu.addAction(ThemesManager::createIcon(QLatin1String("view-refresh")), QCoreApplication::translate("actions", "Update"), this, &FeedsContentsWidget::updateFeed);
 						menu.addSeparator();
 						menu.addAction(ThemesManager::createIcon(QLatin1String("document-open")), QCoreApplication::translate("actions", "Open"), this, &FeedsContentsWidget::openFeed);
+						menu.addSeparator();
+						menu.addAction(tr("Mark All as Read"), this, [&]()
+						{
+							if (m_feed)
+							{
+								m_feed->markAllEntriesAsRead();
+
+								updateFeedModel();
+							}
+						});
 					}
 
 					menu.addSeparator();
@@ -499,11 +509,15 @@ void FeedsContentsWidget::updateEntry()
 			const QString label(feedCategories.value(entryCategories.at(i)));
 			QToolButton *toolButton(new QToolButton(m_ui->entryWidget));
 			toolButton->setText(label.isEmpty() ? QString(entryCategories.at(i)).replace(QLatin1Char('_'), QLatin1Char(' ')) : label);
-			toolButton->setObjectName(entryCategories.at(i));
 
 			m_ui->categoriesLayout->addWidget(toolButton);
 
-			connect(toolButton, &QToolButton::clicked, this, &FeedsContentsWidget::selectCategory);
+			connect(toolButton, &QToolButton::clicked, toolButton, [=]()
+			{
+				m_categories = QStringList({entryCategories.at(i)});
+
+				updateFeedModel();
+			});
 		}
 	}
 
@@ -523,6 +537,7 @@ void FeedsContentsWidget::updateEntry()
 	}
 
 	emit arbitraryActionsStateChanged({ActionsManager::DeleteAction});
+	emit urlChanged(getUrl());
 }
 
 void FeedsContentsWidget::updateFeedModel()
@@ -559,7 +574,7 @@ void FeedsContentsWidget::updateFeedModel()
 
 				if (applications.at(i).icon.isNull())
 				{
-					m_ui->applicationComboBox->setItemData((i + 2), QColor(Qt::transparent), Qt::DecorationRole);
+					m_ui->applicationComboBox->setItemData((i + 2), ItemModel::createDecoration(), Qt::DecorationRole);
 				}
 			}
 		}
@@ -682,7 +697,7 @@ void FeedsContentsWidget::updateFeedModel()
 
 		m_feedModel->appendRow(items);
 
-		if (entry.identifier == identifier)
+		if (!identifier.isEmpty() && entry.identifier == identifier)
 		{
 			m_ui->entriesViewWidget->setCurrentIndex(m_ui->entriesViewWidget->getIndex(i));
 		}
@@ -730,16 +745,16 @@ void FeedsContentsWidget::setFeed(Feed *feed)
 			m_feed->update();
 		}
 
-		if (!FeedsManager::getModel()->hasFeed(m_feed->getUrl()))
+		if (FeedsManager::getModel()->hasFeed(m_feed->getUrl()))
+		{
+			m_ui->subscribeFeedWidget->hide();
+		}
+		else
 		{
 			m_ui->iconLabel->setPixmap(ThemesManager::createIcon(QLatin1String("application-rss+xml"), false).pixmap(m_ui->iconLabel->size()));
 			m_ui->messageLabel->setText(tr("Subscribe to this feed using:"));
 
 			m_ui->subscribeFeedWidget->show();
-		}
-		else
-		{
-			m_ui->subscribeFeedWidget->hide();
 		}
 
 		connect(m_feed, &Feed::entriesModified, this, &FeedsContentsWidget::updateFeedModel);
@@ -757,10 +772,43 @@ void FeedsContentsWidget::setUrl(const QUrl &url, bool isTypedIn)
 {
 	Q_UNUSED(isTypedIn)
 
-	if (url.scheme() == QLatin1String("view-feed"))
+	QUrl feedUrl;
+
+	if (url.scheme() == QLatin1String("feed") || url.scheme() == QLatin1String("view-feed"))
 	{
-		setFeed(FeedsManager::createFeed(url.toDisplayString().mid(10)));
+		feedUrl = QUrl(url.toDisplayString().mid(url.scheme().length() + 1));
 	}
+
+	if (!feedUrl.isValid())
+	{
+		return;
+	}
+
+	setFeed(FeedsManager::createFeed(feedUrl));
+
+	if (m_feedModel->rowCount() == 0)
+	{
+		return;
+	}
+
+	const QString identifier(url.fragment());
+
+	if (!identifier.isEmpty())
+	{
+		for (int i = 0; i < m_feedModel->rowCount(); ++i)
+		{
+			const QModelIndex index(m_feedModel->index(i, 0));
+
+			if (index.data(IdentifierRole).toString() == identifier)
+			{
+				m_ui->entriesViewWidget->selectRow(index);
+
+				return;
+			}
+		}
+	}
+
+	m_ui->entriesViewWidget->selectRow(m_feedModel->index(0, 0));
 }
 
 Animation* FeedsContentsWidget::getUpdateAnimation()
@@ -801,7 +849,20 @@ QLatin1String FeedsContentsWidget::getType() const
 
 QUrl FeedsContentsWidget::getUrl() const
 {
-	return (m_feed ? FeedsManager::createFeedReaderUrl(m_feed->getUrl()) : QUrl(QLatin1String("about:feeds")));
+	if (m_feed)
+	{
+		const QUrl url(FeedsManager::createFeedReaderUrl(m_feed->getUrl()));
+		const QModelIndex index(m_ui->entriesViewWidget->currentIndex().sibling(m_ui->entriesViewWidget->currentIndex().row(), 0));
+
+		if (!index.isValid() || index.data(IdentifierRole).isNull())
+		{
+			return url;
+		}
+
+		return {url.toString() + QLatin1Char('#') + index.data(IdentifierRole).toString()};
+	}
+
+	return {QLatin1String("about:feeds")};
 }
 
 QIcon FeedsContentsWidget::getIcon() const

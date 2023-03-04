@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -64,6 +64,21 @@ void Feed::markEntryAsRead(const QString &identifier)
 			break;
 		}
 	}
+}
+
+void Feed::markAllEntriesAsRead()
+{
+	const QDateTime currentDateTime(QDateTime::currentDateTimeUtc());
+
+	for (int i = 0; i < m_entries.count(); ++i)
+	{
+		if (!m_entries[i].lastReadTime.isValid())
+		{
+			m_entries[i].lastReadTime = currentDateTime;
+		}
+	}
+
+	emit feedModified(this);
 }
 
 void Feed::markEntryAsRemoved(const QString &identifier)
@@ -152,29 +167,31 @@ void Feed::setEntries(const QVector<Feed::Entry> &entries)
 
 void Feed::setUpdateInterval(int interval)
 {
-	if (interval != m_updateInterval)
+	if (interval == m_updateInterval)
 	{
-		m_updateInterval = interval;
-
-		if (interval <= 0 && m_updateTimer)
-		{
-			m_updateTimer->deleteLater();
-			m_updateTimer = nullptr;
-		}
-		else
-		{
-			if (!m_updateTimer)
-			{
-				m_updateTimer = new LongTermTimer(this);
-
-				connect(m_updateTimer, &LongTermTimer::timeout, this, &Feed::update);
-			}
-
-			m_updateTimer->start(static_cast<quint64>(interval) * 60000);
-		}
-
-		emit feedModified(this);
+		return;
 	}
+
+	m_updateInterval = interval;
+
+	if (interval <= 0 && m_updateTimer)
+	{
+		m_updateTimer->deleteLater();
+		m_updateTimer = nullptr;
+	}
+	else
+	{
+		if (!m_updateTimer)
+		{
+			m_updateTimer = new LongTermTimer(this);
+
+			connect(m_updateTimer, &LongTermTimer::timeout, this, &Feed::update);
+		}
+
+		m_updateTimer->start(static_cast<quint64>(interval) * 60000);
+	}
+
+	emit feedModified(this);
 }
 
 void Feed::update()
@@ -269,6 +286,7 @@ void Feed::update()
 											++amount;
 										}
 
+										entry.lastReadTime = existingEntry.lastReadTime;
 										entry.publicationTime = normalizeTime(entry.publicationTime);
 
 										if (entry.updateTime.isValid())
@@ -737,16 +755,6 @@ void FeedsManager::save()
 	file.commit();
 }
 
-void FeedsManager::handleFeedModified(Feed *feed)
-{
-	if (feed)
-	{
-		emit feedModified(feed->getUrl());
-	}
-
-	scheduleSave();
-}
-
 FeedsManager* FeedsManager::getInstance()
 {
 	return m_instance;
@@ -774,7 +782,12 @@ Feed* FeedsManager::createFeed(const QUrl &url, const QString &title, const QIco
 
 	m_feeds.append(feed);
 
-	connect(feed, &Feed::feedModified, m_instance, &FeedsManager::handleFeedModified);
+	connect(feed, &Feed::feedModified, m_instance, [=]()
+	{
+		m_instance->scheduleSave();
+
+		emit m_instance->feedModified(feed->getUrl());
+	});
 
 	return feed;
 }
@@ -800,7 +813,7 @@ Feed* FeedsManager::getFeed(const QUrl &url)
 
 QUrl FeedsManager::createFeedReaderUrl(const QUrl &url)
 {
-	return QUrl(QLatin1String("view-feed:") + url.toDisplayString());
+	return QUrl(QLatin1String("feed:") + url.toDisplayString());
 }
 
 QVector<Feed*> FeedsManager::getFeeds()

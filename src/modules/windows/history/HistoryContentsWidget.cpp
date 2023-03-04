@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2018 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -43,10 +43,11 @@ HistoryContentsWidget::HistoryContentsWidget(const QVariantMap &parameters, Wind
 	m_ui->filterLineEditWidget->setClearOnEscape(true);
 
 	const QStringList groups({tr("Today"), tr("Yesterday"), tr("Earlier This Week"), tr("Previous Week"), tr("Earlier This Month"), tr("Earlier This Year"), tr("Older")});
+	const QIcon icon(ThemesManager::createIcon(QLatin1String("inode-directory")));
 
 	for (int i = 0; i < groups.count(); ++i)
 	{
-		m_model->appendRow(new QStandardItem(ThemesManager::createIcon(QLatin1String("inode-directory")), groups.at(i)));
+		m_model->appendRow(new QStandardItem(icon, groups.at(i)));
 	}
 
 	m_model->setHorizontalHeaderLabels({tr("Address"), tr("Title"), tr("Date")});
@@ -89,6 +90,13 @@ void HistoryContentsWidget::changeEvent(QEvent *event)
 	if (event->type() == QEvent::LanguageChange)
 	{
 		m_ui->retranslateUi(this);
+
+		const QStringList groups({tr("Today"), tr("Yesterday"), tr("Earlier This Week"), tr("Previous Week"), tr("Earlier This Month"), tr("Earlier This Year"), tr("Older")});
+
+		for (int i = 0; i < groups.count(); ++i)
+		{
+			m_model->setData(m_model->index(i, 0), groups.at(i), Qt::DisplayRole);
+		}
 
 		m_model->setHorizontalHeaderLabels({tr("Address"), tr("Title"), tr("Date")});
 	}
@@ -229,36 +237,16 @@ void HistoryContentsWidget::openEntry()
 		const QAction *action(qobject_cast<QAction*>(sender()));
 		MainWindow *mainWindow(MainWindow::findMainWindow(this));
 
-		if (mainWindow)
+		if (action && mainWindow)
 		{
 			mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(action ? static_cast<SessionsManager::OpenHints>(action->data().toInt()) : SessionsManager::DefaultOpen)}});
 		}
 	}
 }
 
-void HistoryContentsWidget::bookmarkEntry()
-{
-	const QStandardItem *entryItem(findEntry(getEntry(m_ui->historyViewWidget->currentIndex())));
-
-	if (entryItem)
-	{
-		Application::triggerAction(ActionsManager::BookmarkPageAction, {{QLatin1String("url"), entryItem->text()}, {QLatin1String("title"), m_ui->historyViewWidget->currentIndex().sibling(m_ui->historyViewWidget->currentIndex().row(), 1).data(Qt::DisplayRole).toString()}}, parentWidget());
-	}
-}
-
-void HistoryContentsWidget::copyEntryLink()
-{
-	const QStandardItem *entryItem(findEntry(getEntry(m_ui->historyViewWidget->currentIndex())));
-
-	if (entryItem)
-	{
-		QApplication::clipboard()->setText(entryItem->text());
-	}
-}
-
 void HistoryContentsWidget::handleEntryAdded(HistoryModel::Entry *entry)
 {
-	if (!entry || entry->getIdentifier() == 0 || findEntry(entry->getIdentifier()))
+	if (!entry || !entry->isValid() || findEntry(entry->getIdentifier()))
 	{
 		return;
 	}
@@ -314,7 +302,7 @@ void HistoryContentsWidget::handleEntryAdded(HistoryModel::Entry *entry)
 
 void HistoryContentsWidget::handleEntryModified(HistoryModel::Entry *entry)
 {
-	if (!entry || entry->getIdentifier() == 0)
+	if (!entry || !entry->isValid())
 	{
 		return;
 	}
@@ -336,7 +324,7 @@ void HistoryContentsWidget::handleEntryModified(HistoryModel::Entry *entry)
 
 void HistoryContentsWidget::handleEntryRemoved(HistoryModel::Entry *entry)
 {
-	if (!entry || entry->getIdentifier() == 0)
+	if (!entry || !entry->isValid())
 	{
 		return;
 	}
@@ -374,8 +362,24 @@ void HistoryContentsWidget::showContextMenu(const QPoint &position)
 		menu.addAction(QCoreApplication::translate("actions", "Open in New Window"), this, &HistoryContentsWidget::openEntry)->setData(SessionsManager::NewWindowOpen);
 		menu.addAction(QCoreApplication::translate("actions", "Open in New Background Window"), this, &HistoryContentsWidget::openEntry)->setData(static_cast<int>(SessionsManager::NewWindowOpen | SessionsManager::BackgroundOpen));
 		menu.addSeparator();
-		menu.addAction(tr("Add to Bookmarks…"), this, &HistoryContentsWidget::bookmarkEntry);
-		menu.addAction(tr("Copy Link to Clipboard"), this, &HistoryContentsWidget::copyEntryLink);
+		menu.addAction(tr("Add to Bookmarks…"), this, [&]()
+		{
+			const QStandardItem *entryItem(findEntry(getEntry(m_ui->historyViewWidget->currentIndex())));
+
+			if (entryItem)
+			{
+				Application::triggerAction(ActionsManager::BookmarkPageAction, {{QLatin1String("url"), entryItem->text()}, {QLatin1String("title"), m_ui->historyViewWidget->currentIndex().sibling(m_ui->historyViewWidget->currentIndex().row(), 1).data(Qt::DisplayRole).toString()}}, parentWidget());
+			}
+		});
+		menu.addAction(tr("Copy Link to Clipboard"), this, [&]()
+		{
+			const QStandardItem *entryItem(findEntry(getEntry(m_ui->historyViewWidget->currentIndex())));
+
+			if (entryItem)
+			{
+				QApplication::clipboard()->setText(entryItem->text());
+			}
+		});
 		menu.addSeparator();
 		menu.addAction(tr("Remove Entry"), this, &HistoryContentsWidget::removeEntry);
 		menu.addAction(tr("Remove All Entries from This Domain"), this, &HistoryContentsWidget::removeDomainEntries);

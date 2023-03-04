@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2016 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -20,12 +20,12 @@
 **************************************************************************/
 
 #include "SettingsManager.h"
+#include "Utils.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QMetaEnum>
 #include <QtCore/QSettings>
-#include <QtCore/QStandardPaths>
 #include <QtCore/QTextStream>
 #include <QtCore/QVector>
 
@@ -97,6 +97,7 @@ void SettingsManager::createInstance(const QString &path)
 	registerOption(Browser_ReuseCurrentTabOption, BooleanType, false);
 	registerOption(Browser_ShowSelectionContextMenuOnDoubleClickOption, BooleanType, false);
 	registerOption(Browser_SpellCheckDictionaryOption, StringType, QString());
+	registerOption(Browser_SpellCheckIgnoreDctionariesOption, StringType, QStringList());
 	registerOption(Browser_StartupBehaviorOption, EnumerationType, QLatin1String("continuePrevious"), {QLatin1String("continuePrevious"), QLatin1String("showDialog"), QLatin1String("startHomePage"), QLatin1String("startStartPage"), QLatin1String("startEmpty")});
 	registerOption(Browser_TransferStartingActionOption, EnumerationType, QLatin1String("doNothing"), {QLatin1String("openTab"), QLatin1String("openBackgroundTab"), QLatin1String("openPanel"), QLatin1String("doNothing")});
 	registerOption(Browser_ValidatorsOrderOption, ListType, QStringList({QLatin1String("w3c-markup"), QLatin1String("w3c-css")}));
@@ -173,7 +174,7 @@ void SettingsManager::createInstance(const QString &path)
 	registerOption(Network_UserAgentOption, EnumerationType, QLatin1String("default"), QStringList(QLatin1String("default")));
 	registerOption(Network_WorkOfflineOption, BooleanType, false);
 	registerOption(Paths_DownloadsOption, PathType, QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
-	registerOption(Paths_OpenFileOption, PathType, QStandardPaths::standardLocations(QStandardPaths::HomeLocation).value(0));
+	registerOption(Paths_OpenFileOption, PathType, Utils::getStandardLocation(QStandardPaths::HomeLocation));
 	registerOption(Paths_SaveFileOption, PathType, QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
 	registerOption(Permissions_EnableFullScreenOption, EnumerationType, QLatin1String("ask"), QStringList({QLatin1String("ask"), QLatin1String("allow"), QLatin1String("disallow")}));
 	registerOption(Permissions_EnableGeolocationOption, EnumerationType, QLatin1String("ask"), QStringList({QLatin1String("ask"), QLatin1String("allow"), QLatin1String("disallow")}));
@@ -261,13 +262,56 @@ void SettingsManager::createInstance(const QString &path)
 
 void SettingsManager::removeOverride(const QString &host, int identifier)
 {
-	if (identifier < 0)
+	QSettings settings(m_overridePath, QSettings::IniFormat);
+
+	if (identifier >= 0)
 	{
-		QSettings(m_overridePath, QSettings::IniFormat).remove(host);
+		settings.remove(host + QLatin1Char('/') + getOptionName(identifier));
+		settings.sync();
+
+		emit m_instance->hostOptionChanged(identifier, getOption(identifier), host);
+
+		return;
 	}
-	else
+
+	settings.beginGroup(host);
+
+	const QStringList groups(settings.childGroups());
+
+	if (groups.isEmpty())
 	{
-		QSettings(m_overridePath, QSettings::IniFormat).remove(host + QLatin1Char('/') + getOptionName(identifier));
+		return;
+	}
+
+	QVector<int> options;
+	options.reserve(groups.count());
+
+	for (int i = 0; i < groups.count(); ++i)
+	{
+		settings.beginGroup(groups.at(i));
+
+		const QStringList rawOptions(settings.childKeys());
+
+		for (int j = 0; j < rawOptions.count(); ++j)
+		{
+			const int option(getOptionIdentifier(groups.at(i) + QLatin1Char('/') + rawOptions.at(j)));
+
+			if (option >= 0)
+			{
+				options.append(option);
+			}
+		}
+
+		settings.endGroup();
+	}
+
+	settings.endGroup();
+	settings.remove(host);
+	settings.sync();
+
+	for (int i = 0; i < options.count(); ++i)
+	{
+		emit m_instance->hostOptionChanged(identifier, getOption(options.at(i)), host);
 	}
 }
 
@@ -285,19 +329,21 @@ void SettingsManager::registerOption(int identifier, OptionType type, const QVar
 
 void SettingsManager::saveOption(const QString &path, const QString &key, const QVariant &value, OptionType type)
 {
+	QSettings settings(path, QSettings::IniFormat);
+
 	if (value.isNull())
 	{
-		QSettings(path, QSettings::IniFormat).remove(key);
+		settings.remove(key);
 	}
 	else if (type == ColorType)
 	{
 		const QColor color(value.value<QColor>());
 
-		QSettings(path, QSettings::IniFormat).setValue(key, (color.isValid() ? color.name(QColor::HexArgb).toUpper() : QString()));
+		settings.setValue(key, (color.isValid() ? color.name(QColor::HexArgb).toUpper() : QString()));
 	}
 	else
 	{
-		QSettings(path, QSettings::IniFormat).setValue(key, value);
+		settings.setValue(key, value);
 	}
 }
 
@@ -643,6 +689,24 @@ int SettingsManager::getOptionIdentifier(const QString &name)
 	}
 
 	return staticMetaObject.enumerator(m_optionIdentifierEnumerator).keyToValue(mutableName.toLatin1());
+}
+
+int SettingsManager::getOverridesCount(int identifier)
+{
+	const QSettings overrides(m_overridePath, QSettings::IniFormat);
+	const QStringList overridesGroups(overrides.childGroups());
+	const QString optionName(getOptionName(identifier));
+	int amount(0);
+
+	for (int i = 0; i < overridesGroups.count(); ++i)
+	{
+		if (overrides.contains(overridesGroups.at(i) + QLatin1Char('/') + optionName))
+		{
+			++amount;
+		}
+	}
+
+	return amount;
 }
 
 bool SettingsManager::hasOverride(const QString &host, int identifier)

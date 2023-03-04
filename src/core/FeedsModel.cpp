@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -108,9 +108,11 @@ QVariant FeedsModel::Entry::data(int role) const
 						return ThemesManager::createIcon(QLatin1String("dialog-error"));
 					}
 
-					if (!m_feed->getIcon().isNull())
+					const QIcon icon(m_feed->getIcon());
+
+					if (!icon.isNull())
 					{
-						return m_feed->getIcon();
+						return icon;
 					}
 				}
 
@@ -137,7 +139,7 @@ QVariant FeedsModel::Entry::data(int role) const
 			case UpdateIntervalRole:
 				return m_feed->getUpdateInterval();
 			case UpdateProgressValueRole:
-				return (m_feed->isUpdating() ? m_feed->getUpdateProgress() : 100);
+				return m_feed->getUpdateProgress();
 			case IsShowingProgressIndicatorRole:
 				return (m_feed->isUpdating() || (m_feed->getLastSynchronizationTime().isValid() && m_feed->getLastSynchronizationTime().msecsTo(QDateTime::currentDateTimeUtc()) < 2500));
 			case IsUpdatingRole:
@@ -389,8 +391,11 @@ void FeedsModel::trashEntry(Entry *entry)
 		else
 		{
 			Entry *previousParent(static_cast<Entry*>(entry->parent()));
+			EntryLocation location;
+			location.parent = entry->parent()->index();
+			location.row = entry->row();
 
-			m_trash[entry] = {entry->parent()->index(), entry->row()};
+			m_trash[entry] = location;
 
 			m_trashEntry->appendRow(entry->parent()->takeRow(entry->row()));
 			m_trashEntry->setEnabled(true);
@@ -411,7 +416,7 @@ void FeedsModel::restoreEntry(Entry *entry)
 		return;
 	}
 
-	Entry *formerParent(m_trash.contains(entry) ? getEntry(m_trash[entry].first) : m_rootEntry);
+	Entry *formerParent(m_trash.contains(entry) ? getEntry(m_trash[entry].parent) : m_rootEntry);
 
 	if (!formerParent || formerParent->getType() != FolderEntry)
 	{
@@ -420,7 +425,7 @@ void FeedsModel::restoreEntry(Entry *entry)
 
 	if (m_trash.contains(entry))
 	{
-		formerParent->insertRow(m_trash[entry].second, entry->parent()->takeRow(entry->row()));
+		formerParent->insertRow(m_trash[entry].row, entry->parent()->takeRow(entry->row()));
 
 		m_trash.remove(entry);
 	}

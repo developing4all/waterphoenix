@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -35,10 +35,10 @@ namespace Ui
 class Animation;
 class Window;
 
-class EntryDelegate final : public ItemDelegate
+class FeedEntryDelegate final : public ItemDelegate
 {
 public:
-	explicit EntryDelegate(QObject *parent);
+	explicit FeedEntryDelegate(QObject *parent);
 
 	void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override;
 };
@@ -74,6 +74,7 @@ public:
 	explicit FeedsContentsWidget(const QVariantMap &parameters, QWidget *parent);
 	~FeedsContentsWidget();
 
+	void print(QPrinter *printer) override;
 	static Animation* getUpdateAnimation();
 	QString getTitle() const override;
 	QLatin1String getType() const override;
@@ -101,7 +102,6 @@ protected slots:
 	void feedProperties();
 	void openEntry();
 	void removeEntry();
-	void selectCategory();
 	void handleFeedModified(const QUrl &url);
 	void showEntriesContextMenu(const QPoint &position);
 	void showFeedsContextMenu(const QPoint &position);

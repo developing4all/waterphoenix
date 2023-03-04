@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -46,13 +46,8 @@ protected:
 	void changeEvent(QEvent *event) override;
 
 protected slots:
-	void downloadUpdate();
 	void handleReadyToInstall();
-	void handleButtonClicked(QAbstractButton *button);
 	void handleUpdateCheckFinished(const QVector<UpdateChecker::UpdateInformation> &availableUpdates);
-	void handleUpdateProgress(int progress);
-	void handleTransferFinished(bool isSuccess);
-	void showDetails();
 
 private:
 	Ui::UpdateCheckerDialog *m_ui;

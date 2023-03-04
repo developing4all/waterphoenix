@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -519,7 +519,7 @@ void AddressWidget::contextMenuEvent(QContextMenuEvent *event)
 			menu.addSeparator();
 		}
 
-		menu.addAction(tr("Remove Icon"), this, [&]()
+		menu.addAction(ThemesManager::createIcon(QLatin1String("edit-delete")), tr("Remove Icon"), this, [&]()
 		{
 			const QString entryName(EnumeratorMapper(metaObject()->enumerator(m_entryIdentifierEnumerator), QLatin1String("Entry")).mapToName(entry));
 
@@ -764,22 +764,38 @@ void AddressWidget::showCompletion(bool isTypedHistory)
 		});
 		connect(popupWidget, &PopupViewWidget::customContextMenuRequested, this, [&](const QPoint &position)
 		{
-			if (isTypedHistory)
+			const QModelIndex index(getPopup()->indexAt(position));
+
+			if (!index.isValid())
 			{
-				const QModelIndex index(getPopup()->indexAt(position));
-
-				if (index.isValid() && index.data(AddressCompletionModel::IsRemovableRole).toBool() && index.data(AddressCompletionModel::TypeRole).toInt() == AddressCompletionModel::CompletionEntry::TypedHistoryType)
-				{
-					QMenu menu(this);
-					menu.addAction(tr("Remove Entry"), this, [&]()
-					{
-						HistoryManager::getTypedHistoryModel()->removeEntry(index.data(AddressCompletionModel::HistoryIdentifierRole).toULongLong());
-
-						updateCompletion(true, true);
-					});
-					menu.exec(getPopup()->mapToGlobal(position));
-				}
+				return;
 			}
+
+			const AddressCompletionModel::CompletionEntry::EntryType type(static_cast<AddressCompletionModel::CompletionEntry::EntryType>(index.data(AddressCompletionModel::TypeRole).toInt()));
+
+			if (type <= AddressCompletionModel::CompletionEntry::HeaderType || type == AddressCompletionModel::CompletionEntry::SearchSuggestionType)
+			{
+				return;
+			}
+
+			QMenu menu(this);
+			menu.addAction(ThemesManager::createIcon(QLatin1String("edit-copy")), QCoreApplication::translate("actons", "Copy"), this, [&]()
+			{
+				QApplication::clipboard()->setText(index.data(AddressCompletionModel::UrlRole).toUrl().toString());
+			});
+
+			if (isTypedHistory && index.data(AddressCompletionModel::IsRemovableRole).toBool() && type == AddressCompletionModel::CompletionEntry::TypedHistoryType)
+			{
+				menu.addSeparator();
+				menu.addAction(ThemesManager::createIcon(QLatin1String("edit-delete")), tr("Remove Entry"), this, [&]()
+				{
+					HistoryManager::getTypedHistoryModel()->removeEntry(index.data(AddressCompletionModel::HistoryIdentifierRole).toULongLong());
+
+					updateCompletion(true, true);
+				});
+			}
+
+			menu.exec(getPopup()->mapToGlobal(position));
 		});
 		connect(popupWidget->selectionModel(), &QItemSelectionModel::currentChanged, this, [&](const QModelIndex &index)
 		{
@@ -920,7 +936,7 @@ void AddressWidget::handleWatchedDataChanged(WebWidget::ChangeWatcher watcher)
 
 void AddressWidget::handleUserInput(const QString &text, SessionsManager::OpenHints hints)
 {
-	if (m_isSimplified)
+	if (m_isSimplified || text.isEmpty())
 	{
 		return;
 	}
@@ -930,39 +946,38 @@ void AddressWidget::handleUserInput(const QString &text, SessionsManager::OpenHi
 		hints = SessionsManager::calculateOpenHints(SessionsManager::CurrentTabOpen);
 	}
 
-	if (!text.isEmpty())
+	const InputInterpreter::InterpreterResult result(InputInterpreter::interpret(text));
+
+	if (!result.isValid())
 	{
-		const InputInterpreter::InterpreterResult result(InputInterpreter::interpret(text));
+		return;
+	}
 
-		if (result.isValid())
-		{
-			MainWindow *mainWindow(m_window ? MainWindow::findMainWindow(m_window) : MainWindow::findMainWindow(this));
-			ActionExecutor::Object executor(mainWindow, mainWindow);
+	MainWindow *mainWindow(m_window ? MainWindow::findMainWindow(m_window) : MainWindow::findMainWindow(this));
+	ActionExecutor::Object executor(mainWindow, mainWindow);
 
-			switch (result.type)
+	switch (result.type)
+	{
+		case InputInterpreter::InterpreterResult::BookmarkType:
+			if (executor.isValid())
 			{
-				case InputInterpreter::InterpreterResult::BookmarkType:
-					if (executor.isValid())
-					{
-						executor.triggerAction(ActionsManager::OpenBookmarkAction, {{QLatin1String("bookmark"), result.bookmark->getIdentifier()}, {QLatin1String("hints"), QVariant(hints)}});
-					}
-
-					break;
-				case InputInterpreter::InterpreterResult::UrlType:
-					if (executor.isValid())
-					{
-						executor.triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), result.url}, {QLatin1String("hints"), QVariant(hints)}});
-					}
-
-					break;
-				case InputInterpreter::InterpreterResult::SearchType:
-					emit requestedSearch(result.searchQuery, result.searchEngine, hints);
-
-					break;
-				default:
-					break;
+				executor.triggerAction(ActionsManager::OpenBookmarkAction, {{QLatin1String("bookmark"), result.bookmark->getIdentifier()}, {QLatin1String("hints"), QVariant(hints)}});
 			}
-		}
+
+			break;
+		case InputInterpreter::InterpreterResult::UrlType:
+			if (executor.isValid())
+			{
+				executor.triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), result.url}, {QLatin1String("hints"), QVariant(hints)}});
+			}
+
+			break;
+		case InputInterpreter::InterpreterResult::SearchType:
+			emit requestedSearch(result.searchQuery, result.searchEngine, hints);
+
+			break;
+		default:
+			break;
 	}
 }
 
@@ -1439,14 +1454,8 @@ void AddressWidget::setUrl(const QUrl &url, bool force)
 	if (m_isSimplified || ((force || !m_wasEdited || !hasFocus()) && url.scheme() != QLatin1String("javascript")))
 	{
 		const QString host(url.host(QUrl::FullyEncoded));
-		QString toolTip(text);
 
-		if (host != url.host())
-		{
-			toolTip = QStringLiteral("(%1) %2").arg(host, text);
-		}
-
-		setToolTip(toolTip);
+		setToolTip((host == url.host()) ? text : QStringLiteral("(%1) %2").arg(host, text));
 		setText(text);
 		setCursorPosition(0);
 

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2022 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -17,13 +17,39 @@
 *
 **************************************************************************/
 
-#include "PreferencesPage.h"
+#ifndef OTTER_QUICKRESPONSECODEDIALOG_H
+#define OTTER_QUICKRESPONSECODEDIALOG_H
+
+#include "../ui/Dialog.h"
+
+#include <QtWidgets/QAbstractButton>
 
 namespace Otter
 {
 
-PreferencesPage::PreferencesPage(QWidget *parent) : QWidget(parent)
+namespace Ui
 {
+	class QuickResponseCodeDialog;
 }
 
+class QuickResponseCodeDialog final : public Dialog
+{
+	Q_OBJECT
+
+public:
+	explicit QuickResponseCodeDialog(const QString &message, QWidget *parent = nullptr);
+	~QuickResponseCodeDialog();
+
+protected:
+	void changeEvent(QEvent *event) override;
+
+protected slots:
+	void handleButtonClicked(QAbstractButton *button);
+
+private:
+	Ui::QuickResponseCodeDialog *m_ui;
+};
+
 }
+
+#endif

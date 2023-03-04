@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,6 @@
 #include "ui_TransferDialog.h"
 
 #include <QtCore/QFileInfo>
-#include <QtCore/QtMath>
 
 namespace Otter
 {
@@ -105,56 +104,63 @@ void TransferDialog::handleButtonClicked(QAbstractButton *button)
 		return;
 	}
 
-	if (standardButton == QDialogButtonBox::Open)
+	switch (standardButton)
 	{
-		m_transfer->setOpenCommand(m_ui->openWithComboBoxWidget->getCommand());
+		case QDialogButtonBox::Open:
+			m_transfer->setOpenCommand(m_ui->openWithComboBoxWidget->getCommand());
 
-		if (m_ui->rememberChoiceCheckBox->isChecked())
-		{
-			HandlersManager::MimeTypeHandlerDefinition definition;
-			definition.transferMode = HandlersManager::MimeTypeHandlerDefinition::OpenTransfer;
-			definition.openCommand = m_ui->openWithComboBoxWidget->getCommand();
-
-			HandlersManager::setMimeTypeHandler(m_transfer->getMimeType(), definition);
-		}
-	}
-	else if (standardButton == QDialogButtonBox::Save)
-	{
-		QWidget *dialog(parentWidget());
-
-		while (dialog)
-		{
-			if (dialog->inherits("Otter::ContentsDialog"))
+			if (m_ui->rememberChoiceCheckBox->isChecked())
 			{
-				dialog->hide();
+				HandlersManager::MimeTypeHandlerDefinition definition;
+				definition.transferMode = HandlersManager::MimeTypeHandlerDefinition::OpenTransfer;
+				definition.openCommand = m_ui->openWithComboBoxWidget->getCommand();
 
-				break;
+				HandlersManager::setMimeTypeHandler(m_transfer->getMimeType(), definition);
 			}
 
-			dialog = dialog->parentWidget();
-		}
+			break;
+		case QDialogButtonBox::Save:
+			{
+				QWidget *dialog(parentWidget());
 
-		const QString path(Utils::getSavePath(m_transfer->getSuggestedFileName()).path);
+				while (dialog)
+				{
+					if (dialog->inherits("Otter::ContentsDialog"))
+					{
+						dialog->hide();
 
-		if (path.isEmpty())
-		{
-			m_transfer->cancel();
+						break;
+					}
 
-			reject();
+					dialog = dialog->parentWidget();
+				}
 
-			return;
-		}
+				const QString path(Utils::getSavePath(m_transfer->getSuggestedFileName()).path);
 
-		m_transfer->setTarget(path, true);
+				if (path.isEmpty())
+				{
+					m_transfer->cancel();
 
-		if (m_ui->rememberChoiceCheckBox->isChecked())
-		{
-			HandlersManager::MimeTypeHandlerDefinition definition;
-			definition.transferMode = HandlersManager::MimeTypeHandlerDefinition::SaveTransfer;
-			definition.downloadsPath = QFileInfo(path).canonicalPath();
+					reject();
 
-			HandlersManager::setMimeTypeHandler(m_transfer->getMimeType(), definition);
-		}
+					return;
+				}
+
+				m_transfer->setTarget(path, true);
+
+				if (m_ui->rememberChoiceCheckBox->isChecked())
+				{
+					HandlersManager::MimeTypeHandlerDefinition definition;
+					definition.transferMode = HandlersManager::MimeTypeHandlerDefinition::SaveTransfer;
+					definition.downloadsPath = QFileInfo(path).canonicalPath();
+
+					HandlersManager::setMimeTypeHandler(m_transfer->getMimeType(), definition);
+				}
+			}
+
+			break;
+		default:
+			break;
 	}
 
 	TransfersManager::addTransfer(m_transfer);

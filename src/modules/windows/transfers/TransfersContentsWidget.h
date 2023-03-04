@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -61,6 +61,18 @@ public:
 		TimeStartedRole
 	};
 
+	enum ColumnRole
+	{
+		DecorationColumn = 0,
+		FilenameColumn,
+		SizeColumn,
+		ProgressColumn,
+		TimeElapsedColumn,
+		SpeedColumn,
+		TimeStartedColumn,
+		TimeFinishedColumn
+	};
+
 	explicit TransfersContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent);
 	~TransfersContentsWidget();
 
@@ -84,7 +96,6 @@ protected:
 protected slots:
 	void removeTransfer();
 	void openTransfer();
-	void openTransferFolder();
 	void copyTransferInformation();
 	void stopResumeTransfer();
 	void redownloadTransfer();
