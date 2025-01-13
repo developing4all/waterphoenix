@@ -30,7 +30,7 @@ if (EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
         set(CPACK_PACKAGE_NAME "waterphoenix-browser")
 	set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}_${MAJOR_VERSION}.${MINOR_VERSION}.${CPACK_PACKAGE_VERSION_PATCH}")
 	set(CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}_${MAJOR_VERSION}.${MINOR_VERSION}.${CPACK_PACKAGE_VERSION_PATCH}")
-	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libhunspell-1.5-0 (>= 1.5.1), libqt5multimedia5 (>=5.6.0), libqt5qml5 (>=5.6.0), libqt5svg5 (>=5.6.0), libqt5webkit5 (>=5.212.0~alpha2)")
+	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libhunspell-1.5-0 (>= 1.5.1), libqt5multimedia5 (>=5.15.0), libqt5qml5 (>=5.15.0), libqt5svg5 (>=5.15.0), libqt5webkit5 (>=5.212.0~alpha2)")
 	set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "gstreamer1.0-plugins-base, gstreamer1.0-plugins-good")
 	set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 	set(CPACK_DEBIAN_PACKAGE_SECTION "web")
@@ -68,24 +68,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FeatureSummary)
 include(GNUInstallDirs)
 
-option(ENABLE_QTWEBENGINE "Enable QtWebEngine backend (requires Qt 5.15)" ON)
+option(ALLOW_WITHOUT_WEB_BACKENDS "Allow to build without any web backends (build testing only)" OFF)
+option(ENABLE_QTWEBENGINE "Enable QtWebEngine backend (requires QtWebEngine 5.15)" ON)
 option(ENABLE_QTWEBKIT "Enable QtWebKit backend (requires QtWebKit 5.212)" ON)
-option(ENABLE_CRASHREPORTS "Enable built-in crash reporting (only for official builds)" OFF)
+option(ENABLE_CRASH_REPORTS "Enable built-in crash reporting (official builds only)" OFF)
 option(ENABLE_DBUS "Enable D-Bus based integration for notifications (only freedesktop.org compatible platforms)" ON)
 option(ENABLE_SPELLCHECK "Enable Hunspell based spell checking" ON)
 
-find_package(Qt5 5.6.0 REQUIRED COMPONENTS Core Gui Multimedia Network PrintSupport Qml Svg Widgets)
-find_package(Qt5 5.15.0 QUIET COMPONENTS WebEngineWidgets)
-find_package(Qt5WebKitWidgets 5.212.0 QUIET)
+find_package(Qt5 5.15.0 REQUIRED COMPONENTS Core Gui Multimedia Network PrintSupport Qml Svg Widgets)
 find_package(Hunspell 1.5.0 QUIET)
 
-set_package_properties(Qt5WebEngineCore PROPERTIES URL "https://www.qt.io/" DESCRIPTION "QtWebEngine based backend (core)" TYPE OPTIONAL)
-set_package_properties(Qt5WebEngineWidgets PROPERTIES URL "https://www.qt.io/" DESCRIPTION "QtWebEngine based backend (widgets)" TYPE OPTIONAL)
-set_package_properties(Qt5WebKit PROPERTIES URL "https://qtwebkit.github.io/" DESCRIPTION "QtWebKit based backend (core)" TYPE OPTIONAL)
-set_package_properties(Qt5WebKitWidgets PROPERTIES URL "https://qtwebkit.github.io/" DESCRIPTION "QtWebKit based backend (widgets)" TYPE OPTIONAL)
 set_package_properties(Hunspell PROPERTIES URL "https://hunspell.github.io/" DESCRIPTION "Generic spell checking support" TYPE OPTIONAL)
 
-set(otter_src
+set(OTTER_SOURCES
 	src/main.cpp
 	src/core/ActionExecutor.cpp
 	src/core/ActionsManager.cpp
@@ -162,6 +157,7 @@ set(otter_src
 	src/ui/CookiePropertiesDialog.cpp
 	src/ui/DataExchangerDialog.cpp
 	src/ui/DateTimeTextLabelWidget.cpp
+	src/ui/DiagnosticReportDialog.cpp
 	src/ui/Dialog.cpp
 	src/ui/FeedPropertiesDialog.cpp
 	src/ui/FeedsComboBoxWidget.cpp
@@ -191,7 +187,6 @@ set(otter_src
 	src/ui/QuickResponseCodeDialog.cpp
 	src/ui/QuickResponseCodeWidget.cpp
 	src/ui/ReloadTimeDialog.cpp
-	src/ui/ReportDialog.cpp
 	src/ui/ResizerWidget.cpp
 	src/ui/SaveSessionDialog.cpp
 	src/ui/SearchEnginePropertiesDialog.cpp
@@ -295,11 +290,11 @@ set(otter_src
 	3rdparty/qrcodegen/qrcodegen.cpp
 )
 
-qt5_add_resources(otter_res
+qt5_add_resources(OTTER_RESOURCES
 	resources/resources.qrc
 )
 
-qt5_wrap_ui(otter_ui
+qt5_wrap_ui(OTTER_UI
 	src/ui/AcceptCookieDialog.ui
 	src/ui/ActionParametersDialog.ui
 	src/ui/AuthenticationDialog.ui
@@ -310,6 +305,7 @@ qt5_wrap_ui(otter_ui
 	src/ui/ContentBlockingProfileDialog.ui
 	src/ui/CookiePropertiesDialog.ui
 	src/ui/DataExchangerDialog.ui
+	src/ui/DiagnosticReportDialog.ui
 	src/ui/FeedPropertiesDialog.ui
 	src/ui/ImagePropertiesDialog.ui
 	src/ui/LocaleDialog.ui
@@ -321,7 +317,6 @@ qt5_wrap_ui(otter_ui
 	src/ui/PreferencesDialog.ui
 	src/ui/QuickResponseCodeDialog.ui
 	src/ui/ReloadTimeDialog.ui
-	src/ui/ReportDialog.ui
 	src/ui/SaveSessionDialog.ui
 	src/ui/SearchEnginePropertiesDialog.ui
 	src/ui/SessionsManagerDialog.ui
@@ -373,8 +368,8 @@ qt5_wrap_ui(otter_ui
 	src/modules/windows/windows/WindowsContentsWidget.ui
 )
 
-foreach (_current_dir ${Qt5Widgets_PRIVATE_INCLUDE_DIRS})
-	if (EXISTS "${_current_dir}/private/qpixmapfilter_p.h")
+foreach (_dir ${Qt5Widgets_PRIVATE_INCLUDE_DIRS})
+	if (EXISTS "${_dir}/private/qpixmapfilter_p.h")
 		add_definitions(-DOTTER_ENABLE_STARTPAGEBLUR)
 		include_directories(${Qt5Widgets_PRIVATE_INCLUDE_DIRS})
 
@@ -382,73 +377,28 @@ foreach (_current_dir ${Qt5Widgets_PRIVATE_INCLUDE_DIRS})
 	endif ()
 endforeach ()
 
-if (TARGET Qt5::WebEngineWidgets AND ENABLE_QTWEBENGINE)
-	add_definitions(-DOTTER_ENABLE_QTWEBENGINE)
-
-	list(APPEND OTTER_BACKENDS_WEB "QtWebEngine (experimental)")
-
-	set(otter_src
-		${otter_src}
-		src/modules/backends/web/qtwebengine/QtWebEnginePage.cpp
-		src/modules/backends/web/qtwebengine/QtWebEngineUrlRequestInterceptor.cpp
-		src/modules/backends/web/qtwebengine/QtWebEngineTransfer.cpp
-		src/modules/backends/web/qtwebengine/QtWebEngineWebBackend.cpp
-		src/modules/backends/web/qtwebengine/QtWebEngineWebWidget.cpp
-	)
-
-	qt5_add_resources(otter_res
-		src/modules/backends/web/qtwebengine/QtWebEngineResources.qrc
-	)
+if (ENABLE_QTWEBENGINE)
+	include(src/modules/backends/web/qtwebengine/CMakeLists.txt)
 endif ()
 
-if (TARGET Qt5::WebKitWidgets AND ENABLE_QTWEBKIT)
-	add_definitions(-DOTTER_ENABLE_QTWEBKIT -DQT_STATICPLUGIN)
-
-	list(APPEND OTTER_BACKENDS_WEB "QtWebKit")
-
-	set(otter_src
-		${otter_src}
-		src/modules/backends/web/qtwebkit/qwebkitplatformplugin.h
-		src/modules/backends/web/qtwebkit/QtWebKitCookieJar.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitFtpListingNetworkReply.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitHistoryInterface.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitNetworkManager.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitNotificationPresenter.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitPage.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitPlugin.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitPluginFactory.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitWebBackend.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitWebWidget.cpp
-		src/modules/backends/web/qtwebkit/3rdparty/qtftp/qftp.cpp
-		src/modules/backends/web/qtwebkit/3rdparty/qtftp/qurlinfo.cpp
-	)
-
-	if (TARGET Hunspell::Hunspell AND ENABLE_SPELLCHECK)
-		set(otter_src
-			${otter_src}
-			src/modules/backends/web/qtwebkit/QtWebKitSpellChecker.cpp
-		)
-	endif ()
-
-	qt5_add_resources(otter_res
-		src/modules/backends/web/qtwebkit/QtWebKitResources.qrc
-	)
+if (ENABLE_QTWEBKIT)
+	include(src/modules/backends/web/qtwebkit/CMakeLists.txt)
 endif ()
 
-if (ENABLE_CRASHREPORTS)
-	add_definitions(-DOTTER_ENABLE_CRASHREPORTS)
+if (ENABLE_CRASH_REPORTS)
+	add_definitions(-DOTTER_ENABLE_CRASH_REPORTS)
 	include_directories(${CMAKE_SOURCE_DIR}/3rdparty/breakpad/src/)
 
 	if (WIN32)
-		set(otter_src
-			${otter_src}
+		set(OTTER_SOURCES
+			${OTTER_SOURCES}
 			3rdparty/breakpad/src/common/windows/guid_string.cc
 			3rdparty/breakpad/src/client/windows/crash_generation/crash_generation_client.cc
 			3rdparty/breakpad/src/client/windows/handler/exception_handler.cc
 		)
 	elseif (CMAKE_SYSTEM_NAME MATCHES "Linux")
-		set(otter_src
-			${otter_src}
+		set(OTTER_SOURCES
+			${OTTER_SOURCES}
 			3rdparty/breakpad/src/client/minidump_file_writer.cc
 			3rdparty/breakpad/src/client/linux/crash_generation/crash_generation_client.cc
 			3rdparty/breakpad/src/client/linux/dump_writer_common/thread_info.cc
@@ -479,8 +429,8 @@ if (TARGET Hunspell::Hunspell AND ENABLE_SPELLCHECK)
 	add_definitions(-DOTTER_ENABLE_SPELLCHECK)
 	include_directories(Hunspell::Hunspell)
 
-	set(otter_src
-		${otter_src}
+	set(OTTER_SOURCES
+		${OTTER_SOURCES}
 		3rdparty/sonnet/src/core/client.cpp
 		3rdparty/sonnet/src/core/loader.cpp
 		3rdparty/sonnet/src/core/speller.cpp
@@ -498,7 +448,7 @@ endif ()
 if (WIN32)
 	add_definitions(-DUNICODE -D_UNICODE)
 
-	find_package(Qt5 5.6.0 QUIET COMPONENTS WinExtras)
+	find_package(Qt5 5.15.0 QUIET COMPONENTS WinExtras)
 
 	if (MSVC)
 		set(CMAKE_PREFIX_PATH $ENV{QTDIR})
@@ -513,25 +463,26 @@ if (WIN32)
 		endif ()
 	endif ()
 
-	set(otter_src
-		${otter_src}
+	set(OTTER_SOURCES
+		${OTTER_SOURCES}
 		otter-browser.rc
 		src/modules/platforms/windows/WindowsPlatformIntegration.cpp
 		src/modules/platforms/windows/WindowsPlatformStyle.cpp
 	)
 elseif (APPLE)
-	find_package(Qt5 5.6.0 QUIET COMPONENTS MacExtras)
+	find_package(Qt5 5.15.0 QUIET COMPONENTS MacExtras)
 
 	set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
         set(MACOSX_BUNDLE_BUNDLE_NAME "Water Phoenix Browser")
 	set(MACOSX_BUNDLE_BUNDLE_VERSION ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION})
 	set(MACOSX_BUNDLE_LONG_VERSION_STRING ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION})
 	set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${MAJOR_VERSION}.${MINOR_VERSION})
+
 	set(MACOSX_BUNDLE_ICON_FILE waterphoenix-browser.icns)
 	set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.developing4all.waterphoenix")
-	set(MACOSX_BUNDLE_COPYRIGHT "Copyright (C) 2013-2021 Waterphoenix Browser Team. All rights reserved.")
-	set(otter_src
-		${otter_src}
+	set(MACOSX_BUNDLE_COPYRIGHT "Copyright (C) 2013-2025 Waterphoenix Browser Team. All rights reserved.")
+	set(OTTER_SOURCES
+		${OTTER_SOURCES}
 		src/modules/platforms/mac/MacPlatformIntegration.mm
 		src/modules/platforms/mac/MacPlatformStyle.cpp
                 resources/icons/waterphoenix-browser.icns
@@ -539,14 +490,14 @@ elseif (APPLE)
 
         set_source_files_properties(resources/icons/waterphoenix-browser.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 elseif (UNIX)
-	find_package(Qt5 5.6.0 QUIET COMPONENTS DBus)
+	find_package(Qt5 5.15.0 QUIET COMPONENTS DBus)
 
 	if (TARGET Qt5::DBus AND ENABLE_DBUS)
 		add_definitions(-DOTTER_ENABLE_DBUS)
 	endif ()
 
-	set(otter_src
-		${otter_src}
+	set(OTTER_SOURCES
+		${OTTER_SOURCES}
 		src/modules/platforms/freedesktoporg/FreeDesktopOrgPlatformIntegration.cpp
 		src/modules/platforms/freedesktoporg/FreeDesktopOrgPlatformStyle.cpp
 		3rdparty/libmimeapps/ConfigReader.cpp
@@ -561,7 +512,13 @@ feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAG
 list(LENGTH OTTER_BACKENDS_WEB OTTER_BACKENDS_WEB_LENGTH)
 
 if (${OTTER_BACKENDS_WEB_LENGTH} EQUAL 0)
-	message(SEND_ERROR "No web backends available!")
+	if (ALLOW_WITHOUT_WEB_BACKENDS)
+		add_definitions(-DOTTER_NO_WEB_BACKENDS)
+
+		message(WARNING "No web backends available!")
+	else ()
+		message(SEND_ERROR "No web backends available!")
+	endif ()
 else ()
 	set(OTTER_BACKENDS_WEB_SUMMARY "The following web backends will be built:\n\n")
 
@@ -571,6 +528,8 @@ else ()
 
 	message(STATUS ${OTTER_BACKENDS_WEB_SUMMARY})
 endif ()
+
+string(TIMESTAMP BUILD_DATETIME UTC)
 
 find_package(Git QUIET)
 
@@ -595,21 +554,18 @@ if (GIT_FOUND)
 	execute_git("GIT_REVISION" "rev-parse;--short;HEAD")
 endif ()
 
-add_definitions(-DOTTER_GIT_BRANCH="${GIT_BRANCH}" -DOTTER_GIT_DATETIME="${GIT_DATETIME}" -DOTTER_GIT_REVISION="${GIT_REVISION}")
+add_definitions(-DOTTER_BUILD_DATETIME="${BUILD_DATETIME}" -DOTTER_GIT_BRANCH="${GIT_BRANCH}" -DOTTER_GIT_DATETIME="${GIT_DATETIME}" -DOTTER_GIT_REVISION="${GIT_REVISION}")
+
 
 add_executable(waterphoenix-browser WIN32 MACOSX_BUNDLE
-	${otter_ui}
-	${otter_res}
-	${otter_src}
+	${OTTER_UI}
+	${OTTER_RESOURCES}
+	${OTTER_SOURCES}
 )
 
-if (Qt5WebEngineWidgets_FOUND AND ENABLE_QTWEBENGINE)
-	target_link_libraries(waterphoenix-browser Qt5::WebEngineCore Qt5::WebEngineWidgets)
-endif ()
-
-if (Qt5WebKitWidgets_FOUND AND ENABLE_QTWEBKIT)
-	target_link_libraries(waterphoenix-browser Qt5::WebKit Qt5::WebKitWidgets)
-endif ()
+foreach (_library ${OTTER_LINK_LIBRARIES})
+	target_link_libraries(waterphoenix-browser ${_library})
+endforeach ()
 
 if (Hunspell_FOUND AND ENABLE_SPELLCHECK)
 	target_link_libraries(waterphoenix-browser Hunspell::Hunspell)
@@ -629,8 +585,9 @@ elseif (UNIX)
 		target_link_libraries(waterphoenix-browser Qt5::DBus)
 	endif ()
 
-	if (ENABLE_CRASHREPORTS)
-                target_link_libraries(waterphoenix-browser -lpthread)
+
+	if (ENABLE_CRASH_REPORTS)
+		target_link_libraries(waterphoenix-browser -lpthread)
 	endif ()
 endif ()
 
@@ -638,15 +595,15 @@ target_link_libraries(waterphoenix-browser Qt5::Core Qt5::Gui Qt5::Multimedia Qt
 
 set(XDG_APPS_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/share/applications CACHE FILEPATH "Install path for .desktop files")
 
-file(GLOB _qm_files resources/translations/*.qm)
+file(GLOB OTTER_TRANSLATIONS resources/translations/*.qm)
 
-foreach(_current_QM_FILE ${_qm_files})
-	install(FILES ${_current_QM_FILE} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/waterphoenix-browser/locale/)
+foreach (_translation ${OTTER_TRANSLATIONS})
+	install(FILES ${_translation} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/waterphoenix-browser/locale/)
 
 	if (APPLE)
-		file(COPY ${_current_QM_FILE} DESTINATION "Water Phoenix Browser.app/Contents/Resources/locale/")
-	endif()
-endforeach()
+		file(COPY ${_translation} DESTINATION "Otter Browser.app/Contents/Resources/locale/")
+	endif ()
+endforeach ()
 
 install(FILES resources/icons/waterphoenix-browser-16.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/16x16/apps/ RENAME waterphoenix-browser.png)
 install(FILES resources/icons/waterphoenix-browser-32.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/32x32/apps/ RENAME waterphoenix-browser.png)

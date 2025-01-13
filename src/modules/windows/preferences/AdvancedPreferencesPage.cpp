@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -86,8 +86,6 @@ void AdvancedPreferencesPage::changeEvent(QEvent *event)
 				const QStringList navigationTitles({tr("Browsing"), tr("Notifications"), tr("Appearance"), {}, tr("Downloads"), tr("Programs"), {}, tr("History"), tr("Network"), tr("Scripting"), tr("Security"), tr("Updates"), {}, tr("Mouse")});
 
 				m_ui->retranslateUi(this);
-				m_ui->browsingDisplayModeComboBox->setItemText(0, tr("Compact"));
-				m_ui->browsingDisplayModeComboBox->setItemText(1, tr("Columns"));
 				m_ui->appearranceWidgetStyleComboBox->setItemText(0, tr("System Style"));
 				m_ui->notificationsPlaySoundFilePathWidget->setFilters({tr("WAV files (*.wav)")});
 				m_ui->appearranceStyleSheetFilePathWidget->setFilters({tr("Style sheets (*.css)")});
@@ -101,9 +99,11 @@ void AdvancedPreferencesPage::changeEvent(QEvent *event)
 
 				for (int i = 0; i < navigationTitles.count(); ++i)
 				{
-					if (!navigationTitles.at(i).isEmpty())
+					const QString title(navigationTitles.at(i));
+
+					if (!title.isEmpty())
 					{
-						m_ui->advancedViewWidget->setData(m_ui->advancedViewWidget->getIndex(i), navigationTitles.at(i), Qt::DisplayRole);
+						m_ui->advancedViewWidget->setData(m_ui->advancedViewWidget->getIndex(i), title, Qt::DisplayRole);
 					}
 				}
 
@@ -156,6 +156,7 @@ void AdvancedPreferencesPage::updateNotificationsActions()
 	m_ui->notificationsPlaySoundFilePathWidget->blockSignals(true);
 	m_ui->notificationsShowAlertCheckBox->blockSignals(true);
 	m_ui->notificationsShowNotificationCheckBox->blockSignals(true);
+	m_ui->preferNativeNotificationsCheckBox->blockSignals(true);
 
 	const QModelIndex index(m_ui->notificationsItemView->getIndex(m_ui->notificationsItemView->getCurrentRow()));
 	const QString path(index.data(SoundPathRole).toString());
@@ -165,10 +166,10 @@ void AdvancedPreferencesPage::updateNotificationsActions()
 	m_ui->notificationsPlaySoundFilePathWidget->setPath(path);
 	m_ui->notificationsShowAlertCheckBox->setChecked(index.data(ShouldShowAlertRole).toBool());
 	m_ui->notificationsShowNotificationCheckBox->setChecked(index.data(ShouldShowNotificationRole).toBool());
-
 	m_ui->notificationsPlaySoundFilePathWidget->blockSignals(false);
 	m_ui->notificationsShowAlertCheckBox->blockSignals(false);
 	m_ui->notificationsShowNotificationCheckBox->blockSignals(false);
+	m_ui->preferNativeNotificationsCheckBox->blockSignals(false);
 }
 
 void AdvancedPreferencesPage::updateNotificationsOptions()
@@ -194,26 +195,28 @@ void AdvancedPreferencesPage::addDownloadsMimeType()
 {
 	const QString mimeType(QInputDialog::getText(this, tr("MIME Type Name"), tr("Select name of MIME Type:")));
 
-	if (!mimeType.isEmpty())
+	if (mimeType.isEmpty())
 	{
-		const QModelIndexList indexes(m_ui->mimeTypesItemView->getSourceModel()->match(m_ui->mimeTypesItemView->getSourceModel()->index(0, 0), Qt::DisplayRole, mimeType));
+		return;
+	}
 
-		if (!indexes.isEmpty())
-		{
-			m_ui->mimeTypesItemView->setCurrentIndex(indexes.value(0));
-		}
-		else if (QRegularExpression(QLatin1String(R"(^[a-zA-Z\-]+/[a-zA-Z0-9\.\+\-_]+$)")).match(mimeType).hasMatch())
-		{
-			QStandardItem *item(new QStandardItem(mimeType));
-			item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+	const QModelIndexList indexes(m_ui->mimeTypesItemView->getSourceModel()->match(m_ui->mimeTypesItemView->getSourceModel()->index(0, 0), Qt::DisplayRole, mimeType));
 
-			m_ui->mimeTypesItemView->insertRow({item});
-			m_ui->mimeTypesItemView->sortByColumn(0, Qt::AscendingOrder);
-		}
-		else
-		{
-			QMessageBox::critical(this, tr("Error"), tr("Invalid MIME Type name."));
-		}
+	if (!indexes.isEmpty())
+	{
+		m_ui->mimeTypesItemView->setCurrentIndex(indexes.value(0));
+	}
+	else if (QRegularExpression(QLatin1String(R"(^[a-zA-Z\-]+/[a-zA-Z0-9\.\+\-_]+$)")).match(mimeType).hasMatch())
+	{
+		QStandardItem *item(new QStandardItem(mimeType));
+		item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+
+		m_ui->mimeTypesItemView->insertRow({item});
+		m_ui->mimeTypesItemView->sortByColumn(0, Qt::AscendingOrder);
+	}
+	else
+	{
+		QMessageBox::critical(this, tr("Error"), tr("Invalid MIME Type name."));
 	}
 }
 
@@ -279,32 +282,34 @@ void AdvancedPreferencesPage::updateDownloadsActions()
 
 void AdvancedPreferencesPage::updateDownloadsOptions()
 {
+	const QModelIndex index(m_ui->mimeTypesItemView->getIndex(m_ui->mimeTypesItemView->getCurrentRow()));
+
+	if (!index.isValid())
+	{
+		return;
+	}
+
 	disconnect(m_ui->mimeTypesItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateDownloadsActions);
 	disconnect(m_ui->mimeTypesButtonGroup, static_cast<void(QButtonGroup::*)(QAbstractButton*, bool)>(&QButtonGroup::buttonToggled), this, &AdvancedPreferencesPage::updateDownloadsOptions);
 
-	const QModelIndex index(m_ui->mimeTypesItemView->getIndex(m_ui->mimeTypesItemView->getCurrentRow()));
+	HandlersManager::MimeTypeHandlerDefinition::TransferMode mode(HandlersManager::MimeTypeHandlerDefinition::IgnoreTransfer);
 
-	if (index.isValid())
+	if (m_ui->mimeTypesSaveButton->isChecked())
 	{
-		HandlersManager::MimeTypeHandlerDefinition::TransferMode mode(HandlersManager::MimeTypeHandlerDefinition::IgnoreTransfer);
-
-		if (m_ui->mimeTypesSaveButton->isChecked())
-		{
-			mode = (m_ui->mimeTypesSaveDirectlyCheckBox->isChecked() ? HandlersManager::MimeTypeHandlerDefinition::SaveTransfer : HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer);
-		}
-		else if (m_ui->mimeTypesOpenButton->isChecked())
-		{
-			mode = HandlersManager::MimeTypeHandlerDefinition::OpenTransfer;
-		}
-		else
-		{
-			mode = HandlersManager::MimeTypeHandlerDefinition::AskTransfer;
-		}
-
-		m_ui->mimeTypesItemView->setData(index, mode, TransferModeRole);
-		m_ui->mimeTypesItemView->setData(index, ((mode == HandlersManager::MimeTypeHandlerDefinition::SaveTransfer || mode == HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer) ? m_ui->mimeTypesFilePathWidget->getPath() : QString()), DownloadsPathRole);
-		m_ui->mimeTypesItemView->setData(index, ((mode == HandlersManager::MimeTypeHandlerDefinition::OpenTransfer) ? m_ui->mimeTypesApplicationComboBoxWidget->getCommand() : QString()), OpenCommandRole);
+		mode = (m_ui->mimeTypesSaveDirectlyCheckBox->isChecked() ? HandlersManager::MimeTypeHandlerDefinition::SaveTransfer : HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer);
 	}
+	else if (m_ui->mimeTypesOpenButton->isChecked())
+	{
+		mode = HandlersManager::MimeTypeHandlerDefinition::OpenTransfer;
+	}
+	else
+	{
+		mode = HandlersManager::MimeTypeHandlerDefinition::AskTransfer;
+	}
+
+	m_ui->mimeTypesItemView->setData(index, mode, TransferModeRole);
+	m_ui->mimeTypesItemView->setData(index, ((mode == HandlersManager::MimeTypeHandlerDefinition::SaveTransfer || mode == HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer) ? m_ui->mimeTypesFilePathWidget->getPath() : QString()), DownloadsPathRole);
+	m_ui->mimeTypesItemView->setData(index, ((mode == HandlersManager::MimeTypeHandlerDefinition::OpenTransfer) ? m_ui->mimeTypesApplicationComboBoxWidget->getCommand() : QString()), OpenCommandRole);
 
 	connect(m_ui->mimeTypesItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateDownloadsActions);
 	connect(m_ui->mimeTypesButtonGroup, static_cast<void(QButtonGroup::*)(QAbstractButton*, bool)>(&QButtonGroup::buttonToggled), this, &AdvancedPreferencesPage::updateDownloadsOptions);
@@ -457,33 +462,35 @@ void AdvancedPreferencesPage::saveUserAgents(QJsonArray *userAgents, const QStan
 	{
 		const QStandardItem *item(parent->child(i, 0));
 
-		if (item)
+		if (!item)
 		{
-			const ItemModel::ItemType type(static_cast<ItemModel::ItemType>(item->data(ItemModel::TypeRole).toInt()));
+			continue;
+		}
 
-			if (type == ItemModel::FolderType || type == ItemModel::EntryType)
+		const ItemModel::ItemType type(static_cast<ItemModel::ItemType>(item->data(ItemModel::TypeRole).toInt()));
+
+		if (type == ItemModel::FolderType || type == ItemModel::EntryType)
+		{
+			QJsonObject userAgentObject({{QLatin1String("identifier"), item->data(UserAgentsModel::IdentifierRole).toString()}, {QLatin1String("title"), item->data(UserAgentsModel::TitleRole).toString()}});
+
+			if (type == ItemModel::FolderType)
 			{
-				QJsonObject userAgentObject({{QLatin1String("identifier"), item->data(UserAgentsModel::IdentifierRole).toString()}, {QLatin1String("title"), item->data(UserAgentsModel::TitleRole).toString()}});
+				QJsonArray userAgentsArray;
 
-				if (type == ItemModel::FolderType)
-				{
-					QJsonArray userAgentsArray;
+				saveUserAgents(&userAgentsArray, item);
 
-					saveUserAgents(&userAgentsArray, item);
-
-					userAgentObject.insert(QLatin1String("children"), userAgentsArray);
-				}
-				else
-				{
-					userAgentObject.insert(QLatin1String("value"), item->index().sibling(i, 1).data(Qt::DisplayRole).toString());
-				}
-
-				userAgents->append(userAgentObject);
+				userAgentObject.insert(QLatin1String("children"), userAgentsArray);
 			}
 			else
 			{
-				userAgents->append(QJsonValue(QLatin1String("separator")));
+				userAgentObject.insert(QLatin1String("value"), item->index().sibling(i, 1).data(Qt::DisplayRole).toString());
 			}
+
+			userAgents->append(userAgentObject);
+		}
+		else
+		{
+			userAgents->append(QJsonValue(QLatin1String("separator")));
 		}
 	}
 }
@@ -628,125 +635,99 @@ void AdvancedPreferencesPage::saveProxies(QJsonArray *proxies, const QStandardIt
 	{
 		const QStandardItem *item(parent->child(i, 0));
 
-		if (item)
+		if (!item)
 		{
-			const ItemModel::ItemType type(static_cast<ItemModel::ItemType>(item->data(ItemModel::TypeRole).toInt()));
+			continue;
+		}
 
-			if (type == ItemModel::FolderType)
+		const ItemModel::ItemType type(static_cast<ItemModel::ItemType>(item->data(ItemModel::TypeRole).toInt()));
+
+		if (type == ItemModel::FolderType)
+		{
+			QJsonArray proxiesArray;
+
+			saveProxies(&proxiesArray, item);
+
+			proxies->append(QJsonObject({{QLatin1String("identifier"), item->data(ProxiesModel::IdentifierRole).toString()}, {QLatin1String("title"), item->data(ProxiesModel::TitleRole).toString()}, {QLatin1String("children"), proxiesArray}}));
+		}
+		else if (type == ItemModel::EntryType)
+		{
+			const QString identifier(item->data(ProxiesModel::IdentifierRole).toString());
+			const ProxyDefinition proxy(m_proxies.value(identifier, NetworkManagerFactory::getProxy(identifier)));
+			QJsonObject proxyObject({{QLatin1String("identifier"), identifier}, {QLatin1String("title"), item->data(ProxiesModel::TitleRole).toString()}});
+
+			switch (proxy.type)
 			{
-				QJsonArray proxiesArray;
+				case ProxyDefinition::NoProxy:
+					proxyObject.insert(QLatin1String("type"), QLatin1String("noProxy"));
 
-				saveProxies(&proxiesArray, item);
+					break;
+				case ProxyDefinition::ManualProxy:
+					{
+						QJsonArray serversArray;
+						QHash<ProxyDefinition::ProtocolType, ProxyDefinition::ProxyServer>::const_iterator iterator;
 
-				proxies->append(QJsonObject({{QLatin1String("identifier"), item->data(ProxiesModel::IdentifierRole).toString()}, {QLatin1String("title"), item->data(ProxiesModel::TitleRole).toString()}, {QLatin1String("children"), proxiesArray}}));
-			}
-			else if (type == ItemModel::EntryType)
-			{
-				const QString identifier(item->data(ProxiesModel::IdentifierRole).toString());
-				const ProxyDefinition proxy(m_proxies.value(identifier, NetworkManagerFactory::getProxy(identifier)));
-				QJsonObject proxyObject({{QLatin1String("identifier"), identifier}, {QLatin1String("title"), item->data(ProxiesModel::TitleRole).toString()}});
-
-				switch (proxy.type)
-				{
-					case ProxyDefinition::NoProxy:
-						proxyObject.insert(QLatin1String("type"), QLatin1String("noProxy"));
-
-						break;
-					case ProxyDefinition::ManualProxy:
+						for (iterator = proxy.servers.constBegin(); iterator != proxy.servers.constEnd(); ++iterator)
 						{
-							QJsonArray serversArray;
-							QHash<ProxyDefinition::ProtocolType, ProxyDefinition::ProxyServer>::const_iterator iterator;
+							QString protocol(QLatin1String("any"));
 
-							for (iterator = proxy.servers.constBegin(); iterator != proxy.servers.constEnd(); ++iterator)
+							switch (iterator.key())
 							{
-								QString protocol(QLatin1String("any"));
+								case ProxyDefinition::HttpProtocol:
+									protocol = QLatin1String("http");
 
-								switch (iterator.key())
-								{
-									case ProxyDefinition::HttpProtocol:
-										protocol = QLatin1String("http");
+									break;
+								case ProxyDefinition::HttpsProtocol:
+									protocol = QLatin1String("https");
 
-										break;
-									case ProxyDefinition::HttpsProtocol:
-										protocol = QLatin1String("https");
+									break;
+								case ProxyDefinition::FtpProtocol:
+									protocol = QLatin1String("ftp");
 
-										break;
-									case ProxyDefinition::FtpProtocol:
-										protocol = QLatin1String("ftp");
+									break;
+								case ProxyDefinition::SocksProtocol:
+									protocol = QLatin1String("socks");
 
-										break;
-									case ProxyDefinition::SocksProtocol:
-										protocol = QLatin1String("socks");
-
-										break;
-									default:
-										break;
-								}
-
-								serversArray.append(QJsonObject({{QLatin1String("protocol"), protocol}, {QLatin1String("hostName"), iterator.value().hostName}, {QLatin1String("port"), iterator.value().port}}));
+									break;
+								default:
+									break;
 							}
 
-							proxyObject.insert(QLatin1String("type"), QLatin1String("manualProxy"));
-							proxyObject.insert(QLatin1String("servers"), serversArray);
+							serversArray.append(QJsonObject({{QLatin1String("protocol"), protocol}, {QLatin1String("hostName"), iterator.value().hostName}, {QLatin1String("port"), iterator.value().port}}));
 						}
 
-						break;
-					case ProxyDefinition::AutomaticProxy:
-						proxyObject.insert(QLatin1String("type"), QLatin1String("automaticProxy"));
-						proxyObject.insert(QLatin1String("path"), proxy.path);
+						proxyObject.insert(QLatin1String("type"), QLatin1String("manualProxy"));
+						proxyObject.insert(QLatin1String("servers"), serversArray);
+					}
 
-						break;
-					default:
-						proxyObject.insert(QLatin1String("type"), QLatin1String("systemProxy"));
+					break;
+				case ProxyDefinition::AutomaticProxy:
+					proxyObject.insert(QLatin1String("type"), QLatin1String("automaticProxy"));
+					proxyObject.insert(QLatin1String("path"), proxy.path);
 
-						break;
-				}
+					break;
+				default:
+					proxyObject.insert(QLatin1String("type"), QLatin1String("systemProxy"));
 
-				if (!proxy.exceptions.isEmpty())
-				{
-					proxyObject.insert(QLatin1String("exceptions"), QJsonArray::fromStringList(proxy.exceptions));
-				}
-
-				if (proxy.usesSystemAuthentication)
-				{
-					proxyObject.insert(QLatin1String("usesSystemAuthentication"), true);
-				}
-
-				proxies->append(proxyObject);
+					break;
 			}
-			else
+
+			if (!proxy.exceptions.isEmpty())
 			{
-				proxies->append(QJsonValue(QLatin1String("separator")));
+				proxyObject.insert(QLatin1String("exceptions"), QJsonArray::fromStringList(proxy.exceptions));
 			}
+
+			if (proxy.usesSystemAuthentication)
+			{
+				proxyObject.insert(QLatin1String("usesSystemAuthentication"), true);
+			}
+
+			proxies->append(proxyObject);
 		}
-	}
-}
-
-void AdvancedPreferencesPage::addCipher(QAction *action)
-{
-	if (!action)
-	{
-		return;
-	}
-
-	QStandardItem *item(new QStandardItem(action->text()));
-	item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled | Qt::ItemNeverHasChildren);
-
-	m_ui->ciphersViewWidget->insertRow({item});
-	m_ui->ciphersAddButton->menu()->removeAction(action);
-	m_ui->ciphersAddButton->setEnabled(m_ui->ciphersAddButton->menu()->actions().count() > 0);
-}
-
-void AdvancedPreferencesPage::removeCipher()
-{
-	const int currentRow(m_ui->ciphersViewWidget->getCurrentRow());
-
-	if (currentRow >= 0)
-	{
-		m_ui->ciphersAddButton->menu()->addAction(m_ui->ciphersViewWidget->getIndex(currentRow, 0).data(Qt::DisplayRole).toString());
-		m_ui->ciphersAddButton->setEnabled(true);
-
-		m_ui->ciphersViewWidget->removeRow();
+		else
+		{
+			proxies->append(QJsonValue(QLatin1String("separator")));
+		}
 	}
 }
 
@@ -972,7 +953,9 @@ void AdvancedPreferencesPage::updateReaddMouseProfileMenu()
 
 	for (int i = 0; i < availableMouseProfiles.count(); ++i)
 	{
-		readdMenu->addAction((availableMouseProfiles.at(i).getTitle()))->setData(availableMouseProfiles.at(i).getName());
+		const MouseProfile profile(availableMouseProfiles.at(i));
+
+		readdMenu->addAction(profile.getTitle())->setData(profile.getName());
 	}
 }
 
@@ -998,10 +981,11 @@ void AdvancedPreferencesPage::load()
 
 	for (int i = 0; i < navigationTitles.count(); ++i)
 	{
-		QStandardItem *item(new QStandardItem(navigationTitles.at(i)));
+		const QString title(navigationTitles.at(i));
+		QStandardItem *item(new QStandardItem(title));
 		item->setFlags(item->flags() | Qt::ItemNeverHasChildren);
 
-		if (navigationTitles.at(i).isEmpty())
+		if (title.isEmpty())
 		{
 			item->setData(QLatin1String("separator"), Qt::AccessibleDescriptionRole);
 			item->setEnabled(false);
@@ -1032,14 +1016,17 @@ void AdvancedPreferencesPage::load()
 	m_ui->browsingSuggestBookmarksCheckBox->setChecked(SettingsManager::getOption(SettingsManager::AddressField_SuggestBookmarksOption).toBool());
 	m_ui->browsingSuggestHistoryCheckBox->setChecked(SettingsManager::getOption(SettingsManager::AddressField_SuggestHistoryOption).toBool());
 	m_ui->browsingSuggestLocalPathsCheckBox->setChecked(SettingsManager::getOption(SettingsManager::AddressField_SuggestLocalPathsOption).toBool());
+
+	if (SettingsManager::getOption(SettingsManager::AddressField_CompletionDisplayModeOption).toString() == QLatin1String("columns"))
+	{
+		m_ui->browsingDisplayModeColumnsRadioButton->setChecked(true);
+	}
+	else
+	{
+		m_ui->browsingDisplayModeCompactRadioButton->setChecked(true);
+	}
+
 	m_ui->browsingCategoriesCheckBox->setChecked(SettingsManager::getOption(SettingsManager::AddressField_ShowCompletionCategoriesOption).toBool());
-
-	m_ui->browsingDisplayModeComboBox->addItem(tr("Compact"), QLatin1String("compact"));
-	m_ui->browsingDisplayModeComboBox->addItem(tr("Columns"), QLatin1String("columns"));
-
-	const int displayModeIndex(m_ui->browsingDisplayModeComboBox->findData(SettingsManager::getOption(SettingsManager::AddressField_CompletionDisplayModeOption).toString()));
-
-	m_ui->browsingDisplayModeComboBox->setCurrentIndex((displayModeIndex < 0) ? 1 : displayModeIndex);
 
 	m_ui->notificationsPlaySoundButton->setIcon(ThemesManager::createIcon(QLatin1String("media-playback-start")));
 	m_ui->notificationsPlaySoundFilePathWidget->setFilters({tr("WAV files (*.wav)")});
@@ -1051,11 +1038,12 @@ void AdvancedPreferencesPage::load()
 
 	for (int i = 0; i < events.count(); ++i)
 	{
-		QList<QStandardItem*> items({new QStandardItem(events.at(i).getTitle()), new QStandardItem(events.at(i).getDescription())});
-		items[0]->setData(events.at(i).identifier, IdentifierRole);
-		items[0]->setData(events.at(i).playSound, SoundPathRole);
-		items[0]->setData(events.at(i).showAlert, ShouldShowAlertRole);
-		items[0]->setData(events.at(i).showNotification, ShouldShowNotificationRole);
+		const NotificationsManager::EventDefinition event(events.at(i));
+		QList<QStandardItem*> items({new QStandardItem(event.getTitle()), new QStandardItem(event.getDescription())});
+		items[0]->setData(event.identifier, IdentifierRole);
+		items[0]->setData(event.playSound, SoundPathRole);
+		items[0]->setData(event.showAlert, ShouldShowAlertRole);
+		items[0]->setData(event.showNotification, ShouldShowNotificationRole);
 		items[0]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
 		items[1]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
 
@@ -1187,16 +1175,18 @@ void AdvancedPreferencesPage::load()
 
 		for (int i = 0; i < supportedCiphers.count(); ++i)
 		{
+			const QString cipherName(supportedCiphers.at(i).name());
+
 			if (useDefaultCiphers && defaultCiphers.contains(supportedCiphers.at(i)))
 			{
-				QStandardItem *item(new QStandardItem(supportedCiphers.at(i).name()));
+				QStandardItem *item(new QStandardItem(cipherName));
 				item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled | Qt::ItemNeverHasChildren);
 
 				ciphersModel->appendRow(item);
 			}
-			else if (!selectedCiphers.contains(supportedCiphers.at(i).name()))
+			else if (!selectedCiphers.contains(cipherName))
 			{
-				m_ui->ciphersAddButton->menu()->addAction(supportedCiphers.at(i).name());
+				m_ui->ciphersAddButton->menu()->addAction(cipherName);
 			}
 		}
 
@@ -1284,6 +1274,10 @@ void AdvancedPreferencesPage::load()
 	});
 	connect(m_ui->notificationsItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateNotificationsActions);
 	connect(m_ui->notificationsPlaySoundButton, &QToolButton::clicked, this, &AdvancedPreferencesPage::playNotificationSound);
+	connect(m_ui->notificationsPlaySoundFilePathWidget, &FilePathWidget::pathChanged, this, &AdvancedPreferencesPage::updateNotificationsOptions);
+	connect(m_ui->notificationsShowNotificationCheckBox, &QCheckBox::toggled, this, &AdvancedPreferencesPage::updateNotificationsOptions);
+	connect(m_ui->notificationsShowAlertCheckBox, &QCheckBox::toggled, this, &AdvancedPreferencesPage::updateNotificationsOptions);
+	connect(m_ui->preferNativeNotificationsCheckBox, &QCheckBox::toggled, this, &AdvancedPreferencesPage::updateNotificationsOptions);
 	connect(m_ui->mimeTypesItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateDownloadsActions);
 	connect(m_ui->mimeTypesAddMimeTypeButton, &QPushButton::clicked, this, &AdvancedPreferencesPage::addDownloadsMimeType);
 	connect(m_ui->mimeTypesRemoveMimeTypeButton, &QPushButton::clicked, this, &AdvancedPreferencesPage::removeDownloadsMimeType);
@@ -1304,8 +1298,27 @@ void AdvancedPreferencesPage::load()
 	connect(m_ui->ciphersViewWidget, &ItemViewWidget::canMoveRowDownChanged, m_ui->ciphersMoveDownButton, &QToolButton::setEnabled);
 	connect(m_ui->ciphersViewWidget, &ItemViewWidget::canMoveRowUpChanged, m_ui->ciphersMoveUpButton, &QToolButton::setEnabled);
 	connect(m_ui->ciphersViewWidget, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateCiphersActions);
-	connect(m_ui->ciphersAddButton->menu(), &QMenu::triggered, this, &AdvancedPreferencesPage::addCipher);
-	connect(m_ui->ciphersRemoveButton, &QPushButton::clicked, this, &AdvancedPreferencesPage::removeCipher);
+	connect(m_ui->ciphersAddButton->menu(), &QMenu::triggered, this, [&](QAction *action)
+	{
+		QStandardItem *item(new QStandardItem(action->text()));
+		item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled | Qt::ItemNeverHasChildren);
+
+		m_ui->ciphersViewWidget->insertRow({item});
+		m_ui->ciphersAddButton->menu()->removeAction(action);
+		m_ui->ciphersAddButton->setEnabled(m_ui->ciphersAddButton->menu()->actions().count() > 0);
+	});
+	connect(m_ui->ciphersRemoveButton, &QPushButton::clicked, this, [&]()
+	{
+		const int currentRow(m_ui->ciphersViewWidget->getCurrentRow());
+
+		if (currentRow >= 0)
+		{
+			m_ui->ciphersAddButton->menu()->addAction(m_ui->ciphersViewWidget->getIndex(currentRow, 0).data(Qt::DisplayRole).toString());
+			m_ui->ciphersAddButton->setEnabled(true);
+
+			m_ui->ciphersViewWidget->removeRow();
+		}
+	});
 	connect(m_ui->ciphersMoveDownButton, &QToolButton::clicked, m_ui->ciphersViewWidget, &ItemViewWidget::moveDownRow);
 	connect(m_ui->ciphersMoveUpButton, &QToolButton::clicked, m_ui->ciphersViewWidget, &ItemViewWidget::moveUpRow);
 	connect(m_ui->updateChannelsItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateUpdateChannelsActions);
@@ -1330,10 +1343,7 @@ void AdvancedPreferencesPage::save()
 		return;
 	}
 
-	for (int i = 0; i < m_filesToRemove.count(); ++i)
-	{
-		QFile::remove(m_filesToRemove.at(i));
-	}
+	Utils::removeFiles(m_filesToRemove);
 
 	m_filesToRemove.clear();
 
@@ -1342,8 +1352,10 @@ void AdvancedPreferencesPage::save()
 	SettingsManager::setOption(SettingsManager::AddressField_SuggestBookmarksOption, m_ui->browsingSuggestBookmarksCheckBox->isChecked());
 	SettingsManager::setOption(SettingsManager::AddressField_SuggestHistoryOption, m_ui->browsingSuggestHistoryCheckBox->isChecked());
 	SettingsManager::setOption(SettingsManager::AddressField_SuggestLocalPathsOption, m_ui->browsingSuggestLocalPathsCheckBox->isChecked());
+	SettingsManager::setOption(SettingsManager::AddressField_CompletionDisplayModeOption, (m_ui->browsingDisplayModeColumnsRadioButton->isChecked() ? QLatin1String("columns") : QLatin1String("compact")));
 	SettingsManager::setOption(SettingsManager::AddressField_ShowCompletionCategoriesOption, m_ui->browsingCategoriesCheckBox->isChecked());
-	SettingsManager::setOption(SettingsManager::AddressField_CompletionDisplayModeOption, m_ui->browsingDisplayModeComboBox->currentData(Qt::UserRole).toString());
+
+	updateNotificationsOptions();
 
 	QSettings notificationsSettings(SessionsManager::getWritableDataPath(QLatin1String("notifications.ini")), QSettings::IniFormat);
 	notificationsSettings.setIniCodec("UTF-8");
@@ -1379,25 +1391,22 @@ void AdvancedPreferencesPage::save()
 	SettingsManager::setOption(SettingsManager::Interface_StyleSheetOption, m_ui->appearranceStyleSheetFilePathWidget->getPath());
 	SettingsManager::setOption(SettingsManager::Browser_EnableTrayIconOption, m_ui->enableTrayIconCheckBox->isChecked());
 
-	if (m_ui->appearranceStyleSheetFilePathWidget->getPath().isEmpty())
+	QString styleSheetPath(m_ui->appearranceStyleSheetFilePathWidget->getPath());
+	QString styleSheet;
+
+	if (!styleSheetPath.isEmpty())
 	{
-		Application::getInstance()->setStyleSheet({});
-	}
-	else
-	{
-		QFile file(m_ui->appearranceStyleSheetFilePathWidget->getPath());
+		QFile file(styleSheetPath);
 
 		if (file.open(QIODevice::ReadOnly))
 		{
-			Application::getInstance()->setStyleSheet(QString::fromLatin1(file.readAll()));
+			styleSheet = QString::fromLatin1(file.readAll());
 
 			file.close();
 		}
-		else
-		{
-			Application::getInstance()->setStyleSheet({});
-		}
 	}
+
+	Application::getInstance()->setStyleSheet(styleSheet);
 
 	const QMimeDatabase mimeDatabase;
 
@@ -1496,8 +1505,7 @@ void AdvancedPreferencesPage::save()
 	SettingsManager::setOption(SettingsManager::Updates_AutomaticInstallOption, m_ui->autoInstallCheckBox->isChecked());
 	SettingsManager::setOption(SettingsManager::Updates_CheckIntervalOption, m_ui->intervalSpinBox->value());
 
-
-	QDir().mkpath(SessionsManager::getWritableDataPath(QLatin1String("mouse")));
+	Utils::ensureDirectoryExists(SessionsManager::getWritableDataPath(QLatin1String("mouse")));
 
 	bool needsMouseProfilesReload(false);
 	QHash<QString, MouseProfile>::iterator mouseProfilesIterator;
@@ -1540,7 +1548,7 @@ void AdvancedPreferencesPage::updatePageSwitcher()
 
 	for (int i = 0; i < m_ui->advancedViewWidget->model()->rowCount(); ++i)
 	{
-		const int itemWidth(Utils::calculateTextWidth(m_ui->advancedViewWidget->model()->index(i, 0).data(Qt::DisplayRole).toString(), m_ui->advancedViewWidget->fontMetrics()) + 10);
+		const int itemWidth(m_ui->advancedViewWidget->fontMetrics().horizontalAdvance(m_ui->advancedViewWidget->model()->index(i, 0).data(Qt::DisplayRole).toString()) + 10);
 
 		if (itemWidth > maximumWidth)
 		{

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -28,7 +28,6 @@
 #include "TabBarWidget.h"
 #include "WidgetFactory.h"
 #include "Window.h"
-#include "../core/Application.h"
 #include "../core/BookmarksManager.h"
 #include "../core/ThemesManager.h"
 #include "../modules/widgets/bookmark/BookmarkWidget.h"
@@ -37,6 +36,7 @@
 #include <QtGui/QDrag>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QStyleOption>
 
@@ -82,7 +82,9 @@ ToolBarWidget::ToolBarWidget(int identifier, Window *window, QWidget *parent) : 
 		{
 			for (int i = 0; i < definition.entries.count(); ++i)
 			{
-				if (definition.entries.at(i).action == QLatin1String("AddressWidget") || definition.entries.at(i).action == QLatin1String("SearchWidget"))
+				const QString action(definition.entries.at(i).action);
+
+				if (action == QLatin1String("AddressWidget") || action == QLatin1String("SearchWidget"))
 				{
 					QTimer::singleShot(0, this, &ToolBarWidget::reload);
 
@@ -97,20 +99,22 @@ ToolBarWidget::ToolBarWidget(int identifier, Window *window, QWidget *parent) : 
 		connect(ToolBarsManager::getInstance(), &ToolBarsManager::toolBarsLockedChanged, this, &ToolBarWidget::setToolBarLocked);
 	}
 
-	if (m_mainWindow)
+	if (!m_mainWindow)
 	{
-		if (definition.isGlobal())
-		{
-			connect(m_mainWindow, &MainWindow::activeWindowChanged, this, [&](quint64 identifier)
-			{
-				m_window = m_mainWindow->getWindowByIdentifier(identifier);
-
-				emit windowChanged(m_window);
-			});
-		}
-
-		connect(m_mainWindow, &MainWindow::fullScreenStateChanged, this, &ToolBarWidget::handleFullScreenStateChanged);
+		return;
 	}
+
+	if (definition.isGlobal())
+	{
+		connect(m_mainWindow, &MainWindow::activeWindowChanged, this, [&](quint64 identifier)
+		{
+			m_window = m_mainWindow->getWindowByIdentifier(identifier);
+
+			emit windowChanged(m_window);
+		});
+	}
+
+	connect(m_mainWindow, &MainWindow::fullScreenStateChanged, this, &ToolBarWidget::handleFullScreenStateChanged);
 }
 
 void ToolBarWidget::timerEvent(QTimerEvent *event)
@@ -162,67 +166,60 @@ void ToolBarWidget::paintEvent(QPaintEvent *event)
 		QToolBar::paintEvent(event);
 	}
 
-	if (getDefinition().type == ToolBarsManager::BookmarksBarType && m_dropIndex >= 0)
+	if (getDefinition().type != ToolBarsManager::BookmarksBarType || m_dropIndex < 0)
 	{
-		const QWidget *widget(widgetForAction(actions().value(m_dropIndex)));
-		const int spacing(style()->pixelMetric(QStyle::PM_ToolBarItemSpacing));
-		int position(-1);
+		return;
+	}
 
-		if (widget)
+	const QWidget *widget(widgetForAction(actions().value(m_dropIndex)));
+	const int spacing(style()->pixelMetric(QStyle::PM_ToolBarItemSpacing));
+	int position(-1);
+
+	if (widget)
+	{
+		if (isHorizontal())
 		{
-			switch (m_area)
+			if (isLeftToRight())
 			{
-				case Qt::LeftToolBarArea:
-				case Qt::RightToolBarArea:
-					position = (widget->geometry().top() - spacing);
-
-					break;
-				default:
-					if (isLeftToRight())
-					{
-						position = (widget->geometry().left() - spacing);
-					}
-					else
-					{
-						position = (widget->geometry().right() + spacing);
-					}
-
-					break;
+				position = (widget->geometry().left() - spacing);
+			}
+			else
+			{
+				position = (widget->geometry().right() + spacing);
 			}
 		}
-		else if (m_dropIndex > 0)
+		else
 		{
-			switch (m_area)
-			{
-				case Qt::LeftToolBarArea:
-				case Qt::RightToolBarArea:
-					position = (childrenRect().bottom() + spacing);
-
-					break;
-				default:
-					position = (isLeftToRight() ? (childrenRect().right() + spacing) : (childrenRect().left() - spacing));
-
-					break;
-			}
+			position = (widget->geometry().top() - spacing);
 		}
-
-		if (position >= 0)
+	}
+	else if (m_dropIndex > 0)
+	{
+		if (isHorizontal())
 		{
-			QPainter painter(this);
-
-			switch (m_area)
-			{
-				case Qt::LeftToolBarArea:
-				case Qt::RightToolBarArea:
-					Application::getStyle()->drawDropZone(QLine(0, position, width(), position), &painter);
-
-					break;
-				default:
-					Application::getStyle()->drawDropZone(QLine(position, 0, position, height()), &painter);
-
-					break;
-			}
+			position = (isLeftToRight() ? (childrenRect().right() + spacing) : (childrenRect().left() - spacing));
 		}
+		else
+		{
+			position = (childrenRect().bottom() + spacing);
+		}
+	}
+
+	if (position < 0)
+	{
+		return;
+	}
+
+	QPainter painter(this);
+	Style *style(ThemesManager::getStyle());
+
+	if (isHorizontal())
+	{
+		style->drawDropZone(QLine(position, 0, position, height()), &painter);
+	}
+	else
+	{
+		style->drawDropZone(QLine(0, position, width(), position), &painter);
 	}
 }
 
@@ -397,7 +394,7 @@ void ToolBarWidget::clearEntries()
 void ToolBarWidget::populateEntries()
 {
 	const ToolBarsManager::ToolBarDefinition definition(getDefinition());
-	const bool isHorizontal(m_area != Qt::LeftToolBarArea && m_area != Qt::RightToolBarArea);
+	const bool isHorizontal(this->isHorizontal());
 
 	m_addressFields.clear();
 	m_searchFields.clear();
@@ -437,29 +434,33 @@ void ToolBarWidget::populateEntries()
 
 			for (int i = 0; i < definition.entries.count(); ++i)
 			{
-				if (definition.entries.at(i).action == QLatin1String("separator"))
+				const QString action(definition.entries.at(i).action);
+
+				if (action == QLatin1String("separator"))
 				{
 					addSeparator();
 				}
-				else if (definition.entries.at(i).action != QLatin1String("TabBarWidget"))
+				else if (action != QLatin1String("TabBarWidget"))
 				{
 					QWidget *widget(WidgetFactory::createToolBarItem(definition.entries.at(i), m_window, this));
 
-					if (widget)
+					if (!widget)
 					{
-						addWidget(widget);
-
-						if (definition.entries.at(i).action == QLatin1String("AddressWidget"))
-						{
-							m_addressFields.append(widget);
-						}
-						else if (definition.entries.at(i).action == QLatin1String("SearchWidget"))
-						{
-							m_searchFields.append(widget);
-						}
-
-						layout()->setAlignment(widget, (isHorizontal ? Qt::AlignVCenter : Qt::AlignHCenter));
+						continue;
 					}
+
+					addWidget(widget);
+
+					if (action == QLatin1String("AddressWidget"))
+					{
+						m_addressFields.append(widget);
+					}
+					else if (action == QLatin1String("SearchWidget"))
+					{
+						m_searchFields.append(widget);
+					}
+
+					layout()->setAlignment(widget, (isHorizontal ? Qt::AlignVCenter : Qt::AlignHCenter));
 				}
 			}
 
@@ -481,7 +482,7 @@ void ToolBarWidget::updateDropIndex(const QPoint &position)
 	if (!position.isNull())
 	{
 		QAction *action(actionAt(position));
-		const bool isHorizontal(m_area != Qt::LeftToolBarArea && m_area != Qt::RightToolBarArea);
+		const bool isHorizontal(this->isHorizontal());
 
 		if (!action)
 		{
@@ -492,22 +493,22 @@ void ToolBarWidget::updateDropIndex(const QPoint &position)
 			{
 				const QPoint adjustedPosition(position.x(), center.y());
 
-				action = (actionAt(adjustedPosition + QPoint(spacing, 0)));
+				action = actionAt(adjustedPosition + QPoint(spacing, 0));
 
 				if (!action)
 				{
-					action = (actionAt(adjustedPosition - QPoint(spacing, 0)));
+					action = actionAt(adjustedPosition - QPoint(spacing, 0));
 				}
 			}
 			else
 			{
 				const QPoint adjustedPosition(center.x(), position.y());
 
-				action = (actionAt(adjustedPosition + QPoint(0, spacing)));
+				action = actionAt(adjustedPosition + QPoint(0, spacing));
 
 				if (!action)
 				{
-					action = (actionAt(adjustedPosition - QPoint(0, spacing)));
+					action = actionAt(adjustedPosition - QPoint(0, spacing));
 				}
 			}
 		}
@@ -839,7 +840,7 @@ void ToolBarWidget::setDefinition(const ToolBarsManager::ToolBarDefinition &defi
 	m_isCollapsed = (definition.hasToggle && !calculateShouldBeVisible(definition, m_state, mode));
 
 	setVisible(shouldBeVisible(mode));
-	setOrientation((m_area != Qt::LeftToolBarArea && m_area != Qt::RightToolBarArea) ? Qt::Horizontal : Qt::Vertical);
+	setOrientation(isHorizontal() ? Qt::Horizontal : Qt::Vertical);
 	clearEntries();
 
 	if (definition.hasToggle)
@@ -1045,6 +1046,11 @@ bool ToolBarWidget::isCollapsed() const
 	return m_isCollapsed;
 }
 
+bool ToolBarWidget::isHorizontal() const
+{
+	return !(m_area ==  Qt::LeftToolBarArea || m_area == Qt::RightToolBarArea);
+}
+
 bool ToolBarWidget::isDragHandle(const QPoint &position) const
 {
 	if (!isMovable())
@@ -1055,7 +1061,7 @@ bool ToolBarWidget::isDragHandle(const QPoint &position) const
 	QStyleOptionToolBar option;
 	initStyleOption(&option);
 
-	return (style()->subElementRect(QStyle::SE_ToolBarHandle, &option, this).contains(position));
+	return style()->subElementRect(QStyle::SE_ToolBarHandle, &option, this).contains(position);
 }
 
 bool ToolBarWidget::shouldBeVisible(ToolBarsManager::ToolBarsMode mode) const
@@ -1183,7 +1189,8 @@ void TabBarToolBarWidget::contextMenuEvent(QContextMenuEvent *event)
 		SettingsManager::setOption(SettingsManager::TabBar_EnableThumbnailsOption, areEnabled);
 	});
 
-	ActionExecutor::Object executor(getMainWindow(), getMainWindow());
+	MainWindow *mainWindow(getMainWindow());
+	ActionExecutor::Object executor(mainWindow, mainWindow);
 	QMenu menu(this);
 	menu.addAction(new Action(ActionsManager::NewTabAction, {}, executor, &menu));
 	menu.addAction(new Action(ActionsManager::NewTabPrivateAction, {}, executor, &menu));
@@ -1206,10 +1213,11 @@ void TabBarToolBarWidget::contextMenuEvent(QContextMenuEvent *event)
 void TabBarToolBarWidget::findTabBar()
 {
 	TabBarWidget *tabBar(m_tabBar ? m_tabBar : findChild<TabBarWidget*>());
+	MainWindow *mainWindow(getMainWindow());
 
-	if (!tabBar && getMainWindow())
+	if (!tabBar && mainWindow)
 	{
-		tabBar = getMainWindow()->getTabBar();
+		tabBar = mainWindow->getTabBar();
 
 		if (tabBar)
 		{
@@ -1234,9 +1242,11 @@ void TabBarToolBarWidget::clearEntries()
 
 	for (int i = (actions().count() - 1); i >= 0; --i)
 	{
-		if (m_tabBar && widgetForAction(actions().at(i)) != m_tabBar)
+		QAction *action(actions().at(i));
+
+		if (m_tabBar && widgetForAction(action) != m_tabBar)
 		{
-			removeAction(actions().at(i));
+			removeAction(action);
 		}
 	}
 
@@ -1246,7 +1256,7 @@ void TabBarToolBarWidget::clearEntries()
 void TabBarToolBarWidget::populateEntries()
 {
 	const ToolBarsManager::ToolBarDefinition definition(getDefinition());
-	const bool isHorizontal(getArea() != Qt::LeftToolBarArea && getArea() != Qt::RightToolBarArea);
+	const bool isHorizontal(this->isHorizontal());
 	QVector<QPointer<QWidget> > addressFields;
 	QVector<QPointer<QWidget> > searchFields;
 
@@ -1254,57 +1264,61 @@ void TabBarToolBarWidget::populateEntries()
 
 	for (int i = 0; i < definition.entries.count(); ++i)
 	{
-		if (definition.entries.at(i).action == QLatin1String("separator"))
+		const QString action(definition.entries.at(i).action);
+
+		if (action == QLatin1String("separator"))
 		{
 			addSeparator();
+
+			continue;
+		}
+
+		if (m_tabBar && action == QLatin1String("TabBarWidget"))
+		{
+			addWidget(m_tabBar);
+
+			continue;
+		}
+
+		const bool isTabBar(action == QLatin1String("TabBarWidget"));
+
+		if (isTabBar && m_tabBar)
+		{
+			continue;
+		}
+
+		QWidget *widget(WidgetFactory::createToolBarItem(definition.entries.at(i), getWindow(), this));
+
+		if (!widget)
+		{
+			continue;
+		}
+
+		addWidget(widget);
+
+		if (isTabBar)
+		{
+			m_tabBar = qobject_cast<TabBarWidget*>(widget);
+
+			if (m_tabBar)
+			{
+				connect(m_tabBar, &TabBarWidget::tabsAmountChanged, this, &TabBarToolBarWidget::updateVisibility);
+
+				updateVisibility();
+			}
 		}
 		else
 		{
-			if (m_tabBar && definition.entries.at(i).action == QLatin1String("TabBarWidget"))
+			if (action == QLatin1String("AddressWidget"))
 			{
-				addWidget(m_tabBar);
+				addressFields.append(widget);
 			}
-			else
+			else if (action == QLatin1String("SearchWidget"))
 			{
-				const bool isTabBar(definition.entries.at(i).action == QLatin1String("TabBarWidget"));
-
-				if (isTabBar && m_tabBar)
-				{
-					continue;
-				}
-
-				QWidget *widget(WidgetFactory::createToolBarItem(definition.entries.at(i), getWindow(), this));
-
-				if (widget)
-				{
-					addWidget(widget);
-
-					if (isTabBar)
-					{
-						m_tabBar = qobject_cast<TabBarWidget*>(widget);
-
-						if (m_tabBar)
-						{
-							connect(m_tabBar, &TabBarWidget::tabsAmountChanged, this, &TabBarToolBarWidget::updateVisibility);
-
-							updateVisibility();
-						}
-					}
-					else
-					{
-						if (definition.entries.at(i).action == QLatin1String("AddressWidget"))
-						{
-							addressFields.append(widget);
-						}
-						else if (definition.entries.at(i).action == QLatin1String("SearchWidget"))
-						{
-							searchFields.append(widget);
-						}
-
-						layout()->setAlignment(widget, (isHorizontal ? Qt::AlignVCenter : Qt::AlignHCenter));
-					}
-				}
+				searchFields.append(widget);
 			}
+
+			layout()->setAlignment(widget, (isHorizontal ? Qt::AlignVCenter : Qt::AlignHCenter));
 		}
 	}
 
@@ -1339,7 +1353,9 @@ void TabBarToolBarWidget::populateEntries()
 
 void TabBarToolBarWidget::updateVisibility()
 {
-	setVisible(shouldBeVisible((getMainWindow() ? getMainWindow()->windowState().testFlag(Qt::WindowFullScreen) : false) ? ToolBarsManager::FullScreenMode : ToolBarsManager::NormalMode));
+	MainWindow *mainWindow(getMainWindow());
+
+	setVisible(shouldBeVisible((mainWindow ? mainWindow->windowState().testFlag(Qt::WindowFullScreen) : false) ? ToolBarsManager::FullScreenMode : ToolBarsManager::NormalMode));
 }
 
 bool TabBarToolBarWidget::shouldBeVisible(ToolBarsManager::ToolBarsMode mode) const

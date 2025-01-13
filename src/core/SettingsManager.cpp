@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2016 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -20,13 +20,11 @@
 **************************************************************************/
 
 #include "SettingsManager.h"
-#include "Utils.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QMetaEnum>
 #include <QtCore/QSettings>
-#include <QtCore/QTextStream>
 #include <QtCore/QVector>
 
 namespace Otter
@@ -288,13 +286,15 @@ void SettingsManager::removeOverride(const QString &host, int identifier)
 
 	for (int i = 0; i < groups.count(); ++i)
 	{
-		settings.beginGroup(groups.at(i));
+		const QString group(groups.at(i));
+
+		settings.beginGroup(group);
 
 		const QStringList rawOptions(settings.childKeys());
 
 		for (int j = 0; j < rawOptions.count(); ++j)
 		{
-			const int option(getOptionIdentifier(groups.at(i) + QLatin1Char('/') + rawOptions.at(j)));
+			const int option(getOptionIdentifier(group + QLatin1Char('/') + rawOptions.at(j)));
 
 			if (option >= 0)
 			{
@@ -417,9 +417,11 @@ QString SettingsManager::createDisplayValue(int identifier, const QVariant &valu
 
 				for (int i = 0; i < definition.choices.count(); ++i)
 				{
-					if (definition.choices.at(i).value == key)
+					const OptionDefinition::Choice choice(definition.choices.at(i));
+
+					if (choice.value == key)
 					{
-						return definition.choices.at(i).getTitle();
+						return choice.getTitle();
 					}
 				}
 			}
@@ -441,69 +443,6 @@ QString SettingsManager::createDisplayValue(int identifier, const QVariant &valu
 	}
 
 	return value.toString();
-}
-
-QString SettingsManager::createReport()
-{
-	QString report;
-	QTextStream stream(&report);
-	stream.setFieldAlignment(QTextStream::AlignLeft);
-	stream << QLatin1String("Settings:\n");
-
-	QHash<QString, int> overridenValues;
-	QSettings overrides(m_overridePath, QSettings::IniFormat);
-	const QStringList overridesGroups(overrides.childGroups());
-
-	for (int i = 0; i < overridesGroups.count(); ++i)
-	{
-		overrides.beginGroup(overridesGroups.at(i));
-
-		const QStringList keys(overrides.allKeys());
-
-		for (int j = 0; j < keys.count(); ++j)
-		{
-			if (overridenValues.contains(keys.at(j)))
-			{
-				++overridenValues[keys.at(j)];
-			}
-			else
-			{
-				overridenValues[keys.at(j)] = 1;
-			}
-		}
-
-		overrides.endGroup();
-	}
-
-	const QStringList options(getOptions());
-
-	for (int i = 0; i < options.count(); ++i)
-	{
-		const OptionDefinition definition(getOptionDefinition(getOptionIdentifier(options.at(i))));
-
-		stream << QLatin1Char('\t');
-		stream.setFieldWidth(50);
-		stream << options.at(i);
-		stream.setFieldWidth(20);
-
-		if (definition.type == StringType || definition.type == PathType)
-		{
-			stream << QLatin1Char('-');
-		}
-		else
-		{
-			stream << definition.defaultValue.toString();
-		}
-
-		stream << ((definition.defaultValue == getOption(definition.identifier)) ? QLatin1String("default") : QLatin1String("non default"));
-		stream << (overridenValues.contains(options.at(i)) ? QStringLiteral("%1 override(s)").arg(overridenValues[options.at(i)]) : QLatin1String("no overrides"));
-		stream.setFieldWidth(0);
-		stream << QLatin1Char('\n');
-	}
-
-	stream << QLatin1Char('\n');
-
-	return report;
 }
 
 QString SettingsManager::getGlobalPath()
@@ -594,9 +533,11 @@ QStringList SettingsManager::getOverrideHosts(int identifier)
 
 	for (int i = 0; i < overridesGroups.count(); ++i)
 	{
-		if (overrides.contains(overridesGroups.at(i) + QLatin1Char('/') + optionName))
+		const QString group(overridesGroups.at(i));
+
+		if (overrides.contains(group + QLatin1Char('/') + optionName))
 		{
-			hosts.append(overridesGroups.at(i));
+			hosts.append(group);
 		}
 	}
 
@@ -636,6 +577,67 @@ QStringList SettingsManager::getOverridesHierarchy(const QString &host)
 	}
 
 	return hierarchy;
+}
+
+DiagnosticReport::Section SettingsManager::createReport()
+{
+	QHash<QString, int> overridenValues;
+	QSettings overrides(m_overridePath, QSettings::IniFormat);
+	const QStringList overridesGroups(overrides.childGroups());
+
+	for (int i = 0; i < overridesGroups.count(); ++i)
+	{
+		overrides.beginGroup(overridesGroups.at(i));
+
+		const QStringList keys(overrides.allKeys());
+
+		for (int j = 0; j < keys.count(); ++j)
+		{
+			const QString key(keys.at(j));
+
+			if (overridenValues.contains(key))
+			{
+				++overridenValues[key];
+			}
+			else
+			{
+				overridenValues[key] = 1;
+			}
+		}
+
+		overrides.endGroup();
+	}
+
+	const QStringList options(getOptions());
+	DiagnosticReport::Section report;
+	report.title = QLatin1String("Settings");
+	report.fieldWidths = {50, 20, 20, 0};
+	report.entries.reserve(options.count());
+
+	for (int i = 0; i < options.count(); ++i)
+	{
+		const QString option(options.at(i));
+		const OptionDefinition definition(getOptionDefinition(getOptionIdentifier(option)));
+		QString value;
+
+		switch (definition.type)
+		{
+			case ListType:
+			case PathType:
+			case StringType:
+				value = QLatin1Char('-');
+
+				break;
+			default:
+				value = definition.defaultValue.toString();
+
+				break;
+		}
+
+		report.entries.append({option, value, (isDefault(definition.identifier) ? QLatin1String("default") : QLatin1String("non default")), (overridenValues.contains(option) ? QStringLiteral("%1 override(s)").arg(overridenValues[option]) : QLatin1String("no overrides"))});
+	}
+
+	return report;
 }
 
 SettingsManager::OptionDefinition SettingsManager::getOptionDefinition(int identifier)
@@ -717,6 +719,11 @@ bool SettingsManager::hasOverride(const QString &host, int identifier)
 	}
 
 	return QSettings(m_overridePath, QSettings::IniFormat).contains(host + QLatin1Char('/') + getOptionName(identifier));
+}
+
+bool SettingsManager::isDefault(int identifier)
+{
+	return (getOption(identifier) == getOptionDefinition(identifier).defaultValue);
 }
 
 }

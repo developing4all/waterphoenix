@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -89,23 +89,25 @@ void PopupViewWidget::changeEvent(QEvent *event)
 {
 	ItemViewWidget::changeEvent(event);
 
-	if (m_removeButton)
+	if (!m_removeButton)
 	{
-		switch (event->type())
-		{
-			case QEvent::LanguageChange:
-				m_removeButton->setToolTip(tr("Remove Entry"));
+		return;
+	}
 
-				updateRemoveButton(currentIndex());
+	switch (event->type())
+	{
+		case QEvent::LanguageChange:
+			m_removeButton->setToolTip(tr("Remove Entry"));
 
-				break;
-			case QEvent::LayoutDirectionChange:
-				updateRemoveButton(currentIndex());
+			updateRemoveButton(currentIndex());
 
-				break;
-			default:
-				break;
-		}
+			break;
+		case QEvent::LayoutDirectionChange:
+			updateRemoveButton(currentIndex());
+
+			break;
+		default:
+			break;
 	}
 }
 
@@ -642,28 +644,30 @@ void LineEditWidget::hidePopup()
 
 void LineEditWidget::setCompletion(const QString &completion)
 {
-	if (completion != m_completion)
+	if (completion == m_completion)
 	{
-		m_completion = completion;
-
-		if (m_shouldIgnoreCompletion)
-		{
-			m_shouldIgnoreCompletion = false;
-
-			return;
-		}
-
-		if (!m_completer)
-		{
-			m_completer = new QCompleter(this);
-			m_completer->setCompletionMode(QCompleter::InlineCompletion);
-
-			setCompleter(m_completer);
-		}
-
-		m_completer->setModel(new QStringListModel({completion}, m_completer));
-		m_completer->complete();
+		return;
 	}
+
+	m_completion = completion;
+
+	if (m_shouldIgnoreCompletion)
+	{
+		m_shouldIgnoreCompletion = false;
+
+		return;
+	}
+
+	if (!m_completer)
+	{
+		m_completer = new QCompleter(this);
+		m_completer->setCompletionMode(QCompleter::InlineCompletion);
+
+		setCompleter(m_completer);
+	}
+
+	m_completer->setModel(new QStringListModel({completion}, m_completer));
+	m_completer->complete();
 }
 
 void LineEditWidget::setDropMode(LineEditWidget::DropMode mode)
@@ -713,53 +717,55 @@ ActionsManager::ActionDefinition::State LineEditWidget::getActionState(int ident
 	ActionsManager::ActionDefinition::State state(definition.getDefaultState());
 	state.isEnabled = false;
 
-	if (definition.scope == ActionsManager::ActionDefinition::EditorScope)
+	if (definition.scope != ActionsManager::ActionDefinition::EditorScope)
 	{
-		switch (definition.identifier)
-		{
-			case ActionsManager::UndoAction:
-				state.isEnabled = (!isReadOnly() && isUndoAvailable());
+		return state;
+	}
 
-				break;
-			case ActionsManager::RedoAction:
-				state.isEnabled = (!isReadOnly() && isRedoAvailable());
+	switch (definition.identifier)
+	{
+		case ActionsManager::UndoAction:
+			state.isEnabled = (!isReadOnly() && isUndoAvailable());
 
-				break;
-			case ActionsManager::CutAction:
-				state.isEnabled = (!isReadOnly() && hasSelectedText());
+			break;
+		case ActionsManager::RedoAction:
+			state.isEnabled = (!isReadOnly() && isRedoAvailable());
 
-				break;
-			case ActionsManager::CopyAction:
-				state.isEnabled = hasSelectedText();
+			break;
+		case ActionsManager::CutAction:
+			state.isEnabled = (!isReadOnly() && hasSelectedText());
 
-				break;
-			case ActionsManager::CopyToNoteAction:
-				state.isEnabled = hasSelectedText();
+			break;
+		case ActionsManager::CopyAction:
+			state.isEnabled = hasSelectedText();
 
-				break;
-			case ActionsManager::PasteAction:
-				state.isEnabled = (!isReadOnly() && (parameters.contains(QLatin1String("note")) || parameters.contains(QLatin1String("text")) || (QApplication::clipboard()->mimeData() && QApplication::clipboard()->mimeData()->hasText())));
+			break;
+		case ActionsManager::CopyToNoteAction:
+			state.isEnabled = hasSelectedText();
 
-				break;
-			case ActionsManager::DeleteAction:
-				state.isEnabled = (!isReadOnly() && hasSelectedText());
+			break;
+		case ActionsManager::PasteAction:
+			state.isEnabled = (!isReadOnly() && (parameters.contains(QLatin1String("note")) || parameters.contains(QLatin1String("text")) || (QApplication::clipboard()->mimeData() && QApplication::clipboard()->mimeData()->hasText())));
 
-				break;
-			case ActionsManager::SelectAllAction:
-				state.isEnabled = !text().isEmpty();
+			break;
+		case ActionsManager::DeleteAction:
+			state.isEnabled = (!isReadOnly() && hasSelectedText());
 
-				break;
-			case ActionsManager::UnselectAction:
-				state.isEnabled = hasSelectedText();
+			break;
+		case ActionsManager::SelectAllAction:
+			state.isEnabled = !text().isEmpty();
 
-				break;
-			case ActionsManager::ClearAllAction:
-				state.isEnabled = (!isReadOnly() && !text().isEmpty());
+			break;
+		case ActionsManager::UnselectAction:
+			state.isEnabled = hasSelectedText();
 
-				break;
-			default:
-				break;
-		}
+			break;
+		case ActionsManager::ClearAllAction:
+			state.isEnabled = (!isReadOnly() && !text().isEmpty());
+
+			break;
+		default:
+			break;
 	}
 
 	return state;

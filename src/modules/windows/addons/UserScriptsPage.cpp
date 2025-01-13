@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -74,14 +74,16 @@ void UserScriptsPage::addAddon()
 
 	for (int i = 0; i < sourcePaths.count(); ++i)
 	{
-		if (sourcePaths.at(i).isEmpty())
+		const QString sourcePath(sourcePaths.at(i));
+
+		if (sourcePath.isEmpty())
 		{
 			continue;
 		}
 
-		const QString scriptName(QFileInfo(sourcePaths.at(i)).completeBaseName());
+		const QString scriptName(QFileInfo(sourcePath).completeBaseName());
 		const QString targetDirectory(QDir(SessionsManager::getWritableDataPath(QLatin1String("scripts"))).filePath(scriptName));
-		const QString targetPath(QDir(targetDirectory).filePath(QFileInfo(sourcePaths.at(i)).fileName()));
+		const QString targetPath(QDir(targetDirectory).filePath(QFileInfo(sourcePath).fileName()));
 		bool isReplacingScript(false);
 
 		if (QFile::exists(targetPath))
@@ -126,9 +128,9 @@ void UserScriptsPage::addAddon()
 			}
 		}
 
-		if ((isReplacingScript && !QDir().remove(targetPath)) || (!isReplacingScript && !QDir().mkpath(targetDirectory)) || !QFile::copy(sourcePaths.at(i), targetPath))
+		if ((isReplacingScript && !QDir().remove(targetPath)) || (!isReplacingScript && !Utils::ensureDirectoryExists(targetDirectory)) || !QFile::copy(sourcePath, targetPath))
 		{
-			failedPaths.append(sourcePaths.at(i));
+			failedPaths.append(sourcePath);
 
 			continue;
 		}
@@ -177,9 +179,11 @@ void UserScriptsPage::reloadAddons()
 
 	for (int i = 0; i < addons.count(); ++i)
 	{
-		addons.at(i)->reload();
+		UserScript *addon(addons.at(i));
 
-		updateAddonEntry(addons.at(i));
+		addon->reload();
+
+		updateAddonEntry(addon);
 	}
 }
 
@@ -196,9 +200,11 @@ void UserScriptsPage::removeAddons()
 
 	for (int i = 0; i < addons.count(); ++i)
 	{
-		if (addons.at(i)->canRemove())
+		UserScript *addon(addons.at(i));
+
+		if (addon->canRemove())
 		{
-			m_addonsToRemove.append(addons.at(i)->getName());
+			m_addonsToRemove.append(addon->getName());
 
 			hasAddonsToRemove = true;
 		}

@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -21,13 +21,12 @@
 #include "ProxyModel.h"
 #include "../core/Utils.h"
 
-#include <QtCore/QCoreApplication>
 #include <QtCore/QDateTime>
 
 namespace Otter
 {
 
-ProxyModel::ProxyModel(QStandardItemModel *model, const QVector<QPair<QString, int> > &mapping, QObject *parent) : QIdentityProxyModel(parent),
+ProxyModel::ProxyModel(QStandardItemModel *model, const QVector<ProxyModel::Column> &mapping, QObject *parent) : QIdentityProxyModel(parent),
 	m_model(model),
 	m_mapping(mapping)
 {
@@ -55,7 +54,7 @@ QVariant ProxyModel::data(const QModelIndex &index, int role) const
 {
 	if (role == Qt::DisplayRole && index.column() < m_mapping.count())
 	{
-		const QVariant data(mapToSource(index.sibling(index.row(), 0)).data(m_mapping.at(index.column()).second));
+		const QVariant data(mapToSource(index.sibling(index.row(), 0)).data(m_mapping.at(index.column()).role));
 
 		if (data.type() == QVariant::DateTime)
 		{
@@ -79,7 +78,7 @@ QVariant ProxyModel::headerData(int section, Qt::Orientation orientation, int ro
 	{
 		if (role == Qt::DisplayRole)
 		{
-			return QCoreApplication::translate("views", m_mapping[section].first.toUtf8().constData());
+			return m_mapping[section].getTitle();
 		}
 
 		if (m_headerData.contains(section) && m_headerData[section].contains(role))
@@ -128,21 +127,21 @@ int ProxyModel::rowCount(const QModelIndex &parent) const
 
 bool ProxyModel::setHeaderData(int section, Qt::Orientation orientation, const QVariant &value, int role)
 {
-	if (orientation == Qt::Horizontal)
+	if (orientation == Qt::Vertical)
 	{
-		if (!m_headerData.contains(section))
-		{
-			m_headerData[section] = {};
-		}
-
-		m_headerData[section][role] = value;
-
-		emit headerDataChanged(orientation, section, section);
-
-		return true;
+		return false;
 	}
 
-	return false;
+	if (!m_headerData.contains(section))
+	{
+		m_headerData[section] = {};
+	}
+
+	m_headerData[section][role] = value;
+
+	emit headerDataChanged(orientation, section, section);
+
+	return true;
 }
 
 }

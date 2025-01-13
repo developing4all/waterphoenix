@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -100,6 +100,7 @@ QtWebKitNetworkManager::QtWebKitNetworkManager(bool isPrivate, QtWebKitCookieJar
 	connect(this, &QtWebKitNetworkManager::authenticationRequired, this, &QtWebKitNetworkManager::handleAuthenticationRequired);
 	connect(this, &QtWebKitNetworkManager::proxyAuthenticationRequired, this, &QtWebKitNetworkManager::handleProxyAuthenticationRequired);
 	connect(this, &QtWebKitNetworkManager::sslErrors, this, &QtWebKitNetworkManager::handleSslErrors);
+#if QT_VERSION < 0x060000
 	connect(NetworkManagerFactory::getInstance(), &NetworkManagerFactory::onlineStateChanged, this, [&](bool isOnline)
 	{
 		if (isOnline)
@@ -107,6 +108,7 @@ QtWebKitNetworkManager::QtWebKitNetworkManager(bool isPrivate, QtWebKitCookieJar
 			setNetworkAccessible(Accessible);
 		}
 	});
+#endif
 }
 
 void QtWebKitNetworkManager::timerEvent(QTimerEvent *event)
@@ -155,7 +157,9 @@ void QtWebKitNetworkManager::resetStatistics()
 
 	for (int i = 0; i < keys.count(); ++i)
 	{
-		emit pageInformationChanged(keys.at(i), m_pageInformation.value(keys.at(i)));
+		const WebWidget::PageInformation key(keys.at(i));
+
+		emit pageInformationChanged(key, m_pageInformation.value(key));
 	}
 
 	emit contentStateChanged(m_contentState);
@@ -244,15 +248,19 @@ void QtWebKitNetworkManager::handleRequestFinished(QNetworkReply *reply)
 		}
 		else
 		{
-			m_sslInformation.certificates = reply->sslConfiguration().peerCertificateChain().toVector();
-			m_sslInformation.cipher = reply->sslConfiguration().sessionCipher();
+			const QSslConfiguration sslConfiguration(reply->sslConfiguration());
+
+			m_sslInformation.certificates = sslConfiguration.peerCertificateChain().toVector();
+			m_sslInformation.cipher = sslConfiguration.sessionCipher();
 		}
 
 		const QList<QNetworkReply::RawHeaderPair> rawHeaders(m_baseReply->rawHeaderPairs());
 
 		for (int i = 0; i < rawHeaders.count(); ++i)
 		{
-			m_headers[rawHeaders.at(i).first] = rawHeaders.at(i).second;
+			const QNetworkReply::RawHeaderPair rawHeader(rawHeaders.at(i));
+
+			m_headers[rawHeader.first] = rawHeader.second;
 		}
 
 		const QVariant mimeTypeHeader(reply->header(QNetworkRequest::ContentTypeHeader));
@@ -374,20 +382,24 @@ void QtWebKitNetworkManager::handleSslErrors(QNetworkReply *reply, const QList<Q
 
 	for (int i = 0; i < errors.count(); ++i)
 	{
-		if (errors.at(i).error() != QSslError::NoError)
+		const QSslError error(errors.at(i));
+
+		if (error.error() == QSslError::NoError)
 		{
-			m_sslInformation.errors.append({errors.at(i), reply->url()});
+			continue;
+		}
 
-			if (exceptions.contains(QString::fromLatin1(errors.at(i).certificate().digest().toBase64())))
-			{
-				Console::addMessage(QStringLiteral("[accepted] The page at %1 was allowed to display insecure content from %2").arg(firstPartyUrl, thirdPartyUrl), Console::SecurityCategory, Console::WarningLevel, thirdPartyUrl, -1, m_widget->getWindowIdentifier());
+		m_sslInformation.errors.append({error, reply->url()});
 
-				errorsToIgnore.append(errors.at(i));
-			}
-			else
-			{
-				Console::addMessage(QStringLiteral("[blocked] The page at %1 was not allowed to display insecure content from %2").arg(firstPartyUrl, thirdPartyUrl), Console::SecurityCategory, Console::WarningLevel, thirdPartyUrl, -1, m_widget->getWindowIdentifier());
-			}
+		if (exceptions.contains(QString::fromLatin1(error.certificate().digest().toBase64())))
+		{
+			Console::addMessage(QStringLiteral("[accepted] The page at %1 was allowed to display insecure content from %2").arg(firstPartyUrl, thirdPartyUrl), Console::SecurityCategory, Console::WarningLevel, thirdPartyUrl, -1, m_widget->getWindowIdentifier());
+
+			errorsToIgnore.append(error);
+		}
+		else
+		{
+			Console::addMessage(QStringLiteral("[blocked] The page at %1 was not allowed to display insecure content from %2").arg(firstPartyUrl, thirdPartyUrl), Console::SecurityCategory, Console::WarningLevel, thirdPartyUrl, -1, m_widget->getWindowIdentifier());
 		}
 	}
 
@@ -671,7 +683,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 			{
 				const ContentFiltersProfile *profile(ContentFiltersManager::getProfile(result.profile));
 
-				Console::addMessage(QCoreApplication::translate("main", "Request blocked by rule from profile %1:\n%2").arg((profile ? profile->getTitle() : QCoreApplication::translate("main", "(Unknown)")), result.rule), Console::NetworkCategory, Console::LogLevel, request.url().toString(), -1, (m_widget ? m_widget->getWindowIdentifier() : 0));
+				Console::addMessage(QCoreApplication::translate("main", "Request blocked by rule from profile %1:\n%2").arg((profile ? profile->getTitle() : QCoreApplication::translate("main", "(Unknown)")), result.rule), Console::NetworkCategory, Console::LogLevel, request.url().toString(), -1, m_widget->getWindowIdentifier());
 
 				if (resourceType != NetworkManager::ScriptType && resourceType != NetworkManager::StyleSheetType)
 				{
@@ -718,9 +730,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 
 	mutableRequest.setRawHeader(QByteArrayLiteral("Accept-Language"), (m_acceptLanguage.isEmpty() ? NetworkManagerFactory::getAcceptLanguage().toLatin1() : m_acceptLanguage.toLatin1()));
 	mutableRequest.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
-#if QT_VERSION >= 0x050900
 	mutableRequest.setAttribute(QNetworkRequest::HTTP2AllowedAttribute, false);
-#endif
 
 	setPageInformation(WebWidget::LoadingMessageInformation, tr("Sending request to %1…").arg(request.url().host()));
 

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,10 @@
 namespace Otter
 {
 
+class MainWindow;
+class Window;
+class WebWidget;
+
 class Menu : public QMenu
 {
 	Q_OBJECT
@@ -37,6 +41,7 @@ public:
 	enum MenuRole
 	{
 		UnknownMenu = 0,
+		BookmarkMenu,
 		BookmarksMenu,
 		BookmarkSelectorMenu,
 		FeedsMenu,
@@ -49,6 +54,7 @@ public:
 		ProxyMenu,
 		SearchMenu,
 		SessionsMenu,
+		SpellCheckSuggestionsMenu,
 		StyleSheetsMenu,
 		ToolBarsMenu,
 		UserAgentMenu,
@@ -72,6 +78,13 @@ public:
 	static int getMenuRoleIdentifier(const QString &name);
 
 protected:
+	struct MenuContext final
+	{
+		MainWindow *mainWindow = nullptr;
+		Window *window = nullptr;
+		WebWidget *webWidget = nullptr;
+	};
+
 	void changeEvent(QEvent *event) override;
 	void hideEvent(QHideEvent *event) override;
 	void mousePressEvent(QMouseEvent *event) override;
@@ -79,6 +92,7 @@ protected:
 	void contextMenuEvent(QContextMenuEvent *event) override;
 	void appendAction(const QJsonValue &definition, const QStringList &sections, const ActionExecutor::Object &executor);
 	ActionExecutor::Object getExecutor() const;
+	MenuContext getMenuContext() const;
 	bool canInclude(const QJsonObject &definition, const QStringList &sections);
 	bool hasIncludeMatch(const QJsonObject &definition, const QString &key, const QStringList &sections);
 
@@ -94,14 +108,14 @@ protected slots:
 	void populateNotesMenu();
 	void populateOpenInApplicationMenu();
 	void populateProxiesMenu();
-	void populateSearchMenu();
+	void populateSearchEnginesMenu();
 	void populateSessionsMenu();
+	void populateSpellCheckSuggestionsMenu();
 	void populateStyleSheetsMenu();
 	void populateToolBarsMenu();
 	void populateUserAgentMenu();
 	void populateWindowsMenu();
 	void clearBookmarksMenu();
-	void clearClosedWindows();
 	void clearNotesMenu();
 	void selectOption(QAction *action);
 	void updateClosedWindowsMenu();
@@ -120,7 +134,7 @@ private:
 	static int m_menuRoleIdentifierEnumerator;
 };
 
-class MenuAction final : public Action
+class MenuAction : public Action
 {
 	Q_OBJECT
 
@@ -128,11 +142,23 @@ public:
 	explicit MenuAction(const QString &text, bool isTranslateable, QMenu *parent);
 	explicit MenuAction(int identifier, const QVariantMap &parameters, const ActionExecutor::Object &executor, QMenu *parent);
 
+	virtual QMenu* createContextMenu(QWidget *parent = nullptr) const;
+	virtual bool hasContextMenu() const;
+
 protected slots:
 	void setState(const ActionsManager::ActionDefinition::State &state) override;
 
 private:
 	QMenu *m_menu;
+};
+
+class OpenBookmarkMenuAction final : public MenuAction
+{
+public:
+	explicit OpenBookmarkMenuAction(quint64 bookmark, const ActionExecutor::Object &executor, QMenu *parent);
+
+	QMenu* createContextMenu(QWidget *parent = nullptr) const override;
+	bool hasContextMenu() const override;
 };
 
 }

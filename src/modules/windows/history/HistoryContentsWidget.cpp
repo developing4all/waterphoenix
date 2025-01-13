@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -239,7 +239,7 @@ void HistoryContentsWidget::openEntry()
 
 		if (action && mainWindow)
 		{
-			mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(action ? static_cast<SessionsManager::OpenHints>(action->data().toInt()) : SessionsManager::DefaultOpen)}});
+			mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(static_cast<SessionsManager::OpenHints>(action->data().toInt()))}});
 		}
 	}
 }
@@ -284,18 +284,20 @@ void HistoryContentsWidget::handleEntryAdded(HistoryModel::Entry *entry)
 
 	m_ui->historyViewWidget->setRowHidden(groupItem->row(), groupItem->index().parent(), false);
 
-	if (sender() && groupItem->rowCount() == 1 && SettingsManager::getOption(SettingsManager::History_ExpandBranchesOption).toString() == QLatin1String("first"))
+	if (!sender() || groupItem->rowCount() != 1 || SettingsManager::getOption(SettingsManager::History_ExpandBranchesOption).toString() != QLatin1String("first"))
 	{
-		for (int i = 0; i < m_model->rowCount(); ++i)
+		return;
+	}
+
+	for (int i = 0; i < m_model->rowCount(); ++i)
+	{
+		const QModelIndex index(m_model->index(i, 0));
+
+		if (m_model->rowCount(index) > 0)
 		{
-			const QModelIndex index(m_model->index(i, 0));
+			m_ui->historyViewWidget->expand(m_ui->historyViewWidget->getProxyModel()->mapFromSource(index));
 
-			if (m_model->rowCount(index) > 0)
-			{
-				m_ui->historyViewWidget->expand(m_ui->historyViewWidget->getProxyModel()->mapFromSource(index));
-
-				break;
-			}
+			break;
 		}
 	}
 }
@@ -331,18 +333,20 @@ void HistoryContentsWidget::handleEntryRemoved(HistoryModel::Entry *entry)
 
 	QStandardItem *entryItem(findEntry(entry->getIdentifier()));
 
-	if (entryItem)
+	if (!entryItem)
 	{
-		QStandardItem *groupItem(entryItem->parent());
+		return;
+	}
 
-		if (groupItem)
+	QStandardItem *groupItem(entryItem->parent());
+
+	if (groupItem)
+	{
+		m_model->removeRow(entryItem->row(), groupItem->index());
+
+		if (groupItem->rowCount() == 0)
 		{
-			m_model->removeRow(entryItem->row(), groupItem->index());
-
-			if (groupItem->rowCount() == 0)
-			{
-				m_ui->historyViewWidget->setRowHidden(groupItem->row(), m_model->invisibleRootItem()->index(), true);
-			}
+			m_ui->historyViewWidget->setRowHidden(groupItem->row(), m_model->invisibleRootItem()->index(), true);
 		}
 	}
 }
@@ -377,7 +381,7 @@ void HistoryContentsWidget::showContextMenu(const QPoint &position)
 
 			if (entryItem)
 			{
-				QApplication::clipboard()->setText(entryItem->text());
+				QGuiApplication::clipboard()->setText(entryItem->text());
 			}
 		});
 		menu.addSeparator();

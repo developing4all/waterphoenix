@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -38,18 +38,18 @@ public:
 	explicit TrayIcon(Application *parent);
 
 	void showNotification(Notification *notification);
+	bool eventFilter(QObject *object, QEvent *event) override;
 
 public slots:
 	void hide();
 
 protected:
+	void timerEvent(QTimerEvent *event) override;
 	void showMessage(const Notification::Message &message);
 
 protected slots:
-	void timerEvent(QTimerEvent *event) override;
 	void toggleWindowsVisibility();
 	void handleMessageClicked();
-	void handleMessageIgnored();
 	void updateMenu();
 
 private:

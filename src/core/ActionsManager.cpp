@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -35,7 +35,7 @@ namespace Otter
 
 bool KeyboardProfile::Action::operator ==(const KeyboardProfile::Action &other) const
 {
-	return (shortcuts == other.shortcuts && parameters == other.parameters && action == other.action);
+	return (action == other.action && shortcuts == other.shortcuts && parameters == other.parameters);
 }
 
 KeyboardProfile::KeyboardProfile(const QString &identifier, LoadMode mode) :
@@ -52,8 +52,9 @@ KeyboardProfile::KeyboardProfile(const QString &identifier, LoadMode mode) :
 
 	for (int i = 0; i < comments.count(); ++i)
 	{
-		const QString key(comments.at(i).section(QLatin1Char(':'), 0, 0).trimmed());
-		const QString value(comments.at(i).section(QLatin1Char(':'), 1).trimmed());
+		const QString comment(comments.at(i));
+		const QString key(comment.section(QLatin1Char(':'), 0, 0).trimmed());
+		const QString value(comment.section(QLatin1Char(':'), 1).trimmed());
 
 		if (key == QLatin1String("Title"))
 		{
@@ -250,12 +251,10 @@ QVector<QKeySequence> KeyboardProfile::loadShortcuts(const QJsonArray &rawShortc
 	{
 		const QKeySequence shortcut(rawShortcuts.at(i).toString());
 
-		if (shortcut.isEmpty() || (!areSingleKeyShortcutsAllowed && !ActionsManager::isShortcutAllowed(shortcut, ActionsManager::DisallowSingleKeyShortcutCheck, false)))
+		if (!shortcut.isEmpty() && (areSingleKeyShortcutsAllowed || ActionsManager::isShortcutAllowed(shortcut, ActionsManager::DisallowSingleKeyShortcutCheck, false)))
 		{
-			continue;
+			shortcuts.append(shortcut);
 		}
-
-		shortcuts.append(shortcut);
 	}
 
 	return shortcuts;
@@ -598,9 +597,11 @@ void ActionsManager::loadProfiles()
 
 					for (int k = 0; k < extraDefinitions.count(); ++k)
 					{
-						if (extraDefinitions.at(k).first == definition.parameters)
+						const QPair<QVariantMap, QVector<QKeySequence> > extraDefinition(extraDefinitions.at(k));
+
+						if (extraDefinition.first == definition.parameters)
 						{
-							shortcuts = extraDefinitions.at(k).second;
+							shortcuts = extraDefinition.second;
 
 							break;
 						}
@@ -659,71 +660,6 @@ ActionsManager* ActionsManager::getInstance()
 	return m_instance;
 }
 
-QString ActionsManager::createReport()
-{
-	QString report;
-	QTextStream stream(&report);
-	stream.setFieldAlignment(QTextStream::AlignLeft);
-	stream << QLatin1String("Keyboard Shortcuts:\n");
-
-	for (int i = 0; i < m_definitions.count(); ++i)
-	{
-		if (m_shortcuts.contains(i))
-		{
-			const QVector<QKeySequence> shortcuts(m_shortcuts[i]);
-
-			stream << QLatin1Char('\t');
-			stream.setFieldWidth(30);
-			stream << getActionName(i);
-			stream.setFieldWidth(20);
-
-			for (int j = 0; j < shortcuts.count(); ++j)
-			{
-				stream << shortcuts.at(j).toString(QKeySequence::PortableText);
-			}
-
-			stream.setFieldWidth(0);
-			stream << QLatin1Char('\n');
-		}
-
-		if (m_extraShortcuts.contains(i))
-		{
-			const QList<QPair<QVariantMap, QVector<QKeySequence> > > definitions(m_extraShortcuts.values(i));
-
-			if (!m_shortcuts.contains(i))
-			{
-				stream << QLatin1Char('\t');
-				stream.setFieldWidth(30);
-				stream << getActionName(i);
-				stream.setFieldWidth(0);
-				stream << QLatin1Char('\n');
-			}
-
-			for (int j = 0; j < definitions.count(); ++j)
-			{
-				const QVector<QKeySequence> shortcuts(definitions.at(j).second);
-
-				stream << QLatin1Char('\t');
-				stream.setFieldWidth(30);
-				stream << QLatin1Char(' ') + QString::fromLatin1(QJsonDocument(QJsonObject::fromVariantMap(definitions.at(j).first)).toJson(QJsonDocument::Compact));
-				stream.setFieldWidth(20);
-
-				for (int k = 0; k < shortcuts.count(); ++k)
-				{
-					stream << shortcuts.at(k).toString(QKeySequence::PortableText);
-				}
-
-				stream.setFieldWidth(0);
-				stream << QLatin1Char('\n');
-			}
-		}
-	}
-
-	stream << QLatin1Char('\n');
-
-	return report;
-}
-
 QString ActionsManager::getActionName(int identifier)
 {
 	return EnumeratorMapper(staticMetaObject.enumerator(m_actionIdentifierEnumerator), QLatin1String("Action")).mapToName(identifier, false);
@@ -747,9 +683,11 @@ QVector<QKeySequence> ActionsManager::getActionShortcuts(int identifier, const Q
 
 		for (int i = 0; i < definitions.count(); ++i)
 		{
-			if (definitions.at(i).first == parameters)
+			const QPair<QVariantMap, QVector<QKeySequence> > definition(definitions.at(i));
+
+			if (definition.first == parameters)
 			{
-				return definitions.at(i).second;
+				return definition.second;
 			}
 		}
 	}
@@ -791,6 +729,56 @@ QVector<KeyboardProfile::Action> ActionsManager::getShortcutDefinitions()
 	}
 
 	return definitions;
+}
+
+DiagnosticReport::Section ActionsManager::createReport()
+{
+	DiagnosticReport::Section report;
+	report.title = QLatin1String("Keyboard Shortcuts");
+	report.fieldWidths = {30, 20};
+
+	for (int i = 0; i < m_definitions.count(); ++i)
+	{
+		const bool hasShortcuts(m_shortcuts.contains(i));
+
+		if (hasShortcuts)
+		{
+			const QVector<QKeySequence> shortcuts(m_shortcuts[i]);
+			QStringList fields({getActionName(i)});
+
+			for (int j = 0; j < shortcuts.count(); ++j)
+			{
+				fields.append(shortcuts.at(j).toString(QKeySequence::PortableText));
+			}
+
+			report.entries.append(fields);
+		}
+
+		if (m_extraShortcuts.contains(i))
+		{
+			const QList<QPair<QVariantMap, QVector<QKeySequence> > > definitions(m_extraShortcuts.values(i));
+
+			if (!hasShortcuts)
+			{
+				report.entries.append({getActionName(i)});
+			}
+
+			for (int j = 0; j < definitions.count(); ++j)
+			{
+				const QVector<QKeySequence> shortcuts(definitions.at(j).second);
+				QStringList fields({QLatin1Char(' ') + QString::fromLatin1(QJsonDocument(QJsonObject::fromVariantMap(definitions.at(j).first)).toJson(QJsonDocument::Compact))});
+
+				for (int k = 0; k < shortcuts.count(); ++k)
+				{
+					fields.append(shortcuts.at(k).toString(QKeySequence::PortableText));
+				}
+
+				report.entries.append(fields);
+			}
+		}
+	}
+
+	return report;
 }
 
 ActionsManager::ActionDefinition ActionsManager::getActionDefinition(int identifier)

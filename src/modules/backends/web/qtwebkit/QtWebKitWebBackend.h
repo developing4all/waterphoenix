@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -48,6 +48,7 @@ public:
 	WebWidget* createWidget(const QVariantMap &parameters, ContentsWidget *parent = nullptr) override;
 	BookmarksImportJob* createBookmarksImportJob(BookmarksModel::Bookmark *folder, const QString &path, bool areDuplicatesAllowed) override;
 	WebPageThumbnailJob* createPageThumbnailJob(const QUrl &url, const QSize &size) override;
+	CookieJarInformation getCookieJar() const override;
 	QString getName() const override;
 	QString getTitle() const override;
 	QString getDescription() const override;

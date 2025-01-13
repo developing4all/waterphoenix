@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include "core/SettingsManager.h"
 #include "ui/MainWindow.h"
 #include "ui/StartupDialog.h"
-#ifdef OTTER_ENABLE_CRASHREPORTS
+#ifdef OTTER_ENABLE_CRASH_REPORTS
 #ifdef Q_OS_WIN32
 #include "../3rdparty/breakpad/src/client/windows/handler/exception_handler.h"
 #elif defined(Q_OS_LINUX)
@@ -56,7 +56,7 @@ void otterMessageHander(QtMsgType type, const QMessageLogContext &context, const
 }
 #endif
 
-#ifdef OTTER_ENABLE_CRASHREPORTS
+#ifdef OTTER_ENABLE_CRASH_REPORTS
 #ifdef Q_OS_WIN32
 bool otterCrashDumpHandler(const wchar_t *dumpDirectory, const wchar_t *dumpIdentifier, void *context, EXCEPTION_POINTERS *exceptionInformation, MDRawAssertionInfo *assertionInformation, bool hasDumpFile)
 {
@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
 	qInstallMessageHandler(otterMessageHander);
 #endif
 
-#ifdef OTTER_ENABLE_CRASHREPORTS
+#ifdef OTTER_ENABLE_CRASH_REPORTS
 #ifdef Q_OS_WIN32
 	new google_breakpad::ExceptionHandler(reinterpret_cast<const wchar_t*>(QStandardPaths::writableLocation(QStandardPaths::TempLocation).utf16()), 0, otterCrashDumpHandler, 0, true);
 #elif defined(Q_OS_LINUX)
@@ -113,7 +113,6 @@ int main(int argc, char *argv[])
 #endif
 #endif
 
-#if QT_VERSION >= 0x050900
 	// Enable automatic High-DPI scaling support. This could be done with earlier Qt
 	// versions as well (down to 5.6), but it was rather buggy before 5.9, so we
 	// restrict to 5.9 and higher.
@@ -122,26 +121,34 @@ int main(int argc, char *argv[])
 	// Note that this attribute must be enabled before the QApplication is
 	// constructed, hence the use of the static version of setAttribute().
 //	Application::setAttribute(Qt::AA_EnableHighDpiScaling, true);
-#endif
+
 	// Use static version for this attribute too, for consistency with the above.
 	Application::setAttribute(Qt::AA_UseHighDpiPixmaps, true);
 
 	Application application(argc, argv);
 
-	if (Application::isAboutToQuit() || Application::isRunning() || Application::isUpdating() || Application::getCommandLineParser()->isSet(QLatin1String("report")))
+#ifdef OTTER_NO_WEB_BACKENDS
+	QMessageBox::critical(nullptr, QLatin1String("Error"), QLatin1String("No web backends available."), QMessageBox::Close);
+
+	return 0;
+#endif
+
+	QCommandLineParser *commandLineParser(Application::getCommandLineParser());
+
+	if (Application::isAboutToQuit() || Application::isRunning() || Application::isUpdating() || commandLineParser->isSet(QLatin1String("report")))
 	{
 		return 0;
 	}
 
-	const QString session(Application::getCommandLineParser()->value(QLatin1String("session")).isEmpty() ? QLatin1String("default") : Application::getCommandLineParser()->value(QLatin1String("session")));
+	const QString session(commandLineParser->value(QLatin1String("session")).isEmpty() ? QLatin1String("default") : commandLineParser->value(QLatin1String("session")));
 	const QString startupBehavior(SettingsManager::getOption(SettingsManager::Browser_StartupBehaviorOption).toString());
-	const bool isPrivate(Application::getCommandLineParser()->isSet(QLatin1String("private-session")));
+	const bool isPrivate(commandLineParser->isSet(QLatin1String("private-session")));
 
-	if (!Application::getCommandLineParser()->value(QLatin1String("session")).isEmpty() && SessionsManager::getSession(session).isClean)
+	if (!commandLineParser->value(QLatin1String("session")).isEmpty() && SessionsManager::getSession(session).isClean)
 	{
 		SessionsManager::restoreSession(SessionsManager::getSession(session), nullptr, isPrivate);
 	}
-	else if (startupBehavior == QLatin1String("showDialog") || Application::getCommandLineParser()->isSet(QLatin1String("session-chooser")) || !SessionsManager::getSession(session).isClean)
+	else if (startupBehavior == QLatin1String("showDialog") || commandLineParser->isSet(QLatin1String("session-chooser")) || !SessionsManager::getSession(session).isClean)
 	{
 		StartupDialog dialog(session);
 
@@ -203,7 +210,7 @@ int main(int argc, char *argv[])
 		SessionsManager::restoreSession(sessionData, nullptr, isPrivate);
 	}
 
-	Application::handlePositionalArguments(Application::getCommandLineParser());
+	Application::handlePositionalArguments(commandLineParser);
 
 	if (Application::getWindows().isEmpty())
 	{

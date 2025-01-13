@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -51,10 +51,10 @@
 #include "../modules/platforms/freedesktoporg/FreeDesktopOrgPlatformIntegration.h"
 #endif
 #include "../ui/DataExchangerDialog.h"
+#include "../ui/DiagnosticReportDialog.h"
 #include "../ui/LocaleDialog.h"
 #include "../ui/MainWindow.h"
 #include "../ui/NotificationDialog.h"
-#include "../ui/ReportDialog.h"
 #include "../ui/SaveSessionDialog.h"
 #include "../ui/SessionsManagerDialog.h"
 #include "../ui/Style.h"
@@ -159,7 +159,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 
 		if (file.open(QIODevice::ReadOnly))
 		{
-			QStringList temporaryArguments(QString::fromLatin1(file.readAll()).trimmed().split(QLatin1Char(' '), QString::SkipEmptyParts));
+			QStringList temporaryArguments(QString::fromLatin1(file.readAll()).trimmed().split(QLatin1Char(' '), Qt::SkipEmptyParts));
 
 			if (!temporaryArguments.isEmpty())
 			{
@@ -265,13 +265,14 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 
 		if (rawReportOptions.contains(QLatin1String("dialog")))
 		{
-			ReportDialog dialog(reportOptions);
+			DiagnosticReportDialog dialog(reportOptions);
 			dialog.exec();
 		}
 		else
 		{
 			QTextStream stream(stdout);
 			stream << createReport(reportOptions);
+			stream.flush();
 		}
 
 		return;
@@ -335,7 +336,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 	{
 		if (m_isFirstRun)
 		{
-			QDir().mkpath(profilePath);
+			Utils::ensureDirectoryExists(profilePath);
 		}
 
 		const QStorageInfo storageInformation(profilePath);
@@ -452,11 +453,6 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 		QMessageBox::warning(nullptr, tr("Warning"), tr("SSL support is not available or is incomplete.\nSome websites may work incorrectly or do not work at all."), QMessageBox::Close);
 	}
 
-	if (SettingsManager::getOption(SettingsManager::Browser_EnableTrayIconOption).toBool())
-	{
-		m_trayIcon = new TrayIcon(this);
-	}
-
 #ifdef Q_OS_WIN
 	m_platformIntegration = new WindowsPlatformIntegration(this);
 #elif defined(Q_OS_DARWIN)
@@ -501,6 +497,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 		}
 	}
 
+	handleOptionChanged(SettingsManager::Browser_EnableTrayIconOption, SettingsManager::getOption(SettingsManager::Browser_EnableTrayIconOption));
 	setStyle(style);
 	setStyleSheet(styleSheet);
 
@@ -543,19 +540,20 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 
 				for (int i = 0; i < actions.count(); ++i)
 				{
+					const QVariant action(actions.at(i));
 					QVariant actionIdentifier;
 					QVariantMap actionParameters;
 
-					if (actions.at(i).type() == QVariant::Map)
+					if (action.type() == QVariant::Map)
 					{
-						const QVariantMap actionData(actions.at(i).toMap());
+						const QVariantMap actionData(action.toMap());
 
 						actionIdentifier = actionData.value(QLatin1String("identifier"));
 						actionParameters = actionData.value(QLatin1String("parameters")).toMap();
 					}
 					else
 					{
-						actionIdentifier = actions.at(i);
+						actionIdentifier = action;
 					}
 
 					if (actionIdentifier.type() == QVariant::Int)
@@ -667,13 +665,15 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 			{
 				for (int i = 0; i < m_windows.count(); ++i)
 				{
-					if (m_windows.at(i)->isPrivate())
+					MainWindow *window(m_windows.at(i));
+
+					if (window->isPrivate())
 					{
-						m_windows.at(i)->close();
+						window->close();
 					}
 					else
 					{
-						m_windows.at(i)->triggerAction(ActionsManager::ClosePrivateTabsAction);
+						window->triggerAction(ActionsManager::ClosePrivateTabsAction);
 					}
 				}
 			}
@@ -715,15 +715,18 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 
 			break;
 		case ActionsManager::ActivateWindowAction:
+			if (parameters.contains(QLatin1String("window")))
 			{
 				const quint64 windowIdentifier(parameters.value(QLatin1String("window")).toULongLong());
 
 				for (int i = 0; i < m_windows.count(); ++i)
 				{
-					if (m_windows.at(i)->getIdentifier() == windowIdentifier)
+					MainWindow *window(m_windows.at(i));
+
+					if (window->getIdentifier() == windowIdentifier)
 					{
-						m_windows.at(i)->raise();
-						m_windows.at(i)->activateWindow();
+						window->raise();
+						window->activateWindow();
 
 						break;
 					}
@@ -744,7 +747,10 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 
 			return;
 		case ActionsManager::ExchangeDataAction:
-			DataExchangerDialog::createDialog(parameters.value(QLatin1String("exchanger")).toString(), m_activeWindow);
+			if (parameters.contains(QLatin1String("exchanger")))
+			{
+				DataExchangerDialog::createDialog(parameters.value(QLatin1String("exchanger")).toString(), m_activeWindow);
+			}
 
 			return;
 		case ActionsManager::SwitchApplicationLanguageAction:
@@ -764,7 +770,7 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 			return;
 		case ActionsManager::DiagnosticReportAction:
 			{
-				ReportDialog *dialog(new ReportDialog(Application::StandardReport, m_activeWindow));
+				DiagnosticReportDialog *dialog(new DiagnosticReportDialog(Application::StandardReport, m_activeWindow));
 				dialog->setAttribute(Qt::WA_DeleteOnClose, true);
 				dialog->show();
 			}
@@ -814,69 +820,73 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 
 	const ActionsManager::ActionDefinition::ActionScope scope(ActionsManager::getActionDefinition(identifier).scope);
 
-	if (scope == ActionsManager::ActionDefinition::MainWindowScope || scope == ActionsManager::ActionDefinition::WindowScope || scope == ActionsManager::ActionDefinition::EditorScope)
+	if (scope != ActionsManager::ActionDefinition::MainWindowScope && scope != ActionsManager::ActionDefinition::WindowScope && scope != ActionsManager::ActionDefinition::EditorScope)
 	{
-		MainWindow *mainWindow(nullptr);
+		return;
+	}
 
-		if (parameters.contains(QLatin1String("window")))
+	MainWindow *mainWindow(nullptr);
+
+	if (parameters.contains(QLatin1String("window")))
+	{
+		const quint64 windowIdentifier(parameters.value(QLatin1String("window")).toULongLong());
+
+		for (int i = 0; i < m_windows.count(); ++i)
 		{
-			const quint64 windowIdentifier(parameters.value(QLatin1String("window")).toULongLong());
+			MainWindow *currentMainWindow(m_windows.at(i));
 
-			for (int i = 0; i < m_windows.count(); ++i)
+			if (currentMainWindow->getIdentifier() == windowIdentifier)
 			{
-				if (m_windows.at(i)->getIdentifier() == windowIdentifier)
-				{
-					mainWindow = m_windows.at(i);
+				mainWindow = currentMainWindow;
 
-					break;
-				}
+				break;
 			}
 		}
-		else
-		{
-			mainWindow = (target ? MainWindow::findMainWindow(target) : m_activeWindow.data());
-		}
+	}
+	else
+	{
+		mainWindow = (target ? MainWindow::findMainWindow(target) : m_activeWindow.data());
+	}
 
-		if (scope == ActionsManager::ActionDefinition::WindowScope)
-		{
-			Window *window(nullptr);
+	if (scope == ActionsManager::ActionDefinition::WindowScope)
+	{
+		Window *window(nullptr);
 
-			if (target)
+		if (target)
+		{
+			if (mainWindow && parameters.contains(QLatin1String("tab")))
 			{
-				if (mainWindow && parameters.contains(QLatin1String("tab")))
+				window = mainWindow->getWindowByIdentifier(parameters[QLatin1String("tab")].toULongLong());
+			}
+			else
+			{
+				while (target)
 				{
-					window = mainWindow->getWindowByIdentifier(parameters[QLatin1String("tab")].toULongLong());
-				}
-				else
-				{
-					while (target)
+					if (target->metaObject()->className() == QLatin1String("Otter::Window"))
 					{
-						if (target->metaObject()->className() == QLatin1String("Otter::Window"))
-						{
-							window = qobject_cast<Window*>(target);
+						window = qobject_cast<Window*>(target);
 
-							break;
-						}
-
-						target = target->parent();
+						break;
 					}
+
+					target = target->parent();
 				}
 			}
-
-			if (!target && mainWindow)
-			{
-				window = mainWindow->getActiveWindow();
-			}
-
-			if (window)
-			{
-				window->triggerAction(identifier, parameters, trigger);
-			}
 		}
-		else if (mainWindow)
+
+		if (!target && mainWindow)
 		{
-			mainWindow->triggerAction(identifier, parameters, trigger);
+			window = mainWindow->getActiveWindow();
 		}
+
+		if (window)
+		{
+			window->triggerAction(identifier, parameters, trigger);
+		}
+	}
+	else if (mainWindow)
+	{
+		mainWindow->triggerAction(identifier, parameters, trigger);
 	}
 }
 
@@ -904,25 +914,27 @@ void Application::removeWindow(MainWindow *mainWindow)
 
 void Application::scheduleUpdateCheck(int interval)
 {
-	if (!m_updateCheckTimer)
+	if (m_updateCheckTimer)
 	{
-		m_updateCheckTimer = new LongTermTimer(this);
-		m_updateCheckTimer->start(static_cast<quint64>(interval * 1000 * SECONDS_IN_DAY));
-
-		connect(m_updateCheckTimer, &LongTermTimer::timeout, this, [&]()
-		{
-			UpdateChecker *updateChecker(new UpdateChecker(this));
-
-			connect(updateChecker, &UpdateChecker::finished, this, &Application::handleUpdateCheckResult);
-
-			const int interval(SettingsManager::getOption(SettingsManager::Updates_CheckIntervalOption).toInt());
-
-			if (interval > 0 && !SettingsManager::getOption(SettingsManager::Updates_ActiveChannelsOption).toStringList().isEmpty())
-			{
-				scheduleUpdateCheck(interval);
-			}
-		});
+		return;
 	}
+
+	m_updateCheckTimer = new LongTermTimer(this);
+	m_updateCheckTimer->start(static_cast<quint64>(interval * 1000 * 86400));
+
+	connect(m_updateCheckTimer, &LongTermTimer::timeout, this, [&]()
+	{
+		UpdateChecker *updateChecker(new UpdateChecker(this));
+
+		connect(updateChecker, &UpdateChecker::finished, this, &Application::handleUpdateCheckResult);
+
+		const int interval(SettingsManager::getOption(SettingsManager::Updates_CheckIntervalOption).toInt());
+
+		if (interval > 0 && !SettingsManager::getOption(SettingsManager::Updates_ActiveChannelsOption).toStringList().isEmpty())
+		{
+			scheduleUpdateCheck(interval);
+		}
+	});
 }
 
 void Application::handleOptionChanged(int identifier, const QVariant &value)
@@ -1086,7 +1098,7 @@ void Application::handlePositionalArguments(QCommandLineParser *parser, bool for
 		openHints = SessionsManager::NewTabOpen;
 	}
 
-	const QStringList urls((openHints == SessionsManager::DefaultOpen || !parser->positionalArguments().isEmpty()) ? parser->positionalArguments() : QStringList({}));
+	const QStringList urls((openHints == SessionsManager::DefaultOpen || !parser->positionalArguments().isEmpty()) ? parser->positionalArguments() : QStringList());
 
 	if (!forceOpen && urls.isEmpty())
 	{
@@ -1107,11 +1119,13 @@ void Application::handlePositionalArguments(QCommandLineParser *parser, bool for
 		{
 			for (int i = 0; i < urls.count(); ++i)
 			{
+				const QUrl url(urls.at(i));
+
 				mainWindow = createWindow(parameters);
 
-				if (!urls.at(i).isEmpty())
+				if (!url.isEmpty())
 				{
-					mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), urls.at(i)}, {QLatin1String("needsInterpretation"), true}});
+					mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("needsInterpretation"), true}});
 				}
 			}
 		}
@@ -1176,24 +1190,25 @@ void Application::handleUpdateCheckResult(const QVector<UpdateChecker::UpdateInf
 		return;
 	}
 
+	const UpdateChecker::UpdateInformation availableUpdate(availableUpdates.at(latestVersionIndex));
+
 	if (SettingsManager::getOption(SettingsManager::Updates_AutomaticInstallOption).toBool())
 	{
-		new Updater(availableUpdates.at(latestVersionIndex), this);
+		new Updater(availableUpdate, this);
 
 		return;
 	}
 
 	Notification::Message message;
-	message.message = tr("New update %1 from %2 channel is available.").arg(availableUpdates.at(latestVersionIndex).version, availableUpdates.at(latestVersionIndex).channel);
+	message.message = tr("New update %1 from %2 channel is available.").arg(availableUpdate.version, availableUpdate.channel);
 	message.icon = windowIcon();
 	message.event = NotificationsManager::UpdateAvailableEvent;
 
 	Notification *notification(NotificationsManager::createNotification(message));
-	notification->setData(QVariant::fromValue<QVector<UpdateChecker::UpdateInformation> >(availableUpdates));
 
-	connect(notification, &Notification::clicked, notification, [&]()
+	connect(notification, &Notification::clicked, notification, [=]()
 	{
-		UpdateCheckerDialog *dialog(new UpdateCheckerDialog(nullptr, notification->getData().value<QVector<UpdateChecker::UpdateInformation> >()));
+		UpdateCheckerDialog *dialog(new UpdateCheckerDialog(nullptr, availableUpdates));
 		dialog->show();
 	});
 }
@@ -1249,11 +1264,22 @@ void Application::setLocale(const QString &locale)
 		installTranslator(m_applicationTranslator);
 	}
 
-    const QString identifier(locale.endsWith(QLatin1String(".qm")) ? QFileInfo(locale).baseName().remove(QLatin1String("waterphoenix-browser_")) : ((locale == QLatin1String("system")) ? QLocale::system().name() : locale));
+	const QString systemLocale(QLocale::system().name());
+	QString identifier(locale);
+
+	if (locale.endsWith(QLatin1String(".qm")))
+	{
+		identifier = QFileInfo(locale).baseName().remove(QLatin1String("waterphoenix-browser_"));
+	}
+	else if (locale == QLatin1String("system"))
+	{
+		identifier = systemLocale;
+	}
+
 	const bool useSystemLocale(locale.isEmpty() || locale == QLatin1String("system"));
 
-	m_qtTranslator->load(QLatin1String("qt_") + (useSystemLocale ? QLocale::system().name() : identifier), QLibraryInfo::location(QLibraryInfo::TranslationsPath));
-    m_applicationTranslator->load((locale.endsWith(QLatin1String(".qm")) ? locale : QLatin1String("waterphoenix-browser_") + (useSystemLocale ? QLocale::system().name() : locale)), m_localePath);
+	m_qtTranslator->load(QLatin1String("qt_") + (useSystemLocale ? systemLocale : identifier), QLibraryInfo::location(QLibraryInfo::TranslationsPath));
+	m_applicationTranslator->load((locale.endsWith(QLatin1String(".qm")) ? locale : QLatin1String("waterphoenix-browser_") + (useSystemLocale ? systemLocale : locale)), m_localePath);
 
 	QLocale::setDefault(Utils::createLocale(identifier));
 }
@@ -1330,18 +1356,6 @@ QObject* Application::getFocusObject(bool ignoreMenus)
 	return (ignoreMenus ? m_nonMenuFocusObject.data() : focusObject());
 }
 
-Style* Application::getStyle()
-{
-	Style *style(qobject_cast<Style*>(QApplication::style()));
-
-	if (style)
-	{
-		return style;
-	}
-
-	return QApplication::style()->findChild<Style*>();
-}
-
 PlatformIntegration* Application::getPlatformIntegration()
 {
 	return m_platformIntegration;
@@ -1363,172 +1377,106 @@ QString Application::createReport(ReportOptions options)
 	AddonsManager::createInstance();
 
 	const WebBackend *webBackend(AddonsManager::getWebBackend());
-	QString report;
-	QTextStream stream(&report);
-	stream.setFieldAlignment(QTextStream::AlignLeft);
-    stream << QLatin1String("Water Phoenix Browser diagnostic report created on ") << QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-	stream << QLatin1String("\n\nVersion:\n\t");
-	stream.setFieldWidth(20);
-	stream << QLatin1String("Main Number");
-	stream << OTTER_VERSION_MAIN;
-	stream.setFieldWidth(0);
-	stream << QLatin1String("\n\t");
-	stream.setFieldWidth(20);
-	stream << QLatin1String("Weekly Number");
 
-	if (QStringLiteral(OTTER_VERSION_WEEKLY).trimmed().isEmpty())
-	{
-		stream << QLatin1Char('-');
-	}
-	else
-	{
-		stream << OTTER_VERSION_WEEKLY;
-	}
+	const QString versionWeekly(QStringLiteral(OTTER_VERSION_WEEKLY).trimmed());
+	const QString gitBranch(QStringLiteral(OTTER_GIT_BRANCH).trimmed());
+	const QString gitRevision(QStringLiteral(OTTER_GIT_REVISION).trimmed());
+	DiagnosticReport report;
+	DiagnosticReport::Section versionReport;
+	versionReport.title = QLatin1String("Version");
+	versionReport.fieldWidths = {20, 0};
+	versionReport.entries.reserve(7);
+	versionReport.entries.append({QLatin1String("Main Number"), OTTER_VERSION_MAIN});
+	versionReport.entries.append({QLatin1String("Weekly Number"), (versionWeekly.isEmpty() ? QString(QLatin1Char('-')) : versionWeekly)});
+	versionReport.entries.append({QLatin1String("Context"), OTTER_VERSION_CONTEXT});
+	versionReport.entries.append({QLatin1String("Web Backend"), (webBackend ? QStringLiteral("%1 %2").arg(webBackend->getTitle(), webBackend->getEngineVersion()) : QLatin1String("none"))});
+	versionReport.entries.append({QLatin1String("Build Date"), QDateTime::fromString(OTTER_BUILD_DATETIME, Qt::ISODate).toUTC().toString(Qt::ISODate)});
+	versionReport.entries.append({QLatin1String("Git Branch"), ((gitBranch.isEmpty() || gitBranch == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : gitBranch)});
+	versionReport.entries.append({QLatin1String("Git Revision"), ((gitRevision.isEmpty() || gitRevision == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : QStringLiteral("%1 (%2)").arg(gitRevision).arg(QDateTime::fromString(QStringLiteral(OTTER_GIT_DATETIME).trimmed(), Qt::ISODate).toUTC().toString(Qt::ISODate)))});
 
-	stream.setFieldWidth(0);
-	stream << QLatin1String("\n\t");
-	stream.setFieldWidth(20);
-	stream << QLatin1String("Context");
-	stream << OTTER_VERSION_CONTEXT;
-	stream.setFieldWidth(0);
-	stream << QLatin1String("\n\t");
-	stream.setFieldWidth(20);
-	stream << QLatin1String("Web Backend");
-	stream << (webBackend ? QStringLiteral("%1 %2").arg(webBackend->getTitle(), webBackend->getEngineVersion()) : QLatin1String("none"));
-	stream.setFieldWidth(0);
-	stream << QLatin1String("\n\t");
-	stream.setFieldWidth(20);
-	stream << QLatin1String("Git Branch");
-
-	if (QStringLiteral(OTTER_GIT_BRANCH).trimmed().isEmpty() || QStringLiteral(OTTER_GIT_BRANCH) == QLatin1String("unknown"))
-	{
-		stream << QLatin1Char('-');
-	}
-	else
-	{
-		stream << OTTER_GIT_BRANCH;
-	}
-
-	stream.setFieldWidth(0);
-	stream << QLatin1String("\n\t");
-	stream.setFieldWidth(20);
-	stream << QLatin1String("Git Revision");
-
-	if (QStringLiteral(OTTER_GIT_REVISION).trimmed().isEmpty() || QStringLiteral(OTTER_GIT_REVISION) == QLatin1String("unknown"))
-	{
-		stream << QLatin1Char('-');
-	}
-	else
-	{
-		stream << QStringLiteral("%1 (%2)").arg(OTTER_GIT_REVISION).arg(OTTER_GIT_DATETIME);
-	}
-
-	stream.setFieldWidth(0);
-	stream << QLatin1String("\n\n");
+	report.sections.append(versionReport);
 
 	if (options.testFlag(EnvironmentReport))
 	{
 		const QString sslVersion(webBackend ? webBackend->getSslVersion() : QString());
+		DiagnosticReport::Section environmentReport;
+		environmentReport.title = QLatin1String("Environment");
+		environmentReport.fieldWidths = {30, 0};
+		environmentReport.entries.reserve(8);
+		environmentReport.entries.append({QLatin1String("System Name"), QSysInfo::prettyProductName()});
+		environmentReport.entries.append({QLatin1String("Build ABI"), QSysInfo::buildAbi()});
+		environmentReport.entries.append({QLatin1String("Build CPU Architecture"), QSysInfo::buildCpuArchitecture()});
+		environmentReport.entries.append({QLatin1String("Runtime CPU Architecture"), QSysInfo::currentCpuArchitecture()});
+		environmentReport.entries.append({QLatin1String("Build Qt Version"), QT_VERSION_STR});
+		environmentReport.entries.append({QLatin1String("Runtime Qt Version"), qVersion()});
+		environmentReport.entries.append({QLatin1String("SSL Library Version"), (sslVersion.isEmpty() ? QLatin1String("unavailable") : sslVersion)});
+		environmentReport.entries.append({QLatin1String("System Locale"), QLocale::system().name()});
 
-		stream << QLatin1String("Environment:\n\t");
-		stream.setFieldWidth(30);
-		stream << QLatin1String("System Name");
-		stream << QSysInfo::prettyProductName();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(30);
-		stream << QLatin1String("Build ABI");
-		stream << QSysInfo::buildAbi();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(30);
-		stream << QLatin1String("Build CPU Architecture");
-		stream << QSysInfo::buildCpuArchitecture();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(30);
-		stream << QLatin1String("Current CPU Architecture");
-		stream << QSysInfo::currentCpuArchitecture();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(30);
-		stream << QLatin1String("Build Qt Version");
-		stream << QT_VERSION_STR;
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(30);
-		stream << QLatin1String("Current Qt Version");
-		stream << qVersion();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(30);
-		stream << QLatin1String("SSL Library Version");
-		stream << (sslVersion.isEmpty() ? QLatin1String("unavailable") : sslVersion);
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(30);
-		stream << QLatin1String("Locale");
-		stream << QLocale::system().name();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\n");
+		report.sections.append(environmentReport);
 	}
 
 	if (options.testFlag(PathsReport))
 	{
-		stream << QLatin1String("Paths:\n\t");
-		stream.setFieldWidth(20);
-		stream << QLatin1String("Profile");
-		stream << SessionsManager::getProfilePath();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(20);
-		stream << QLatin1String("Configuration");
-		stream << SettingsManager::getGlobalPath();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(20);
-		stream << QLatin1String("Overrides");
-		stream << SettingsManager::getOverridePath();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(20);
-		stream << QLatin1String("Session");
-		stream << SessionsManager::getSessionPath(SessionsManager::getCurrentSession());
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(20);
-		stream << QLatin1String("Bookmarks");
-		stream << SessionsManager::getWritableDataPath(QLatin1String("bookmarks.xbel"));
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(20);
-		stream << QLatin1String("Notes");
-		stream << SessionsManager::getWritableDataPath(QLatin1String("notes.xbel"));
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(20);
-		stream << QLatin1String("History");
-		stream << SessionsManager::getWritableDataPath(QLatin1String("browsingHistory.json"));
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\t");
-		stream.setFieldWidth(20);
-		stream << QLatin1String("Cache");
-		stream << SessionsManager::getCachePath();
-		stream.setFieldWidth(0);
-		stream << QLatin1String("\n\n");
+		DiagnosticReport::Section pathsReport;
+		pathsReport.title = QLatin1String("Paths");
+		pathsReport.fieldWidths = {20, 0};
+		pathsReport.entries.reserve(8);
+		pathsReport.entries.append({QLatin1String("Profile"), SessionsManager::getProfilePath()});
+		pathsReport.entries.append({QLatin1String("Configuration"), SettingsManager::getGlobalPath()});
+		pathsReport.entries.append({QLatin1String("Overrides"), SettingsManager::getOverridePath()});
+		pathsReport.entries.append({QLatin1String("Session"), SessionsManager::getSessionPath(SessionsManager::getCurrentSession())});
+		pathsReport.entries.append({QLatin1String("Bookmarks"), SessionsManager::getWritableDataPath(QLatin1String("bookmarks.xbel"))});
+		pathsReport.entries.append({QLatin1String("Notes"), SessionsManager::getWritableDataPath(QLatin1String("notes.xbel"))});
+		pathsReport.entries.append({QLatin1String("History"), SessionsManager::getWritableDataPath(QLatin1String("browsingHistory.json"))});
+		pathsReport.entries.append({QLatin1String("Cache"), SessionsManager::getCachePath()});
+
+		report.sections.append(pathsReport);
 	}
 
 	if (options.testFlag(SettingsReport))
 	{
-		stream << SettingsManager::createReport();
+		report.sections.append(SettingsManager::createReport());
 	}
 
 	if (options.testFlag(KeyboardShortcutsReport))
 	{
-		stream << ActionsManager::createReport();
+		report.sections.append(ActionsManager::createReport());
 	}
 
-	return report.remove(QRegularExpression(QLatin1String(" +$"), QRegularExpression::MultilineOption));
+	QString reportString;
+	QTextStream stream(&reportString);
+	stream.setFieldAlignment(QTextStream::AlignLeft);
+	stream << QLatin1String("Otter Browser diagnostic report created on ") << QDateTime::currentDateTimeUtc().toString(Qt::ISODate) << QLatin1String("\n\n");
+
+	for (int i = 0; i < report.sections.count(); ++i)
+	{
+		const DiagnosticReport::Section section(report.sections.at(i));
+
+		stream << section.title << QLatin1String(":\n");
+
+		for (int j = 0; j < section.entries.count(); ++j)
+		{
+			const QStringList fields(section.entries.at(j));
+			int size(0);
+
+			stream << QLatin1Char('\t');
+
+			for (int k = 0; k < fields.count(); ++k)
+			{
+				size = section.fieldWidths.value(k, size);
+
+				stream.setFieldWidth(size);
+				stream << fields.at(k);
+			}
+
+			stream.setFieldWidth(0);
+			stream << QLatin1Char('\n');
+		}
+
+		stream << QLatin1Char('\n');
+	}
+
+	return reportString.remove(QRegularExpression(QLatin1String(" +$"), QRegularExpression::MultilineOption));
 }
 
 QString Application::getFullVersion()
@@ -1648,6 +1596,7 @@ ActionsManager::ActionDefinition::State Application::getActionState(int identifi
 
 			break;
 		case ActionsManager::ActivateWindowAction:
+			if (parameters.contains(QLatin1String("window")))
 			{
 				const quint64 windowIdentifier(parameters.value(QLatin1String("window")).toULongLong());
 
@@ -1672,6 +1621,7 @@ ActionsManager::ActionDefinition::State Application::getActionState(int identifi
 
 			break;
 		case ActionsManager::ExchangeDataAction:
+			if (parameters.contains(QLatin1String("exchanger")))
 			{
 				const QString exchanger(parameters.value(QLatin1String("exchanger")).toString());
 
@@ -1682,7 +1632,11 @@ ActionsManager::ActionDefinition::State Application::getActionState(int identifi
 					const WebBackend *webBackend(AddonsManager::getWebBackend());
 
 					state.text = translate("actions", "Import HTML Bookmarks…");
-					state.isEnabled = (webBackend && webBackend->hasCapability(WebBackend::BookmarksImportCapability));
+
+					if (!webBackend || !webBackend->hasCapability(WebBackend::BookmarksImportCapability))
+					{
+						state.isEnabled = false;
+					}
 				}
 				else if (exchanger == QLatin1String("OperaBookmarksImport"))
 				{
@@ -1735,20 +1689,9 @@ bool Application::canClose()
 {
 	if (TransfersManager::hasRunningTransfers() && SettingsManager::getOption(SettingsManager::Choices_WarnQuitTransfersOption).toBool())
 	{
-		const QVector<Transfer*> transfers(TransfersManager::getTransfers());
-		int runningTransfers(0);
-
-		for (int i = 0; i < transfers.count(); ++i)
-		{
-			if (transfers.at(i)->getState() == Transfer::RunningState)
-			{
-				++runningTransfers;
-			}
-		}
-
 		QMessageBox messageBox;
 		messageBox.setWindowTitle(tr("Question"));
-		messageBox.setText(tr("You are about to quit while %n files are still being downloaded.", "", runningTransfers));
+		messageBox.setText(tr("You are about to quit while %n files are still being downloaded.", "", TransfersManager::getRunningTransfersCount()));
 		messageBox.setInformativeText(tr("Do you want to continue?"));
 		messageBox.setIcon(QMessageBox::Question);
 		messageBox.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -118,23 +118,25 @@ void CookieJar::clearCookies(int period)
 
 void CookieJar::scheduleSave()
 {
-	if (!m_path.isEmpty())
+	if (m_path.isEmpty())
 	{
-		if (Application::isAboutToQuit())
-		{
-			if (m_saveTimer != 0)
-			{
-				killTimer(m_saveTimer);
+		return;
+	}
 
-				m_saveTimer = 0;
-			}
-
-			save();
-		}
-		else if (m_saveTimer == 0)
+	if (Application::isAboutToQuit())
+	{
+		if (m_saveTimer != 0)
 		{
-			m_saveTimer = startTimer(500);
+			killTimer(m_saveTimer);
+
+			m_saveTimer = 0;
 		}
+
+		save();
+	}
+	else if (m_saveTimer == 0)
+	{
+		m_saveTimer = startTimer(500);
 	}
 }
 
@@ -193,9 +195,11 @@ void CookieJar::save()
 
 	for (int i = 0; i < cookies.count(); ++i)
 	{
-		if (!cookies.at(i).isSessionCookie())
+		const QNetworkCookie cookie(cookies.at(i));
+
+		if (!cookie.isSessionCookie())
 		{
-			stream << cookies.at(i).toRawForm();
+			stream << cookie.toRawForm();
 		}
 	}
 
@@ -234,9 +238,11 @@ QVector<QNetworkCookie> CookieJar::getCookies(const QString &domain) const
 
 	for (int i = 0; i < cookies.count(); ++i)
 	{
-		if (cookies.at(i).domain() == domain || (cookies.at(i).domain().startsWith(QLatin1Char('.')) && domain.endsWith(cookies.at(i).domain())))
+		const QNetworkCookie cookie(cookies.at(i));
+
+		if (cookie.domain() == domain || (cookie.domain().startsWith(QLatin1Char('.')) && domain.endsWith(cookie.domain())))
 		{
-			domainCookies.append(cookies.at(i));
+			domainCookies.append(cookie);
 		}
 	}
 
@@ -274,6 +280,8 @@ bool CookieJar::updateCookie(const QNetworkCookie &cookie)
 	if (result)
 	{
 		scheduleSave();
+
+		emit cookieModified(cookie);
 	}
 
 	return result;
@@ -351,32 +359,13 @@ bool CookieJar::hasCookie(const QNetworkCookie &cookie) const
 
 	for (int i = 0; i < cookies.count(); ++i)
 	{
-		if (cookies.at(i).domain() == cookie.domain() && cookies.at(i).name() == cookie.name())
+		if (cookie.hasSameIdentifier(cookies.at(i)))
 		{
 			return true;
 		}
 	}
 
 	return false;
-}
-
-bool CookieJar::isDomainTheSame(const QUrl &first, const QUrl &second)
-{
-	const QString firstTld(first.topLevelDomain());
-	const QString secondTld(second.topLevelDomain());
-
-	if (firstTld != secondTld)
-	{
-		return false;
-	}
-
-	QString firstDomain(QLatin1Char('.') + first.host().toLower());
-	firstDomain.remove((firstDomain.length() - firstTld.length()), firstTld.length());
-
-	QString secondDomain(QLatin1Char('.') + second.host().toLower());
-	secondDomain.remove((secondDomain.length() - secondTld.length()), secondTld.length());
-
-	return firstDomain.section(QLatin1Char('.'), -1) == secondDomain.section(QLatin1Char('.'), -1);
 }
 
 }

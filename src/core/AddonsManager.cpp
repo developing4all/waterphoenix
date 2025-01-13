@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -133,14 +133,14 @@ AddonsManager::AddonsManager(QObject *parent) : QObject(parent)
 	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Cookies"), {}, QUrl(QLatin1String("about:cookies")), ThemesManager::createIcon(QLatin1String("cookies"), false), SpecialPageInformation::UniversalType), QLatin1String("cookies"));
 	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Feeds"), {}, QUrl(QLatin1String("about:feeds")), ThemesManager::createIcon(QLatin1String("feeds"), false), SpecialPageInformation::UniversalType), QLatin1String("feeds"));
 	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "History"), {}, QUrl(QLatin1String("about:history")), ThemesManager::createIcon(QLatin1String("view-history"), false), SpecialPageInformation::UniversalType), QLatin1String("history"));
-	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Links"), {}, QUrl(QLatin1String("about:links")), ThemesManager::createIcon(QLatin1String("links"), false), SpecialPageInformation::SidebarPanelType), QLatin1String("links"));
+	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Links"), {}, QUrl(QLatin1String("about:links")), ThemesManager::createIcon(QLatin1String("links"), false), SpecialPageInformation::SidebarPanelType, false), QLatin1String("links"));
 	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Notes"), {}, QUrl(QLatin1String("about:notes")), ThemesManager::createIcon(QLatin1String("notes"), false), SpecialPageInformation::UniversalType), QLatin1String("notes"));
 	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Page Information"), {}, {}, ThemesManager::createIcon(QLatin1String("view-information"), false), SpecialPageInformation::SidebarPanelType), QLatin1String("pageInformation"));
 	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Passwords"), {}, QUrl(QLatin1String("about:passwords")), ThemesManager::createIcon(QLatin1String("dialog-password"), false), SpecialPageInformation::UniversalType), QLatin1String("passwords"));
 	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Preferences"), {}, QUrl(QLatin1String("about:preferences")), ThemesManager::createIcon(QLatin1String("configuration"), false), SpecialPageInformation::StandaloneType), QLatin1String("preferences"));
 	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Tab History"), {}, {}, ThemesManager::createIcon(QLatin1String("tab-history"), false), SpecialPageInformation::SidebarPanelType), QLatin1String("tabHistory"));
-	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Downloads"), {}, QUrl(QLatin1String("about:transfers")), ThemesManager::createIcon(QLatin1String("transfers"), false), SpecialPageInformation::UniversalType), QLatin1String("transfers"));
-	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Windows and Tabs"), {}, QUrl(QLatin1String("about:windows")), ThemesManager::createIcon(QLatin1String("window"), false), SpecialPageInformation::UniversalType), QLatin1String("windows"));
+	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Downloads"), {}, QUrl(QLatin1String("about:transfers")), ThemesManager::createIcon(QLatin1String("transfers"), false), SpecialPageInformation::UniversalType, false), QLatin1String("transfers"));
+	registerSpecialPage(SpecialPageInformation(QT_TRANSLATE_NOOP("addons", "Windows and Tabs"), {}, QUrl(QLatin1String("about:windows")), ThemesManager::createIcon(QLatin1String("window"), false), SpecialPageInformation::UniversalType, false), QLatin1String("windows"));
 }
 
 void AddonsManager::createInstance()
@@ -183,29 +183,30 @@ void AddonsManager::loadUserScripts()
 		file.close();
 	}
 
-	const QList<QFileInfo> scripts(QDir(SessionsManager::getWritableDataPath(QLatin1String("scripts"))).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot));
+	const QList<QFileInfo> scriptFiles(QDir(SessionsManager::getWritableDataPath(QLatin1String("scripts"))).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot));
 
-	for (int i = 0; i < scripts.count(); ++i)
+	for (int i = 0; i < scriptFiles.count(); ++i)
 	{
-		const QString path(QDir(scripts.at(i).absoluteFilePath()).filePath(scripts.at(i).fileName() + QLatin1String(".js")));
+		const QFileInfo scriptFile(scriptFiles.at(i));
+		const QString path(QDir(scriptFile.absoluteFilePath()).filePath(scriptFile.fileName() + QLatin1String(".js")));
 
-		if (QFile::exists(path))
-		{
-			const QJsonObject scriptObject(metaData.value(scripts.at(i).fileName()));
-			UserScript *script(new UserScript(path, QUrl(scriptObject.value(QLatin1String("downloadUrl")).toString()), m_instance));
-			script->setEnabled(scriptObject.value(QLatin1String("isEnabled")).toBool(false));
-
-			m_userScripts[scripts.at(i).fileName()] = script;
-
-			connect(script, &UserScript::metaDataChanged, m_instance, [=]()
-			{
-				emit m_instance->userScriptModified(script->getName());
-			});
-		}
-		else
+		if (!QFile::exists(path))
 		{
 			Console::addMessage(QCoreApplication::translate("main", "Failed to find User Script file: %1").arg(path), Console::OtherCategory, Console::WarningLevel);
+
+			continue;
 		}
+
+		const QJsonObject scriptObject(metaData.value(scriptFile.fileName()));
+		UserScript *script(new UserScript(path, QUrl(scriptObject.value(QLatin1String("downloadUrl")).toString()), m_instance));
+		script->setEnabled(scriptObject.value(QLatin1String("isEnabled")).toBool(false));
+
+		m_userScripts[scriptFile.fileName()] = script;
+
+		connect(script, &UserScript::metaDataChanged, m_instance, [=]()
+		{
+			emit m_instance->userScriptModified(script->getName());
+		});
 	}
 
 	m_areUserScriptsInitialized = true;
@@ -316,7 +317,7 @@ bool AddonsManager::isSpecialPage(const QUrl &url)
 
 	const QString identifier(url.path());
 
-	return (m_specialPages.contains(identifier) && m_specialPages[identifier].types & SpecialPageInformation::StandaloneType);
+	return (m_specialPages.contains(identifier) && m_specialPages[identifier].types.testFlag(SpecialPageInformation::StandaloneType));
 }
 
 }

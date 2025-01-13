@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -296,7 +296,7 @@ void BookmarksContentsWidget::triggerAction(int identifier, const QVariantMap &p
 
 void BookmarksContentsWidget::updateActions()
 {
-	const bool hasSelecion(!m_ui->bookmarksViewWidget->selectionModel()->selectedIndexes().isEmpty());
+	const bool hasSelecion(m_ui->bookmarksViewWidget->hasSelection());
 	const QModelIndex index(hasSelecion ? m_ui->bookmarksViewWidget->selectionModel()->currentIndex().sibling(m_ui->bookmarksViewWidget->selectionModel()->currentIndex().row(), 0) : QModelIndex());
 	const BookmarksModel::BookmarkType type(static_cast<BookmarksModel::BookmarkType>(index.data(BookmarksModel::TypeRole).toInt()));
 
@@ -325,19 +325,18 @@ BookmarksModel::Bookmark* BookmarksContentsWidget::getBookmark(const QModelIndex
 BookmarksContentsWidget::BookmarkLocation BookmarksContentsWidget::getBookmarkCreationLocation()
 {
 	const QModelIndex index(m_model->mapToSource(m_ui->bookmarksViewWidget->currentIndex()));
-	BookmarksModel::Bookmark *item(BookmarksManager::getModel()->getBookmark(index));
+	BookmarksModel *model(BookmarksManager::getModel());
+	BookmarksModel::Bookmark *bookmark(model->getBookmark(index));
 	BookmarkLocation location;
 
-	if (!item || item == BookmarksManager::getModel()->getRootItem() || item == BookmarksManager::getModel()->getTrashItem())
+	if (!bookmark || bookmark == model->getRootItem() || bookmark == model->getTrashItem())
 	{
-		location.folder = BookmarksManager::getModel()->getRootItem();
+		location.folder = model->getRootItem();
 
 		return location;
 	}
 
-	const BookmarksModel::BookmarkType type(item->getType());
-
-	location.folder = ((type == BookmarksModel::RootBookmark || type == BookmarksModel::FolderBookmark) ? item : item->getParent());
+	location.folder = (bookmark->isFolder() ? bookmark : bookmark->getParent());
 	location.row = ((location.folder && location.folder->index() == index) ? -1 : (index.row() + 1));
 
 	return location;

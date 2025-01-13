@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -126,8 +126,9 @@ public:
 
 		QUrl url;
 		PageTypes types;
+		bool isSingleton = true;
 
-		explicit SpecialPageInformation(const QString &titleValue, const QString &descriptionValue, const QUrl &urlValue, const QIcon &iconValue, PageTypes typesValue) : AddonInformation(titleValue, descriptionValue, iconValue), url(urlValue), types(typesValue)
+		explicit SpecialPageInformation(const QString &titleValue, const QString &descriptionValue, const QUrl &urlValue, const QIcon &iconValue, PageTypes typesValue, bool isSingletonValue = true) : AddonInformation(titleValue, descriptionValue, iconValue), url(urlValue), types(typesValue), isSingleton(isSingletonValue)
 		{
 		}
 

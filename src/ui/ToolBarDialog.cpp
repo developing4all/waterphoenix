@@ -107,22 +107,25 @@ ToolBarDialog::ToolBarDialog(const ToolBarsManager::ToolBarDefinition &definitio
 
 				for (int i = 0; i < specialPages.count(); ++i)
 				{
-					ItemModel::Item *item(new ItemModel::Item(SidebarWidget::getPanelTitle(specialPages.at(i))));
+					const QString specialPage(specialPages.at(i));
+					ItemModel::Item *item(new ItemModel::Item(SidebarWidget::getPanelTitle(specialPage)));
 					item->setCheckable(true);
-					item->setCheckState(definition.panels.contains(specialPages.at(i)) ? Qt::Checked : Qt::Unchecked);
-					item->setData(specialPages.at(i), ItemModel::UserRole);
+					item->setCheckState(definition.panels.contains(specialPage) ? Qt::Checked : Qt::Unchecked);
+					item->setData(specialPage, ItemModel::UserRole);
 
 					panelsModel->insertRow(item);
 				}
 
 				for (int i = 0; i < definition.panels.count(); ++i)
 				{
-					if (!specialPages.contains(definition.panels.at(i)))
+					const QString panel(definition.panels.at(i));
+
+					if (!specialPages.contains(panel))
 					{
-						ItemModel::Item *item(new ItemModel::Item(SidebarWidget::getPanelTitle(definition.panels.at(i))));
+						ItemModel::Item *item(new ItemModel::Item(SidebarWidget::getPanelTitle(panel)));
 						item->setCheckable(true);
 						item->setCheckState(Qt::Checked);
-						item->setData(definition.panels.at(i), ItemModel::UserRole);
+						item->setData(panel, ItemModel::UserRole);
 
 						panelsModel->insertRow(item);
 					}
@@ -157,15 +160,17 @@ ToolBarDialog::ToolBarDialog(const ToolBarsManager::ToolBarDefinition &definitio
 
 	for (int i = 0; i < widgets.count(); ++i)
 	{
-		availableEntriesModel->appendRow(createEntry(widgets.at(i)));
+		const QString widget(widgets.at(i));
 
-		if (widgets.at(i) == QLatin1String("SearchWidget"))
+		availableEntriesModel->appendRow(createEntry(widget));
+
+		if (widget == QLatin1String("SearchWidget"))
 		{
 			const QStringList searchEngines(SearchEnginesManager::getSearchEngines());
 
 			for (int j = 0; j < searchEngines.count(); ++j)
 			{
-				availableEntriesModel->appendRow(createEntry(widgets.at(i), {{QLatin1String("searchEngine"), searchEngines.at(j)}}));
+				availableEntriesModel->appendRow(createEntry(widget, {{QLatin1String("searchEngine"), searchEngines.at(j)}}));
 			}
 		}
 	}
@@ -174,14 +179,16 @@ ToolBarDialog::ToolBarDialog(const ToolBarsManager::ToolBarDefinition &definitio
 
 	for (int i = 0; i < actions.count(); ++i)
 	{
-		if (actions.at(i).flags.testFlag(ActionsManager::ActionDefinition::IsDeprecatedFlag) || actions.at(i).flags.testFlag(ActionsManager::ActionDefinition::RequiresParameters))
+		const ActionsManager::ActionDefinition action(actions.at(i));
+
+		if (action.flags.testFlag(ActionsManager::ActionDefinition::IsDeprecatedFlag) || action.flags.testFlag(ActionsManager::ActionDefinition::RequiresParameters))
 		{
 			continue;
 		}
 
-		const QString name(ActionsManager::getActionName(actions.at(i).identifier) + QLatin1String("Action"));
-		QStandardItem *item(new QStandardItem(actions.at(i).getText(true)));
-		item->setData(ItemModel::createDecoration(actions.at(i).defaultState.icon), Qt::DecorationRole);
+		const QString name(ActionsManager::getActionName(action.identifier) + QLatin1String("Action"));
+		QStandardItem *item(new QStandardItem(action.getText(true)));
+		item->setData(ItemModel::createDecoration(action.defaultState.icon), Qt::DecorationRole);
 		item->setData(name, IdentifierRole);
 		item->setData(true, HasOptionsRole);
 		item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled | Qt::ItemNeverHasChildren);
@@ -438,7 +445,7 @@ void ToolBarDialog::editEntry()
 		}
 		else if (identifier.startsWith(QLatin1String("bookmarks:")))
 		{
-			const BookmarksModel::Bookmark *bookmark(identifier.startsWith(QLatin1String("bookmarks:/")) ? BookmarksManager::getModel()->getBookmarkByPath(identifier.mid(11)) : BookmarksManager::getBookmark(identifier.midRef(10).toULongLong()));
+			const BookmarksModel::Bookmark *bookmark(identifier.startsWith(QLatin1String("bookmarks:/")) ? BookmarksManager::getModel()->getBookmarkByPath(identifier.mid(11)) : BookmarksManager::getBookmark(identifier.mid(10).toULongLong()));
 
 			if (bookmark)
 			{
@@ -784,7 +791,7 @@ QMap<int, QVariant> ToolBarDialog::createEntryData(const QString &identifier, co
 	}
 	else if (identifier.startsWith(QLatin1String("bookmarks:")))
 	{
-		const BookmarksModel::Bookmark *bookmark(identifier.startsWith(QLatin1String("bookmarks:/")) ? BookmarksManager::getModel()->getBookmarkByPath(identifier.mid(11)) : BookmarksManager::getBookmark(identifier.midRef(10).toULongLong()));
+		const BookmarksModel::Bookmark *bookmark(identifier.startsWith(QLatin1String("bookmarks:/")) ? BookmarksManager::getModel()->getBookmarkByPath(identifier.mid(11)) : BookmarksManager::getBookmark(identifier.mid(10).toULongLong()));
 
 		if (bookmark)
 		{

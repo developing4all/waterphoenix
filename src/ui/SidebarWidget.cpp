@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -80,7 +80,19 @@ SidebarWidget::SidebarWidget(ToolBarWidget *parent) : QWidget(parent),
 
 	connect(parent, &ToolBarWidget::toolBarModified, this, &SidebarWidget::updateLayout);
 	connect(parent, &ToolBarWidget::toolBarModified, this, &SidebarWidget::updatePanels);
-	connect(m_resizerWidget, &ResizerWidget::finished, this, &SidebarWidget::saveSize);
+	connect(m_resizerWidget, &ResizerWidget::finished, [&]()
+	{
+		ToolBarsManager::ToolBarDefinition definition(m_parentToolBarWidget->getDefinition());
+		const int maximumSize(m_ui->containerWidget->maximumWidth());
+		const int panelSize((maximumSize == QWIDGETSIZE_MAX) ? -1 : maximumSize);
+
+		if (panelSize != definition.panelSize)
+		{
+			definition.panelSize = panelSize;
+
+			ToolBarsManager::setToolBar(definition);
+		}
+	});
 }
 
 SidebarWidget::~SidebarWidget()
@@ -287,20 +299,6 @@ void SidebarWidget::selectPanel(const QString &identifier)
 	}
 }
 
-void SidebarWidget::saveSize()
-{
-	ToolBarsManager::ToolBarDefinition definition(m_parentToolBarWidget->getDefinition());
-	const int maximumSize(m_ui->containerWidget->maximumWidth());
-	const int panelSize((maximumSize == QWIDGETSIZE_MAX) ? -1 : maximumSize);
-
-	if (panelSize != definition.panelSize)
-	{
-		definition.panelSize = panelSize;
-
-		ToolBarsManager::setToolBar(definition);
-	}
-}
-
 void SidebarWidget::updateLayout()
 {
 	const Qt::ToolBarArea area(m_parentToolBarWidget->getArea());
@@ -348,37 +346,38 @@ void SidebarWidget::updatePanels()
 		return;
 	}
 
-	const QStringList panels(definition.panels);
-
 	qDeleteAll(m_buttons.begin(), m_buttons.end());
 
 	m_buttons.clear();
 
+	const QStringList panels(definition.panels);
 	const QStringList currentPanels(m_panels.keys());
 
 	for (int i = 0; i < currentPanels.count(); ++i)
 	{
 		const QString &panel(currentPanels.at(i));
 
-		if (!panels.contains(panel))
+		if (panels.contains(panel))
 		{
-			ContentsWidget *widget(m_panels[panel]);
-			widget->hide();
-
-			if (panel == m_currentPanel)
-			{
-				m_currentPanel.clear();
-
-				m_ui->containerLayout->removeWidget(widget);
-				m_ui->containerWidget->hide();
-
-				m_resizerWidget->hide();
-			}
-
-			widget->deleteLater();
-
-			m_panels.remove(panel);
+			continue;
 		}
+
+		ContentsWidget *widget(m_panels[panel]);
+		widget->hide();
+
+		if (panel == m_currentPanel)
+		{
+			m_currentPanel.clear();
+
+			m_ui->containerLayout->removeWidget(widget);
+			m_ui->containerWidget->hide();
+
+			m_resizerWidget->hide();
+		}
+
+		widget->deleteLater();
+
+		m_panels.remove(panel);
 	}
 
 	const QStringList specialPages(AddonsManager::getSpecialPages(AddonsManager::SpecialPageInformation::SidebarPanelType));
@@ -412,19 +411,20 @@ void SidebarWidget::updatePanels()
 
 	for (int i = 0; i < panels.count(); ++i)
 	{
-		const bool isWebPanel(panels.at(i).startsWith(QLatin1String("web:")));
+		const QString panel(panels.at(i));
+		const bool isWebPanel(panel.startsWith(QLatin1String("web:")));
 
-		if (!isWebPanel && !specialPages.contains(panels.at(i)))
+		if (!isWebPanel && !specialPages.contains(panel))
 		{
 			continue;
 		}
 
-		const QKeySequence shortcut(ActionsManager::getActionShortcut(ActionsManager::ShowPanelAction, {{QLatin1String("panel"), panels.at(i)}}));
-		const QString title(getPanelTitle(panels.at(i)));
+		const QKeySequence shortcut(ActionsManager::getActionShortcut(ActionsManager::ShowPanelAction, {{QLatin1String("panel"), panel}}));
+		const QString title(getPanelTitle(panel));
 		QToolButton *button(new QToolButton(this));
 		QAction *selectPanelButtonAction(new QAction(button));
-		selectPanelButtonAction->setData(panels.at(i));
-		selectPanelButtonAction->setIcon(getPanelIcon(panels.at(i)));
+		selectPanelButtonAction->setData(panel);
+		selectPanelButtonAction->setIcon(getPanelIcon(panel));
 		selectPanelButtonAction->setToolTip(Utils::appendShortcut(title, shortcut));
 
 		button->setDefaultAction(selectPanelButtonAction);
@@ -436,7 +436,7 @@ void SidebarWidget::updatePanels()
 			QAction *selectPanelMenuAction(menu->addAction(Utils::elideText(title, menu->fontMetrics(), nullptr, 300)));
 			selectPanelMenuAction->setCheckable(true);
 			selectPanelMenuAction->setChecked(true);
-			selectPanelMenuAction->setData(panels.at(i));
+			selectPanelMenuAction->setData(panel);
 
 			connect(selectPanelMenuAction, &QAction::toggled, this, &SidebarWidget::choosePanel);
 		}

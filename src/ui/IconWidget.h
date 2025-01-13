@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -33,9 +33,9 @@ class IconWidget final : public QToolButton
 public:
 	explicit IconWidget(QWidget *parent = nullptr);
 
-	void setIcon(const QString &icon);
+	void setIcon(const QString &name);
 	void setIcon(const QIcon &icon);
-	void setDefaultIcon(const QString &icon);
+	void setDefaultIcon(const QString &name);
 	QString getIcon() const;
 	int heightForWidth(int width) const override;
 	bool hasHeightForWidth() const override;
@@ -44,15 +44,12 @@ protected:
 	void changeEvent(QEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
 
-protected slots:
-	void populateMenu();
-
 private:
-	QString m_icon;
-	QString m_defaultIcon;
+	QString m_iconName;
+	QString m_defaultIconName;
 
 signals:
-	void iconChanged(const QString &icon);
+	void iconChanged(const QString &name);
 };
 
 }

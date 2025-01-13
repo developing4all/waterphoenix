@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -33,13 +33,51 @@ namespace Otter
 
 IconWidget::IconWidget(QWidget *parent) : QToolButton(parent)
 {
-	setMenu(new QMenu(this));
+	QMenu *menu(new QMenu(this));
+
+	setMenu(menu);
 	setToolTip(tr("Select Icon"));
 	setPopupMode(QToolButton::InstantPopup);
 	setMinimumSize(16, 16);
 	setMaximumSize(64, 64);
 
-	connect(menu(), &QMenu::aboutToShow, this, &IconWidget::populateMenu);
+	connect(menu, &QMenu::aboutToShow, this, [&]()
+	{
+		menu->clear();
+		menu->addAction(tr("Select From File…"), this, [&]()
+		{
+			const QString path(QFileDialog::getOpenFileName(this, tr("Select Icon"), {}, Utils::formatFileTypes({tr("Images (*.png *.jpg *.bmp *.gif *.svg *.svgz *.ico)")})));
+
+			if (!path.isEmpty())
+			{
+				setIcon(QIcon(QPixmap(path)));
+			}
+		});
+		menu->addAction(tr("Select From Theme…"), this, [&]()
+		{
+			const QString name(QInputDialog::getText(this, tr("Select Icon"), tr("Icon Name:")));
+
+			if (!name.isEmpty())
+			{
+				setIcon(name);
+			}
+		});
+
+		if (!m_defaultIconName.isEmpty())
+		{
+			menu->addSeparator();
+			menu->addAction(tr("Reset"), this, [&]()
+			{
+				setIcon(m_defaultIconName);
+			})->setEnabled(Utils::savePixmapAsDataUri(icon().pixmap(16, 16)) != m_defaultIconName);
+		}
+
+		menu->addSeparator();
+		menu->addAction(ThemesManager::createIcon(QLatin1String("edit-clear")), tr("Clear"), this, [&]()
+		{
+			setIcon(QString());
+		})->setEnabled(!icon().isNull());
+	});
 }
 
 void IconWidget::changeEvent(QEvent *event)
@@ -61,75 +99,37 @@ void IconWidget::resizeEvent(QResizeEvent *event)
 	setIconSize({iconSize, iconSize});
 }
 
-void IconWidget::populateMenu()
+void IconWidget::setIcon(const QString &name)
 {
-	menu()->clear();
-	menu()->addAction(tr("Select From File…"), this, [&]()
-	{
-		const QString path(QFileDialog::getOpenFileName(this, tr("Select Icon"), {}, Utils::formatFileTypes({tr("Images (*.png *.jpg *.bmp *.gif *.svg *.svgz *.ico)")})));
+	m_iconName = name;
 
-		if (!path.isEmpty())
-		{
-			setIcon(QIcon(QPixmap(path)));
-		}
-	});
-	menu()->addAction(tr("Select From Theme…"), this, [&]()
-	{
-		const QString name(QInputDialog::getText(this, tr("Select Icon"), tr("Icon Name:")));
+	QToolButton::setIcon(ThemesManager::createIcon(name));
 
-		if (!name.isEmpty())
-		{
-			setIcon(name);
-		}
-	});
-
-	if (!m_defaultIcon.isEmpty())
-	{
-		menu()->addSeparator();
-		menu()->addAction(tr("Reset"), this, [&]()
-		{
-			setIcon(m_defaultIcon);
-		})->setEnabled(Utils::savePixmapAsDataUri(icon().pixmap(16, 16)) != m_defaultIcon);
-	}
-
-	menu()->addSeparator();
-	menu()->addAction(ThemesManager::createIcon(QLatin1String("edit-clear")), tr("Clear"), this, [&]()
-	{
-		setIcon(QString());
-	})->setEnabled(!icon().isNull());
-}
-
-void IconWidget::setIcon(const QString &icon)
-{
-	m_icon = icon;
-
-	QToolButton::setIcon(ThemesManager::createIcon(icon));
-
-	emit iconChanged(m_icon);
+	emit iconChanged(m_iconName);
 }
 
 void IconWidget::setIcon(const QIcon &icon)
 {
-	m_icon = Utils::savePixmapAsDataUri(icon.pixmap(icon.availableSizes().value(0, {16, 16})));
+	m_iconName = Utils::savePixmapAsDataUri(icon.pixmap(icon.availableSizes().value(0, {16, 16})));
 
 	QToolButton::setIcon(icon);
 
-	emit iconChanged(m_icon);
+	emit iconChanged(m_iconName);
 }
 
-void IconWidget::setDefaultIcon(const QString &icon)
+void IconWidget::setDefaultIcon(const QString &name)
 {
-	m_defaultIcon = icon;
+	m_defaultIconName = name;
 
-	if (icon.isEmpty())
+	if (name.isEmpty())
 	{
-		setIcon(ThemesManager::createIcon(icon));
+		setIcon(QIcon());
 	}
 }
 
 QString IconWidget::getIcon() const
 {
-	return m_icon;
+	return m_iconName;
 }
 
 int IconWidget::heightForWidth(int width) const

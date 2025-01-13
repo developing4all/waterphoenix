@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ NetworkCache::NetworkCache(const QString &path, QObject *parent) : QNetworkDiskC
 		return;
 	}
 
-	QDir().mkpath(path);
+	Utils::ensureDirectoryExists(path);
 
 	setCacheDirectory(path);
 	setMaximumCacheSize(SettingsManager::getOption(SettingsManager::Cache_DiskCacheLimitOption).toInt() * 1024);
@@ -74,9 +74,11 @@ void NetworkCache::clearCache(int period)
 
 			for (int k = 0; k < files.count(); ++k)
 			{
-				if (files.at(k).lastModified().toUTC().secsTo(currentDateTime) < (period * 3600))
+				const QFileInfo file(files.at(k));
+
+				if (file.lastModified().toUTC().secsTo(currentDateTime) < (period * 3600))
 				{
-					const QNetworkCacheMetaData metaData(fileMetaData(files.at(k).absoluteFilePath()));
+					const QNetworkCacheMetaData metaData(fileMetaData(file.absoluteFilePath()));
 
 					if (metaData.isValid())
 					{

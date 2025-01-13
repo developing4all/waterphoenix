@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2016 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -34,9 +34,7 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QMimeData>
-#if QT_VERSION >= 0x050900
 #include <QtCore/QOperatingSystemVersion>
-#endif
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QtMath>
 #include <QtGui/QDesktopServices>
@@ -51,7 +49,6 @@ namespace Otter
 {
 
 QProcessEnvironment WindowsPlatformIntegration::m_environment;
-bool WindowsPlatformIntegration::m_isVistaOrNewer = false;
 bool WindowsPlatformIntegration::m_is7OrNewer = false;
 bool WindowsPlatformIntegration::m_is10OrNewer = false;
 
@@ -62,69 +59,62 @@ WindowsPlatformIntegration::WindowsPlatformIntegration(QObject *parent) : Platfo
 	m_registrationPairs({{QLatin1String("http"), ProtocolType}, {QLatin1String("https"), ProtocolType}, {QLatin1String("ftp"), ProtocolType}, {QLatin1String(".htm"), ExtensionType}, {QLatin1String(".html"), ExtensionType}, {QLatin1String(".xhtml"), ExtensionType}}),
 	m_cleanupTimer(0)
 {
-#if QT_VERSION >= 0x050900
 	const QOperatingSystemVersion systemVersion(QOperatingSystemVersion::current());
 
 	m_is7OrNewer = (systemVersion >= QOperatingSystemVersion::Windows7);
 	m_is10OrNewer = (systemVersion >= QOperatingSystemVersion::Windows10);
-#else
-	m_isVistaOrNewer = (QSysInfo::windowsVersion() >= QSysInfo::WV_VISTA);
-	m_is7OrNewer = (QSysInfo::windowsVersion() >= QSysInfo::WV_WINDOWS7);
-	m_is10OrNewer = (QSysInfo::windowsVersion() >= QSysInfo::WV_WINDOWS10);
-#endif
 
-	if (m_is7OrNewer)
+	if (!m_is7OrNewer)
 	{
-		connect(Application::getInstance(), &Application::windowRemoved, this, [&](MainWindow *mainWindow)
+		return;
+	}
+
+	const QString applicationFilePath(QCoreApplication::applicationFilePath());
+	QWinJumpList jumpLists;
+	QWinJumpListCategory* tasks(jumpLists.tasks());
+	tasks->addLink(ThemesManager::createIcon(QLatin1String("tab-new")), tr("New tab"), applicationFilePath, QStringList(QLatin1String("--new-tab")));
+	tasks->addLink(ThemesManager::createIcon(QLatin1String("tab-new-private")), tr("New private tab"), applicationFilePath, QStringList(QLatin1String("--new-private-tab")));
+	tasks->addLink(ThemesManager::createIcon(QLatin1String("window-new")), tr("New window"), applicationFilePath, QStringList(QLatin1String("--new-window")));
+	tasks->addLink(ThemesManager::createIcon(QLatin1String("window-new-private")), tr("New private window"), applicationFilePath, QStringList(QLatin1String("--new-private-window")));
+	tasks->setVisible(true);
+
+	connect(Application::getInstance(), &Application::windowRemoved, this, [&](MainWindow *mainWindow)
+	{
+		if (m_taskbarButtons.contains(mainWindow))
 		{
-			if (m_taskbarButtons.contains(mainWindow))
+			m_taskbarButtons.remove(mainWindow);
+		}
+	});
+	connect(TransfersManager::getInstance(), &TransfersManager::transfersChanged, this, [&]()
+	{
+		const QVector<MainWindow*> mainWindows(Application::getWindows());
+		const TransfersManager::ActiveTransfersInformation information(TransfersManager::getActiveTransfersInformation());
+		const int progress((information.bytesReceived > 0) ? qFloor(Utils::calculatePercent(information.bytesReceived, information.bytesTotal)) : 0);
+
+		for (int i = 0; i < mainWindows.count(); ++i)
+		{
+			MainWindow *mainWindow(mainWindows.at(i));
+
+			if (information.activeTransfersAmount > 0)
 			{
+				if (!m_taskbarButtons.contains(mainWindow))
+				{
+					m_taskbarButtons[mainWindow] = new QWinTaskbarButton(mainWindow);
+					m_taskbarButtons[mainWindow]->setWindow(mainWindow->windowHandle());
+					m_taskbarButtons[mainWindow]->progress()->show();
+				}
+
+				m_taskbarButtons[mainWindow]->progress()->setValue(progress);
+			}
+			else if (m_taskbarButtons.contains(mainWindow))
+			{
+				m_taskbarButtons[mainWindow]->progress()->reset();
+				m_taskbarButtons[mainWindow]->progress()->hide();
+				m_taskbarButtons[mainWindow]->deleteLater();
 				m_taskbarButtons.remove(mainWindow);
 			}
-		});
-		connect(TransfersManager::getInstance(), &TransfersManager::transfersChanged, this, [&]()
-		{
-			const QVector<MainWindow*> mainWindows(Application::getWindows());
-			const TransfersManager::ActiveTransfersInformation information(TransfersManager::getActiveTransfersInformation());
-			const int progress((information.bytesReceived > 0) ? qFloor(Utils::calculatePercent(information.bytesReceived, information.bytesTotal)) : 0);
-
-			for (int i = 0; i < mainWindows.count(); ++i)
-			{
-				MainWindow *mainWindow(mainWindows.at(i));
-
-				if (information.activeTransfersAmount > 0)
-				{
-					if (!m_taskbarButtons.contains(mainWindow))
-					{
-						m_taskbarButtons[mainWindow] = new QWinTaskbarButton(mainWindow);
-						m_taskbarButtons[mainWindow]->setWindow(mainWindow->windowHandle());
-						m_taskbarButtons[mainWindow]->progress()->show();
-					}
-
-					m_taskbarButtons[mainWindow]->progress()->setValue(progress);
-				}
-				else if (m_taskbarButtons.contains(mainWindow))
-				{
-					m_taskbarButtons[mainWindow]->progress()->reset();
-					m_taskbarButtons[mainWindow]->progress()->hide();
-					m_taskbarButtons[mainWindow]->deleteLater();
-					m_taskbarButtons.remove(mainWindow);
-				}
-			}
-		});
-	}
-
-	if (m_isVistaOrNewer)
-	{
-		const QString applicationFilePath(QCoreApplication::applicationFilePath());
-		QWinJumpList jumpLists;
-		QWinJumpListCategory* tasks(jumpLists.tasks());
-		tasks->addLink(ThemesManager::createIcon(QLatin1String("tab-new")), tr("New tab"), applicationFilePath, QStringList(QLatin1String("--new-tab")));
-		tasks->addLink(ThemesManager::createIcon(QLatin1String("tab-new-private")), tr("New private tab"), applicationFilePath, QStringList(QLatin1String("--new-private-tab")));
-		tasks->addLink(ThemesManager::createIcon(QLatin1String("window-new")), tr("New window"), applicationFilePath, QStringList(QLatin1String("--new-window")));
-		tasks->addLink(ThemesManager::createIcon(QLatin1String("window-new-private")), tr("New private window"), applicationFilePath, QStringList(QLatin1String("--new-private-window")));
-		tasks->setVisible(true);
-	}
+		}
+	});
 }
 
 void WindowsPlatformIntegration::timerEvent(QTimerEvent *event)
@@ -481,7 +471,7 @@ bool WindowsPlatformIntegration::setAsDefaultBrowser()
 
 		Console::addMessage(QCoreApplication::translate("main", "Failed to run File Associations Manager, error code: %1\nApplication ID: %2").arg(result).arg(pid), Console::OtherCategory, Console::ErrorLevel);
 	}
-	else if (m_isVistaOrNewer)
+	else if (m_is7OrNewer)
 	{
 		IApplicationAssociationRegistrationUI *applicationAssociationRegistrationUi(nullptr);
 		HRESULT result(CoCreateInstance(CLSID_ApplicationAssociationRegistrationUI, nullptr, CLSCTX_INPROC_SERVER, IID_IApplicationAssociationRegistrationUI, (LPVOID*)&applicationAssociationRegistrationUi));
@@ -591,7 +581,7 @@ bool WindowsPlatformIntegration::isDefaultBrowser() const
 		{
 			isDefault &= (registry.value(QLatin1String("Classes/") + m_registrationPairs.at(i).first + QLatin1String("/."), {}).toString() == QLatin1String(REGISTRATION_IDENTIFIER));
 
-			if (m_isVistaOrNewer)
+			if (m_is7OrNewer)
 			{
 				isDefault &= (registry.value(QLatin1String("Microsoft/Windows/CurrentVersion/Explorer/FileExts/") + m_registrationPairs.at(i).first + QLatin1String("/UserChoice/Progid")).toString() == QLatin1String(REGISTRATION_IDENTIFIER));
 			}

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2015 - 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -177,7 +177,13 @@ void HeaderViewWidget::contextMenuEvent(QContextMenuEvent *event)
 
 	for (int i = 0; i < model()->columnCount(); ++i)
 	{
-		const QString title(model()->headerData(i, orientation()).toString().isEmpty() ? tr("(Untitled)") : model()->headerData(i, orientation()).toString());
+		QString title(model()->headerData(i, orientation()).toString());
+
+		if (title.isEmpty())
+		{
+			title = tr("(Untitled)");
+		}
+
 		QAction *sortAction(sortMenu->addAction(title));
 		sortAction->setData(i);
 		sortAction->setCheckable(true);
@@ -209,36 +215,38 @@ void HeaderViewWidget::contextMenuEvent(QContextMenuEvent *event)
 	{
 		const ItemViewWidget *view(qobject_cast<ItemViewWidget*>(parent()));
 
-		if (action && view)
+		if (!action || !view)
 		{
-			const int value(action->data().toInt());
-			int column(view->getSortColumn());
+			return;
+		}
 
-			if (column < 0)
+		const int value(action->data().toInt());
+		int column(view->getSortColumn());
+
+		if (column < 0)
+		{
+			for (int i = 0; i < count(); ++i)
 			{
-				for (int i = 0; i < count(); ++i)
-				{
-					column = logicalIndex(i);
+				column = logicalIndex(i);
 
-					if (!isSectionHidden(column))
-					{
-						break;
-					}
+				if (!isSectionHidden(column))
+				{
+					break;
 				}
 			}
+		}
 
-			if (value == AscendingOrder)
-			{
-				setSort(column, Qt::AscendingOrder);
-			}
-			else if (value == DescendingOrder)
-			{
-				setSort(column, Qt::DescendingOrder);
-			}
-			else
-			{
-				handleSectionClicked(value);
-			}
+		if (value == AscendingOrder)
+		{
+			setSort(column, Qt::AscendingOrder);
+		}
+		else if (value == DescendingOrder)
+		{
+			setSort(column, Qt::DescendingOrder);
+		}
+		else
+		{
+			handleSectionClicked(value);
 		}
 	});
 	connect(visibilityMenu, &QMenu::triggered, this, [&](QAction *action)
@@ -440,57 +448,59 @@ void ItemViewWidget::keyPressEvent(QKeyEvent *event)
 {
 	const int rowCount(getRowCount());
 
-	if ((event->key() == Qt::Key_Down || event->key() == Qt::Key_Up) && rowCount > 1 && moveCursor(((event->key() == Qt::Key_Up) ? MoveUp : MoveDown), event->modifiers()) == currentIndex())
+	if (!(event->key() == Qt::Key_Down || event->key() == Qt::Key_Up) || rowCount <= 0 || moveCursor(((event->key() == Qt::Key_Up) ? MoveUp : MoveDown), event->modifiers()) != currentIndex())
 	{
-		QModelIndex newIndex;
+		QTreeView::keyPressEvent(event);
+	}
 
-		if (event->key() == Qt::Key_Down)
+	QModelIndex newIndex;
+
+	if (event->key() == Qt::Key_Down)
+	{
+		for (int i = 0; i < rowCount; ++i)
 		{
-			for (int i = 0; i < rowCount; ++i)
+			const QModelIndex index(getIndex(i, 0));
+
+			if (index.flags().testFlag(Qt::ItemIsSelectable))
 			{
-				const QModelIndex index(getIndex(i, 0));
+				newIndex = index;
 
-				if (index.flags().testFlag(Qt::ItemIsSelectable))
-				{
-					newIndex = index;
-
-					break;
-				}
+				break;
 			}
 		}
-		else
+	}
+	else
+	{
+		for (int i = (rowCount - 1); i >= 0; --i)
 		{
-			for (int i = (rowCount - 1); i >= 0; --i)
+			const QModelIndex index(getIndex(i, 0));
+
+			if (index.flags().testFlag(Qt::ItemIsSelectable))
 			{
-				const QModelIndex index(getIndex(i, 0));
+				newIndex = index;
 
-				if (index.flags().testFlag(Qt::ItemIsSelectable))
-				{
-					newIndex = index;
-
-					break;
-				}
+				break;
 			}
 		}
+	}
 
-		if (newIndex.isValid())
+	if (newIndex.isValid())
+	{
+		const QItemSelectionModel::SelectionFlags command(selectionCommand(newIndex, event));
+
+		if (command != QItemSelectionModel::NoUpdate || style()->styleHint(QStyle::SH_ItemView_MovementWithoutUpdatingSelection, nullptr, this))
 		{
-			const QItemSelectionModel::SelectionFlags command(selectionCommand(newIndex, event));
-
-			if (command != QItemSelectionModel::NoUpdate || style()->styleHint(QStyle::SH_ItemView_MovementWithoutUpdatingSelection, nullptr, this))
+			if (event->key() == Qt::Key_Down)
 			{
-				if (event->key() == Qt::Key_Down)
-				{
-					scrollTo(getIndex(0, 0));
-				}
-
-				selectionModel()->setCurrentIndex(newIndex, command);
+				scrollTo(getIndex(0, 0));
 			}
 
-			event->accept();
-
-			return;
+			selectionModel()->setCurrentIndex(newIndex, command);
 		}
+
+		event->accept();
+
+		return;
 	}
 
 	QTreeView::keyPressEvent(event);
@@ -593,7 +603,7 @@ void ItemViewWidget::ensureInitialized()
 
 	setSort(settings.getValue(QLatin1String("sortColumn"), -1).toInt(), ((settings.getValue(QLatin1String("sortOrder"), QLatin1String("ascending")).toString() == QLatin1String("ascending")) ? Qt::AscendingOrder : Qt::DescendingOrder));
 
-	const QStringList columns(settings.getValue(QLatin1String("columns")).toString().split(QLatin1Char(','), QString::SkipEmptyParts));
+	const QStringList columns(settings.getValue(QLatin1String("columns")).toString().split(QLatin1Char(','), Qt::SkipEmptyParts));
 	bool shouldStretchLastSection(true);
 
 	if (!columns.isEmpty())
@@ -649,7 +659,7 @@ void ItemViewWidget::currentChanged(const QModelIndex &current, const QModelInde
 {
 	QTreeView::currentChanged(current, previous);
 
-	if (selectionModel() && selectionModel()->hasSelection())
+	if (hasSelection())
 	{
 		if (m_sourceModel)
 		{
@@ -879,7 +889,9 @@ void ItemViewWidget::updateSize()
 
 		for (int i = 0; i < widestSections.count(); ++i)
 		{
-			m_headerWidget->resizeSection(widestSections.at(i), (m_headerWidget->sectionSize(widestSections.at(i)) + sectionWidth));
+			const int widestSection(widestSections.at(i));
+
+			m_headerWidget->resizeSection(widestSection, (m_headerWidget->sectionSize(widestSection) + sectionWidth));
 		}
 	}
 }
@@ -997,14 +1009,7 @@ void ItemViewWidget::paintEvent(QPaintEvent *event)
 	}
 
 	QPainter painter(viewport());
-#if QT_VERSION >= 0x050C00
 	painter.setPen(palette().placeholderText().color());
-#else
-	QColor placeholderColor(palette().text().color());
-	placeholderColor.setAlpha(128);
-
-	painter.setPen(placeholderColor);
-#endif
 	painter.setFont(Utils::multiplyFontSize(font(), 2));
 	painter.drawText(rect(), Qt::AlignCenter, tr("No items"));
 }
@@ -1122,12 +1127,12 @@ QSortFilterProxyModel* ItemViewWidget::getProxyModel() const
 
 QStandardItem* ItemViewWidget::getItem(const QModelIndex &index) const
 {
-	return(m_sourceModel ? m_sourceModel->itemFromIndex(index) : nullptr);
+	return (m_sourceModel ? m_sourceModel->itemFromIndex(index) : nullptr);
 }
 
 QStandardItem* ItemViewWidget::getItem(int row, int column, const QModelIndex &parent) const
 {
-	return(m_sourceModel ? m_sourceModel->itemFromIndex(getIndex(row, column, parent)) : nullptr);
+	return (m_sourceModel ? m_sourceModel->itemFromIndex(getIndex(row, column, parent)) : nullptr);
 }
 
 QModelIndex ItemViewWidget::getCheckedIndex(const QModelIndex &parent) const
@@ -1159,7 +1164,7 @@ QModelIndex ItemViewWidget::getCheckedIndex(const QModelIndex &parent) const
 
 QModelIndex ItemViewWidget::getCurrentIndex(int column) const
 {
-	if (!selectionModel() || !selectionModel()->hasSelection())
+	if (!hasSelection())
 	{
 		return {};
 	}
@@ -1234,7 +1239,7 @@ int ItemViewWidget::getSortColumn() const
 
 int ItemViewWidget::getCurrentRow() const
 {
-	return ((selectionModel() && selectionModel()->hasSelection()) ? currentIndex().row() : -1);
+	return (hasSelection() ? currentIndex().row() : -1);
 }
 
 int ItemViewWidget::getRowCount(const QModelIndex &parent) const
@@ -1265,9 +1270,19 @@ bool ItemViewWidget::canMoveRowDown() const
 	return (currentRow >= 0 && rowCount > 1 && currentRow < (rowCount - 1));
 }
 
+bool ItemViewWidget::hasSelection() const
+{
+	return (selectionModel() && !selectionModel()->selectedIndexes().isEmpty());
+}
+
 bool ItemViewWidget::isExclusive() const
 {
 	return m_isExclusive;
+}
+
+bool ItemViewWidget::isModified() const
+{
+	return m_isModified;
 }
 
 bool ItemViewWidget::applyFilter(const QModelIndex &index, bool parentHasMatch)
@@ -1345,11 +1360,6 @@ bool ItemViewWidget::applyFilter(const QModelIndex &index, bool parentHasMatch)
 	}
 
 	return hasMatch;
-}
-
-bool ItemViewWidget::isModified() const
-{
-	return m_isModified;
 }
 
 }

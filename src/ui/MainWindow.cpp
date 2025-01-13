@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -95,18 +95,22 @@ MainWindow::MainWindow(const QVariantMap &parameters, const Session::MainWindow 
 		{
 			const QVector<ToolBarsManager::ToolBarDefinition> definitions(ToolBarsManager::getToolBarDefinitions(areas.at(i)));
 
-			if (!definitions.isEmpty())
+			if (definitions.isEmpty())
 			{
-				QVector<Session::MainWindow::ToolBarState> states;
-				states.reserve(definitions.length());
-
-				for (int j = 0; j < definitions.count(); ++j)
-				{
-					states.append(Session::MainWindow::ToolBarState(definitions.at(j).identifier, ToolBarsManager::getToolBarDefinition(definitions.at(j).identifier)));
-				}
-
-				toolBarStates[areas.at(i)] = states;
+				continue;
 			}
+
+			QVector<Session::MainWindow::ToolBarState> states;
+			states.reserve(definitions.length());
+
+			for (int j = 0; j < definitions.count(); ++j)
+			{
+				const int identifier(definitions.at(j).identifier);
+
+				states.append(Session::MainWindow::ToolBarState(identifier, ToolBarsManager::getToolBarDefinition(identifier)));
+			}
+
+			toolBarStates[areas.at(i)] = states;
 		}
 	}
 	else if (!session.toolBars.isEmpty())
@@ -203,9 +207,11 @@ MainWindow::MainWindow(const QVariantMap &parameters, const Session::MainWindow 
 
 	if (session.geometry.isEmpty())
 	{
-		if (Application::getActiveWindow())
+		MainWindow *activeWindow(Application::getActiveWindow());
+
+		if (activeWindow)
 		{
-			resize(Application::getActiveWindow()->size());
+			resize(activeWindow->size());
 		}
 		else
 		{
@@ -282,6 +288,8 @@ void MainWindow::timerEvent(QTimerEvent *event)
 			}
 		}
 	}
+
+	QMainWindow::timerEvent(event);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -664,7 +672,7 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 					return;
 				}
 
-				if (AddonsManager::isSpecialPage(url) && SessionsManager::hasUrl(url, true))
+				if (AddonsManager::isSpecialPage(url) && (AddonsManager::getSpecialPage(url.path()).isSingleton && SessionsManager::hasUrl(url, true)))
 				{
 					return;
 				}
@@ -821,11 +829,19 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 				{
 					const QVariant bookmarkData(parameters[QLatin1String("bookmark")]);
 
-					bookmark = ((bookmarkData.type() == QVariant::String) ? BookmarksManager::getBookmark(bookmarkData.toString()) : BookmarksManager::getBookmark(bookmarkData.toULongLong()));
+					if (bookmarkData.type() == QVariant::String)
+					{
+						bookmark = BookmarksManager::getBookmark(bookmarkData.toString());
+					}
+					else
+					{
+						bookmark = BookmarksManager::getBookmark(bookmarkData.toULongLong());
+					}
 				}
 				else if (parameters.contains(QLatin1String("startPageTile")))
 				{
-					const BookmarksModel::Bookmark *startPageBookmark(BookmarksManager::getModel()->getBookmarkByPath(SettingsManager::getOption(SettingsManager::StartPage_BookmarksFolderOption).toString()));
+					const QString bookmarkPath(SettingsManager::getOption(SettingsManager::StartPage_BookmarksFolderOption).toString());
+					const BookmarksModel::Bookmark *startPageBookmark(BookmarksManager::getModel()->getBookmarkByPath(bookmarkPath));
 
 					if (startPageBookmark)
 					{
@@ -875,17 +891,24 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 								SettingsManager::setOption(SettingsManager::Choices_WarnOpenBookmarkFolderOption, !messageBox.checkBox()->isChecked());
 							}
 
-							if (urls.isEmpty() || !canOpen)
+							if (!canOpen || urls.isEmpty())
 							{
 								break;
 							}
 
-							const SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints(parameters));
+							SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints(parameters));
 							int index(parameters.value(QLatin1String("index"), -1).toInt());
 
 							if (index < 0)
 							{
-								index = ((!hints.testFlag(SessionsManager::EndOpen) && SettingsManager::getOption(SettingsManager::TabBar_OpenNextToActiveOption).toBool()) ? (getCurrentWindowIndex() + 1) : (m_windows.count() - 1));
+								if (!hints.testFlag(SessionsManager::EndOpen) && SettingsManager::getOption(SettingsManager::TabBar_OpenNextToActiveOption).toBool())
+								{
+									index = (getCurrentWindowIndex() + 1);
+								}
+								else
+								{
+									index = (m_windows.count() - 1);
+								}
 							}
 
 							mutableParameters[QLatin1String("url")] = urls.at(0);
@@ -894,7 +917,12 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 
 							triggerAction(ActionsManager::OpenUrlAction, mutableParameters, trigger);
 
-							mutableParameters[QLatin1String("hints")] = QVariant((hints == SessionsManager::DefaultOpen || hints.testFlag(SessionsManager::CurrentTabOpen)) ? SessionsManager::NewTabOpen : hints);
+							if (hints == SessionsManager::DefaultOpen || hints.testFlag(SessionsManager::CurrentTabOpen))
+							{
+								hints = SessionsManager::NewTabOpen;
+							}
+
+							mutableParameters[QLatin1String("hints")] = QVariant(hints);
 
 							for (int i = 1; i < urls.count(); ++i)
 							{
@@ -1059,10 +1087,11 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 				const int toolBarIdentifier(parameters.value(QLatin1String("sidebar"), ToolBarsManager::SideBar).toInt());
 				const QString panel(parameters.value(QLatin1String("panel")).toString());
 				ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(toolBarIdentifier));
-				definition.currentPanel = ((definition.currentPanel == panel) ? QString() : panel);
 
 				if (definition.isValid())
 				{
+					definition.currentPanel = ((definition.currentPanel == panel) ? QString() : panel);
+
 					ToolBarsManager::setToolBar(definition);
 
 					triggerAction(ActionsManager::ShowToolBarAction, {{QLatin1String("toolBar"), toolBarIdentifier}, {QLatin1String("isChecked"), true}}, trigger);
@@ -1271,7 +1300,8 @@ void MainWindow::restoreSession(const Session::MainWindow &session)
 	{
 		for (int i = 0; i < session.windows.count(); ++i)
 		{
-			QVariantMap parameters({{QLatin1String("size"), ((session.windows.at(i).state.state == Qt::WindowMaximized || !session.windows.at(i).state.geometry.isValid()) ? m_workspace->size() : session.windows.at(i).state.geometry.size())}});
+			const Session::Window sessionWindow(session.windows.at(i));
+			QVariantMap parameters({{QLatin1String("size"), ((sessionWindow.state.state == Qt::WindowMaximized || !sessionWindow.state.geometry.isValid()) ? m_workspace->size() : sessionWindow.state.geometry.size())}});
 
 			if (m_isPrivate)
 			{
@@ -1279,14 +1309,14 @@ void MainWindow::restoreSession(const Session::MainWindow &session)
 			}
 
 			Window *window(new Window(parameters, nullptr, this));
-			window->setSession(session.windows.at(i), SettingsManager::getOption(SettingsManager::Sessions_DeferTabsLoadingOption).toBool());
+			window->setSession(sessionWindow, SettingsManager::getOption(SettingsManager::Sessions_DeferTabsLoadingOption).toBool());
 
-			if (index < 0 && session.windows.at(i).state.state != Qt::WindowMinimized)
+			if (index < 0 && sessionWindow.state.state != Qt::WindowMinimized)
 			{
 				index = i;
 			}
 
-			addWindow(window, SessionsManager::DefaultOpen, -1, session.windows.at(i).state, session.windows.at(i).isAlwaysOnTop);
+			addWindow(window, SessionsManager::DefaultOpen, -1, sessionWindow.state, sessionWindow.isAlwaysOnTop);
 		}
 
 		emit arbitraryActionsStateChanged({ActionsManager::MaximizeAllAction, ActionsManager::MinimizeAllAction, ActionsManager::RestoreAllAction, ActionsManager::CascadeAllAction, ActionsManager::TileAllAction});
@@ -1361,11 +1391,14 @@ void MainWindow::restoreClosedWindow(int index)
 
 void MainWindow::clearClosedWindows()
 {
-	m_closedWindows.clear();
-
-	if (SessionsManager::getClosedWindows().isEmpty())
+	if (!m_closedWindows.isEmpty())
 	{
-		emit closedWindowsAvailableChanged(false);
+		m_closedWindows.clear();
+
+		if (SessionsManager::getClosedWindows().isEmpty())
+		{
+			emit closedWindowsAvailableChanged(false);
+		}
 	}
 }
 
@@ -1599,24 +1632,28 @@ void MainWindow::beginToolBarDragging(bool isSidebar)
 
 	for (int i = 0; i < 4; ++i)
 	{
-		if (!isSidebar || areas.at(i) == Qt::LeftToolBarArea || areas.at(i) == Qt::RightToolBarArea)
+		const Qt::ToolBarArea area(areas.at(i));
+
+		if (!isSidebar || area == Qt::LeftToolBarArea || area == Qt::RightToolBarArea)
 		{
-			addToolBarBreak(areas.at(i));
-			addToolBar(areas.at(i), new ToolBarDropZoneWidget(this));
+			addToolBarBreak(area);
+			addToolBar(area, new ToolBarDropZoneWidget(this));
 		}
 	}
 }
 
 void MainWindow::endToolBarDragging()
 {
-	const QList<ToolBarDropZoneWidget*> toolBars(findChildren<ToolBarDropZoneWidget*>());
+	const QList<ToolBarDropZoneWidget*> dropZones(findChildren<ToolBarDropZoneWidget*>());
 
-	for (int i = 0; i < toolBars.count(); ++i)
+	for (int i = 0; i < dropZones.count(); ++i)
 	{
-		removeToolBarBreak(toolBars.at(i));
-		removeToolBar(toolBars.at(i));
+		ToolBarDropZoneWidget *dropZone(dropZones.at(i));
 
-		toolBars.at(i)->deleteLater();
+		removeToolBarBreak(dropZone);
+		removeToolBar(dropZone);
+
+		dropZone->deleteLater();
 	}
 
 	m_isDraggingToolBar = false;
@@ -1781,7 +1818,7 @@ void MainWindow::handleToolBarAdded(int identifier)
 {
 	const ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(identifier));
 	QVector<ToolBarWidget*> toolBars(getToolBars(definition.location));
-	ToolBarWidget *toolBar(WidgetFactory::createToolBar(identifier, nullptr, this));
+	ToolBarWidget *newToolBar(WidgetFactory::createToolBar(identifier, nullptr, this));
 
 	if (toolBars.isEmpty() || definition.row < 0)
 	{
@@ -1790,7 +1827,7 @@ void MainWindow::handleToolBarAdded(int identifier)
 			addToolBarBreak(definition.location);
 		}
 
-		addToolBar(definition.location, toolBar);
+		addToolBar(definition.location, newToolBar);
 	}
 	else
 	{
@@ -1799,7 +1836,7 @@ void MainWindow::handleToolBarAdded(int identifier)
 			removeToolBar(toolBars.at(i));
 		}
 
-		toolBars.append(toolBar);
+		toolBars.append(newToolBar);
 
 		std::sort(toolBars.begin(), toolBars.end(), [&](ToolBarWidget *first, ToolBarWidget *second)
 		{
@@ -1810,18 +1847,20 @@ void MainWindow::handleToolBarAdded(int identifier)
 
 		for (int i = 0; i < toolBars.count(); ++i)
 		{
+			ToolBarWidget *toolBar(toolBars.at(i));
+
 			if (i > 0)
 			{
 				addToolBarBreak(definition.location);
 			}
 
-			addToolBar(definition.location, toolBars.at(i));
+			addToolBar(definition.location, toolBar);
 
-			toolBars.at(i)->setVisible(toolBars.at(i)->shouldBeVisible(mode));
+			toolBar->setVisible(toolBar->shouldBeVisible(mode));
 		}
 	}
 
-	m_toolBars[identifier] = toolBar;
+	m_toolBars[identifier] = newToolBar;
 
 	SessionsManager::markSessionAsModified();
 
@@ -1830,19 +1869,21 @@ void MainWindow::handleToolBarAdded(int identifier)
 
 void MainWindow::handleToolBarRemoved(int identifier)
 {
-	if (m_toolBars.contains(identifier))
+	if (!m_toolBars.contains(identifier))
 	{
-		ToolBarWidget *toolBar(m_toolBars.take(identifier));
-
-		removeToolBarBreak(toolBar);
-		removeToolBar(toolBar);
-
-		toolBar->deleteLater();
-
-		SessionsManager::markSessionAsModified();
-
-		emit arbitraryActionsStateChanged({ActionsManager::ShowToolBarAction});
+		return;
 	}
+
+	ToolBarWidget *toolBar(m_toolBars.take(identifier));
+
+	removeToolBarBreak(toolBar);
+	removeToolBar(toolBar);
+
+	toolBar->deleteLater();
+
+	SessionsManager::markSessionAsModified();
+
+	emit arbitraryActionsStateChanged({ActionsManager::ShowToolBarAction});
 }
 
 void MainWindow::handleTransferStarted()
@@ -1891,9 +1932,11 @@ void MainWindow::updateShortcuts()
 
 		for (int j = 0; j < definition.shortcuts.count(); ++j)
 		{
-			if (ActionsManager::isShortcutAllowed(definition.shortcuts.at(j)))
+			const QKeySequence shortcut(definition.shortcuts.at(j));
+
+			if (ActionsManager::isShortcutAllowed(shortcut))
 			{
-				m_shortcuts.append(new Shortcut(definition.action, definition.shortcuts.at(j), definition.parameters, this));
+				m_shortcuts.append(new Shortcut(definition.action, shortcut, definition.parameters, this));
 			}
 		}
 	}
@@ -1983,7 +2026,7 @@ void MainWindow::setActiveWindowByIdentifier(quint64 identifier, bool updateLast
 
 void MainWindow::setActiveWindow(Window *window)
 {
-	const Window *previousWindow((m_activeWindow && m_activeWindow->isAboutToClose()) ? nullptr : m_activeWindow);
+	const Window *previousWindow((m_activeWindow && !m_activeWindow->isAboutToClose()) ? m_activeWindow : nullptr);
 
 	m_activeWindow = window;
 
@@ -2051,9 +2094,11 @@ QWidget* MainWindow::findVisibleWidget(const QVector<QPointer<QWidget> > &widget
 {
 	for (int i = 0; i < widgets.count(); ++i)
 	{
-		if (widgets.at(i) && widgets.at(i)->isVisible())
+		QWidget *widget(widgets.at(i));
+
+		if (widget && widget->isVisible())
 		{
-			return widgets.at(i);
+			return widget;
 		}
 	}
 
@@ -2479,9 +2524,10 @@ Session::MainWindow MainWindow::getSession() const
 
 		for (int j = 0; j < toolBars.count(); ++j)
 		{
-			Session::MainWindow::ToolBarState state(toolBars.at(j)->getState());
+			ToolBarWidget *toolBar(toolBars.at(j));
+			Session::MainWindow::ToolBarState state(toolBar->getState());
 			state.location = areas.at(i);
-			state.identifier = toolBars.at(j)->getIdentifier();
+			state.identifier = toolBar->getIdentifier();
 			state.row = j;
 
 			session.toolBars.append(state);
@@ -2493,27 +2539,27 @@ Session::MainWindow MainWindow::getSession() const
 	if (isPrivate())
 	{
 		session.index = -1;
+
+		return session;
 	}
-	else
+
+	session.windows.reserve(m_windows.count());
+
+	for (int i = 0; i < m_windows.count(); ++i)
 	{
-		session.windows.reserve(m_windows.count());
+		const Window *window(getWindowByIndex(i));
 
-		for (int i = 0; i < m_windows.count(); ++i)
+		if (window && !window->isPrivate())
 		{
-			const Window *window(getWindowByIndex(i));
-
-			if (window && !window->isPrivate())
-			{
-				session.windows.append(window->getSession());
-			}
-			else if (i <= session.index)
-			{
-				--session.index;
-			}
+			session.windows.append(window->getSession());
 		}
-
-		session.windows.squeeze();
+		else if (i <= session.index)
+		{
+			--session.index;
+		}
 	}
+
+	session.windows.squeeze();
 
 	return session;
 }

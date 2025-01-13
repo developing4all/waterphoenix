@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piktas Zuikis <piktas.zuikis@inbox.lt>
@@ -67,8 +67,9 @@ public:
 		RemoteContentState = 4,
 		SecureContentState = 8,
 		TrustedContentState = 16,
-		MixedContentState = 32,
-		FraudContentState = 64
+		AmbiguousContentState = 32,
+		MixedContentState = 64,
+		FraudContentState = 128
 	};
 
 	Q_DECLARE_FLAGS(ContentStates, ContentState)
@@ -222,6 +223,7 @@ public:
 	virtual QString getDescription() const;
 	virtual QString getActiveStyleSheet() const;
 	virtual QString getCharacterEncoding() const;
+	virtual QString getMisspelledWord() const;
 	virtual QString getSelectedText() const;
 	QString getStatusMessage() const;
 	QVariant getOption(int identifier, const QUrl &url = {}) const;
@@ -241,6 +243,7 @@ public:
 	virtual SslInformation getSslInformation() const;
 	virtual Session::Window::History getHistory() const = 0;
 	virtual HitTestResult getHitTestResult(const QPoint &position);
+	virtual QStringList getSpellCheckerSuggestions() const;
 	virtual QStringList getStyleSheets() const;
 	virtual QVector<SpellCheckManager::DictionaryInformation> getDictionaries() const;
 	virtual QVector<LinkUrl> getFeeds() const;
@@ -269,6 +272,7 @@ public slots:
 	virtual void clearOptions();
 	virtual void fillPassword(const PasswordsManager::PasswordInformation &password);
 	virtual void findInPage(const QString &text, FindFlags flags = NoFlagsFind) = 0;
+	virtual void replaceMisspelledWord(const QString &replacement);
 	virtual void showContextMenu(const QPoint &position = {});
 	virtual void setActiveStyleSheet(const QString &styleSheet);
 	virtual void setPermission(FeaturePermission feature, const QUrl &url, PermissionPolicies policies);

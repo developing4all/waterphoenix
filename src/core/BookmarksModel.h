@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -92,6 +92,9 @@ public:
 		quint64 getIdentifier() const;
 		BookmarkType getType() const;
 		int getVisits() const;
+		bool hasChildren() const;
+		static bool isFolder(BookmarkType type);
+		bool isFolder() const;
 		bool isAncestorOf(Bookmark *child) const;
 		bool operator<(const QStandardItem &other) const override;
 
@@ -125,7 +128,7 @@ public:
 	QStringList mimeTypes() const override;
 	QStringList getKeywords() const;
 	QVector<BookmarkMatch> findBookmarks(const QString &prefix) const;
-	QVector<Bookmark*> findUrls(const QUrl &url, QStandardItem *branch = nullptr) const;
+	QVector<Bookmark*> findUrls(const QUrl &url, Bookmark *branch = nullptr) const;
 	QVector<Bookmark*> getBookmarks(const QUrl &url) const;
 	FormatMode getFormatMode() const;
 	int getCount() const;

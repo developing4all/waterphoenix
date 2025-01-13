@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -27,6 +27,7 @@
 #include "../../../../core/NetworkManagerFactory.h"
 #include "../../../../core/NotificationsManager.h"
 #include "../../../../core/SettingsManager.h"
+#include "../../../../core/SpellCheckManager.h"
 #include "../../../../core/TransfersManager.h"
 #include "../../../../core/Utils.h"
 #include "../../../../ui/TransferDialog.h"
@@ -52,6 +53,8 @@ QtWebEngineWebBackend::QtWebEngineWebBackend(QObject *parent) : WebBackend(paren
 	m_engineVersion = QRegularExpression(QLatin1String("Chrome/([\\d\\.]+)")).match(userAgent).captured(1);
 
 	m_userAgentComponents = {{QLatin1String("platform"), QRegularExpression(QLatin1String(R"((\([^\)]+\)))")).match(userAgent).captured(1)}, {QLatin1String("engineVersion"), QLatin1String("AppleWebKit/537.36 (KHTML, like Gecko) Chrome/") + m_engineVersion}, {QLatin1String("applicationVersion"), QCoreApplication::applicationName() + QLatin1Char('/') + QCoreApplication::applicationVersion()}};
+
+	qputenv("QTWEBENGINE_DICTIONARIES_PATH", SpellCheckManager::getDictionariesPath().toLatin1());
 }
 
 void QtWebEngineWebBackend::handleDownloadRequested(QWebEngineDownloadItem *item)
@@ -248,7 +251,7 @@ WebWidget* QtWebEngineWebBackend::createWidget(const QVariantMap &parameters, Co
 		}
 		else
 		{
-			QDir().mkpath(cachePath);
+			Utils::ensureDirectoryExists(cachePath);
 
 			profile->setHttpCacheType(QWebEngineProfile::DiskHttpCache);
 			profile->setHttpCacheMaximumSize(SettingsManager::getOption(SettingsManager::Cache_DiskCacheLimitOption).toInt() * 1024);

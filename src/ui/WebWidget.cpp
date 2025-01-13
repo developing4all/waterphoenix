@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piktas Zuikis <piktas.zuikis@inbox.lt>
@@ -269,6 +269,11 @@ void WebWidget::clearOptions()
 void WebWidget::fillPassword(const PasswordsManager::PasswordInformation &password)
 {
 	Q_UNUSED(password)
+}
+
+void WebWidget::replaceMisspelledWord(const QString &replacement)
+{
+	Q_UNUSED(replacement)
 }
 
 void WebWidget::openUrl(const QUrl &url, SessionsManager::OpenHints hints)
@@ -976,6 +981,11 @@ QString WebWidget::getCharacterEncoding() const
 	return {};
 }
 
+QString WebWidget::getMisspelledWord() const
+{
+	return {};
+}
+
 QString WebWidget::getSelectedText() const
 {
 	return {};
@@ -1025,7 +1035,7 @@ QPixmap WebWidget::createThumbnail(const QSize &size)
 {
 	QPixmap pixmap(size);
 	pixmap.fill(Qt::white);
-
+///TODO fallback method to create one letter "thumbnails"
 	return pixmap;
 }
 
@@ -1377,13 +1387,19 @@ ActionsManager::ActionDefinition::State WebWidget::getActionState(int identifier
 				}
 				else
 				{
-					state.isEnabled = (parameters.contains(QLatin1String("text")) || (QApplication::clipboard()->mimeData() && QApplication::clipboard()->mimeData()->hasText()));
+					const QClipboard *clipboard(QGuiApplication::clipboard());
+
+					state.isEnabled = (parameters.contains(QLatin1String("text")) || (clipboard->mimeData() && clipboard->mimeData()->hasText()));
 				}
 			}
 
 			break;
 		case ActionsManager::PasteAndGoAction:
-			state.isEnabled = (QApplication::clipboard()->mimeData() && QApplication::clipboard()->mimeData()->hasText());
+			{
+				const QClipboard *clipboard(QGuiApplication::clipboard());
+
+				state.isEnabled = (clipboard->mimeData() && clipboard->mimeData()->hasText());
+			}
 
 			break;
 		case ActionsManager::DeleteAction:
@@ -1520,6 +1536,11 @@ WebWidget::SslInformation WebWidget::getSslInformation() const
 	return {};
 }
 
+QStringList WebWidget::getSpellCheckerSuggestions() const
+{
+	return {};
+}
+
 QStringList WebWidget::getStyleSheets() const
 {
 	return {};
@@ -1596,6 +1617,11 @@ WebWidget::ContentStates WebWidget::getContentState() const
 	if (getOption(SettingsManager::Security_EnableFraudCheckingOption, url).toBool() && ContentFiltersManager::isFraud(url))
 	{
 		state |= FraudContentState;
+	}
+
+	if (Utils::isUrlAmbiguous(url))
+	{
+		state |= AmbiguousContentState;
 	}
 
 	return state;

@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -98,10 +98,11 @@ void ContentFiltersManager::initialize()
 
 	for (int i = 0; i < profiles.count(); ++i)
 	{
-		QJsonObject profileObject(localMainObject.value(profiles.at(i)).toObject());
-		const QJsonObject bundledProfileObject(bundledMainObject.value(profiles.at(i)).toObject());
+		const QString name(profiles.at(i));
+		QJsonObject profileObject(localMainObject.value(name).toObject());
+		const QJsonObject bundledProfileObject(bundledMainObject.value(name).toObject());
 		ContentFiltersProfile::ProfileSummary profileSummary;
-		profileSummary.name = profiles.at(i);
+		profileSummary.name = name;
 
 		ContentFiltersProfile::ProfileFlags flags(ContentFiltersProfile::NoFlags);
 
@@ -300,11 +301,14 @@ void ContentFiltersManager::addProfile(ContentFiltersProfile *profile)
 
 	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
 	{
-		if (m_contentBlockingProfiles.at(i)->getName() == profile->getName())
+		ContentFiltersProfile *currentProfile(m_contentBlockingProfiles.at(i));
+
+		if (currentProfile->getName() == profile->getName())
 		{
 			isReplacing = true;
 
-			m_contentBlockingProfiles.at(i)->deleteLater();
+			currentProfile->deleteLater();
+
 			m_contentBlockingProfiles.replace(i, profile);
 
 			break;
@@ -364,13 +368,15 @@ ContentFiltersManager* ContentFiltersManager::getInstance()
 	return m_instance;
 }
 
-ContentFiltersProfile* ContentFiltersManager::getProfile(const QString &profile)
+ContentFiltersProfile* ContentFiltersManager::getProfile(const QString &name)
 {
 	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
 	{
-		if (m_contentBlockingProfiles.at(i)->getName() == profile)
+		ContentFiltersProfile *profile(m_contentBlockingProfiles.at(i));
+
+		if (profile->getName() == name)
 		{
-			return m_contentBlockingProfiles.at(i);
+			return profile;
 		}
 	}
 
@@ -386,9 +392,11 @@ ContentFiltersProfile* ContentFiltersManager::getProfile(const QUrl &url)
 
 	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
 	{
-		if (m_contentBlockingProfiles.at(i)->getUpdateUrl() == url)
+		ContentFiltersProfile *profile(m_contentBlockingProfiles.at(i));
+
+		if (profile->getUpdateUrl() == url)
 		{
-			return m_contentBlockingProfiles.at(i);
+			return profile;
 		}
 	}
 
@@ -419,20 +427,24 @@ ContentFiltersManager::CheckResult ContentFiltersManager::checkUrl(const QVector
 
 	for (int i = 0; i < profiles.count(); ++i)
 	{
-		if (profiles.at(i) >= 0 && profiles.at(i) < m_contentBlockingProfiles.count())
-		{
-			CheckResult currentResult(m_contentBlockingProfiles.at(profiles.at(i))->checkUrl(baseUrl, requestUrl, resourceType));
-			currentResult.profile = profiles.at(i);
-			currentResult.isFraud = result.isFraud;
+		const int profile(profiles.at(i));
 
-			if (currentResult.isBlocked)
-			{
-				result = currentResult;
-			}
-			else if (currentResult.isException)
-			{
-				return currentResult;
-			}
+		if (profile < 0 || profile >= m_contentBlockingProfiles.count())
+		{
+			continue;
+		}
+
+		CheckResult currentResult(m_contentBlockingProfiles.at(profile)->checkUrl(baseUrl, requestUrl, resourceType));
+		currentResult.profile = profile;
+		currentResult.isFraud = result.isFraud;
+
+		if (currentResult.isBlocked)
+		{
+			result = currentResult;
+		}
+		else if (currentResult.isException)
+		{
+			return currentResult;
 		}
 	}
 
@@ -455,6 +467,7 @@ ContentFiltersManager::CosmeticFiltersResult ContentFiltersManager::getCosmeticF
 
 	CosmeticFiltersResult result;
 	const QStringList domains(createSubdomainList(requestUrl.host()));
+	const bool isDomainOnly(mode == DomainOnlyFilters);
 
 	for (int i = 0; i < profiles.count(); ++i)
 	{
@@ -462,7 +475,7 @@ ContentFiltersManager::CosmeticFiltersResult ContentFiltersManager::getCosmeticF
 
 		if (index >= 0 && index < m_contentBlockingProfiles.count())
 		{
-			const CosmeticFiltersResult profileResult(m_contentBlockingProfiles.at(index)->getCosmeticFilters(domains, (mode == DomainOnlyFilters)));
+			const CosmeticFiltersResult profileResult(m_contentBlockingProfiles.at(index)->getCosmeticFilters(domains, isDomainOnly));
 
 			result.rules.append(profileResult.rules);
 			result.exceptions.append(profileResult.exceptions);
@@ -521,6 +534,11 @@ QVector<ContentFiltersProfile*> ContentFiltersManager::getFraudCheckingProfiles(
 
 QVector<int> ContentFiltersManager::getProfileIdentifiers(const QStringList &names)
 {
+	if (names.isEmpty())
+	{
+		return {};
+	}
+
 	initialize();
 
 	QVector<int> identifiers;

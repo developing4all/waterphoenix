@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2015 - 2018 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -118,10 +118,11 @@ void PopupsBarWidget::populateMenu()
 
 	for (int i = 0; i < policies.count(); ++i)
 	{
-		QAction *action(menu->addAction(policies.at(i).second));
+		const QPair<QString, QString> policy(policies.at(i));
+		QAction *action(menu->addAction(policy.second));
 		action->setCheckable(true);
-		action->setChecked(popupsPolicy == policies.at(i).first);
-		action->setData(policies.at(i).first);
+		action->setChecked(popupsPolicy == policy.first);
+		action->setData(policy.first);
 
 		m_actionGroup->addAction(action);
 	}
@@ -134,8 +135,9 @@ void PopupsBarWidget::populateMenu()
 
 	for (int i = 0; i < m_popupUrls.count(); ++i)
 	{
-		QAction *action(popupsMenu->addAction(Utils::elideText(m_popupUrls.at(i).url(), popupsMenu->fontMetrics(), nullptr, 300)));
-		action->setData(m_popupUrls.at(i).url());
+		const QString url(m_popupUrls.at(i).url());
+		QAction *action(popupsMenu->addAction(Utils::elideText(url, popupsMenu->fontMetrics(), nullptr, 300)));
+		action->setData(url);
 	}
 
 	connect(popupsMenu, &QMenu::triggered, this, &PopupsBarWidget::openUrl);

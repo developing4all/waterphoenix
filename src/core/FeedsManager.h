@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -95,7 +95,7 @@ protected:
 	void setCategories(const QMap<QString, QString> &categories);
 	void setRemovedEntries(const QStringList &removedEntries);
 	void setEntries(const QVector<Entry> &entries);
-	static QDateTime normalizeTime(const QDateTime &time);
+	static QDateTime normalizeDateTime(const QDateTime &time);
 
 private:
 	LongTermTimer *m_updateTimer;

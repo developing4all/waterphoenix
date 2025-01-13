@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -230,12 +230,13 @@ SessionInformation SessionsManager::getSession(const QString &path)
 	}
 
 	const int defaultZoom(SettingsManager::getOption(SettingsManager::Content_DefaultZoomOption).toInt());
-	const QJsonArray mainWindowsArray(settings.object().value(QLatin1String("windows")).toArray());
+	const QJsonObject settingsObject(settings.object());
+	const QJsonArray mainWindowsArray(settingsObject.value(QLatin1String("windows")).toArray());
 
 	session.path = path;
-	session.title = settings.object().value(QLatin1String("title")).toString((path == QLatin1String("default")) ? tr("Default") : tr("(Untitled)"));
-	session.index = (settings.object().value(QLatin1String("currentIndex")).toInt(1) - 1);
-	session.isClean = settings.object().value(QLatin1String("isClean")).toBool(true);
+	session.title = settingsObject.value(QLatin1String("title")).toString((path == QLatin1String("default")) ? tr("Default") : tr("(Untitled)"));
+	session.index = (settingsObject.value(QLatin1String("currentIndex")).toInt(1) - 1);
+	session.isClean = settingsObject.value(QLatin1String("isClean")).toBool(true);
 
 	for (int i = 0; i < mainWindowsArray.count(); ++i)
 	{
@@ -367,12 +368,26 @@ SessionInformation SessionsManager::getSession(const QString &path)
 
 				if (toolBarObject.contains(QLatin1String("normalVisibility")))
 				{
-					toolBarState.normalVisibility = ((toolBarObject.value(QLatin1String("normalVisibility")).toString() == QLatin1String("hidden")) ? Session::MainWindow::ToolBarState::AlwaysHiddenToolBar : Session::MainWindow::ToolBarState::AlwaysVisibleToolBar);
+					if (toolBarObject.value(QLatin1String("normalVisibility")).toString() == QLatin1String("hidden"))
+					{
+						toolBarState.normalVisibility = Session::MainWindow::ToolBarState::AlwaysHiddenToolBar;
+					}
+					else
+					{
+						toolBarState.normalVisibility = Session::MainWindow::ToolBarState::AlwaysVisibleToolBar;
+					}
 				}
 
 				if (toolBarObject.contains(QLatin1String("fullScreenVisibility")))
 				{
-					toolBarState.fullScreenVisibility = ((toolBarObject.value(QLatin1String("fullScreenVisibility")).toString() == QLatin1String("hidden")) ? Session::MainWindow::ToolBarState::AlwaysHiddenToolBar : Session::MainWindow::ToolBarState::AlwaysVisibleToolBar);
+					if (toolBarObject.value(QLatin1String("fullScreenVisibility")).toString() == QLatin1String("hidden"))
+					{
+						toolBarState.fullScreenVisibility = Session::MainWindow::ToolBarState::AlwaysHiddenToolBar;
+					}
+					else
+					{
+						toolBarState.fullScreenVisibility = Session::MainWindow::ToolBarState::AlwaysVisibleToolBar;
+					}
 				}
 
 				if (toolBarObject.contains(QLatin1String("row")))
@@ -591,9 +606,11 @@ bool SessionsManager::saveSession(const QString &path, const QString &title, Mai
 
 	for (int i = 0; i < windows.count(); ++i)
 	{
-		if (!windows.at(i)->isPrivate())
+		MainWindow *window(windows.at(i));
+
+		if (!window->isPrivate())
 		{
-			session.windows.append(windows.at(i)->getSession());
+			session.windows.append(window->getSession());
 		}
 	}
 
@@ -606,7 +623,7 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 {
 	const QString sessionsPath(m_profilePath + QLatin1String("/sessions/"));
 
-	QDir().mkpath(sessionsPath);
+	Utils::ensureDirectoryExists(sessionsPath);
 
 	if (session.windows.isEmpty())
 	{
@@ -650,16 +667,17 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 
 		for (int j = 0; j < sessionEntry.windows.count(); ++j)
 		{
-			QJsonObject windowObject({{QLatin1String("currentIndex"), (sessionEntry.windows.at(j).history.index + 1)}});
+			const Session::Window window(sessionEntry.windows.at(j));
+			QJsonObject windowObject({{QLatin1String("currentIndex"), (window.history.index + 1)}});
 
-			if (!sessionEntry.windows.at(j).identity.isEmpty())
+			if (!window.identity.isEmpty())
 			{
-				windowObject.insert(QLatin1String("identity"), sessionEntry.windows.at(j).identity);
+				windowObject.insert(QLatin1String("identity"), window.identity);
 			}
 
-			if (!sessionEntry.windows.at(j).options.isEmpty())
+			if (!window.options.isEmpty())
 			{
-				const QHash<int, QVariant> windowOptions(sessionEntry.windows.at(j).options);
+				const QHash<int, QVariant> windowOptions(window.options);
 				QHash<int, QVariant>::const_iterator optionsIterator;
 				QJsonObject optionsObject;
 
@@ -676,7 +694,7 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 				windowObject.insert(QLatin1String("options"), optionsObject);
 			}
 
-			switch (sessionEntry.windows.at(j).state.state)
+			switch (window.state.state)
 			{
 				case Qt::WindowMaximized:
 					windowObject.insert(QLatin1String("state"), QLatin1String("maximized"));
@@ -688,7 +706,7 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 					break;
 				default:
 					{
-						const QRect geometry(sessionEntry.windows.at(j).state.geometry);
+						const QRect geometry(window.state.geometry);
 
 						windowObject.insert(QLatin1String("state"), QLatin1String("normal"));
 
@@ -701,23 +719,24 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 					break;
 			}
 
-			if (sessionEntry.windows.at(j).isAlwaysOnTop)
+			if (window.isAlwaysOnTop)
 			{
 				windowObject.insert(QLatin1String("isAlwaysOnTop"), true);
 			}
 
-			if (sessionEntry.windows.at(j).isPinned)
+			if (window.isPinned)
 			{
 				windowObject.insert(QLatin1String("isPinned"), true);
 			}
 
-			const Session::Window::History windowHistory(sessionEntry.windows.at(j).history);
+			const Session::Window::History windowHistory(window.history);
 			QJsonArray windowHistoryArray;
 
 			for (int k = 0; k < windowHistory.entries.count(); ++k)
 			{
-				const QPoint position(windowHistory.entries.at(k).position);
-				QJsonObject historyEntryObject({{QLatin1String("url"), windowHistory.entries.at(k).url}, {QLatin1String("title"), windowHistory.entries.at(k).title}, {QLatin1String("zoom"), windowHistory.entries.at(k).zoom}});
+				const Session::Window::History::Entry historyEntry(windowHistory.entries.at(k));
+				const QPoint position(historyEntry.position);
+				QJsonObject historyEntryObject({{QLatin1String("url"), historyEntry.url}, {QLatin1String("title"), historyEntry.title}, {QLatin1String("zoom"), historyEntry.zoom}});
 
 				if (!position.isNull())
 				{
@@ -740,7 +759,8 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 
 			for (int j = 0; j < sessionEntry.toolBars.count(); ++j)
 			{
-				const QString identifier(ToolBarsManager::getToolBarName(sessionEntry.toolBars.at(j).identifier));
+				const Session::MainWindow::ToolBarState toolBar(sessionEntry.toolBars.at(j));
+				const QString identifier(ToolBarsManager::getToolBarName(toolBar.identifier));
 
 				if (identifier.isEmpty())
 				{
@@ -750,7 +770,7 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 				QJsonObject toolBarObject({{QLatin1String("identifier"), identifier}});
 				QString location;
 
-				switch (sessionEntry.toolBars.at(j).location)
+				switch (toolBar.location)
 				{
 					case Qt::LeftToolBarArea:
 						location = QLatin1String("left");
@@ -777,19 +797,19 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 					toolBarObject.insert(QLatin1String("location"), location);
 				}
 
-				if (sessionEntry.toolBars.at(j).normalVisibility != Session::MainWindow::ToolBarState::UnspecifiedVisibilityToolBar)
+				if (toolBar.normalVisibility != Session::MainWindow::ToolBarState::UnspecifiedVisibilityToolBar)
 				{
-					toolBarObject.insert(QLatin1String("normalVisibility"), ((sessionEntry.toolBars.at(j).normalVisibility == Session::MainWindow::ToolBarState::AlwaysHiddenToolBar) ? QLatin1String("hidden") : QLatin1String("visible")));
+					toolBarObject.insert(QLatin1String("normalVisibility"), ((toolBar.normalVisibility == Session::MainWindow::ToolBarState::AlwaysHiddenToolBar) ? QLatin1String("hidden") : QLatin1String("visible")));
 				}
 
-				if (sessionEntry.toolBars.at(j).fullScreenVisibility != Session::MainWindow::ToolBarState::UnspecifiedVisibilityToolBar)
+				if (toolBar.fullScreenVisibility != Session::MainWindow::ToolBarState::UnspecifiedVisibilityToolBar)
 				{
-					toolBarObject.insert(QLatin1String("fullScreenVisibility"), ((sessionEntry.toolBars.at(j).fullScreenVisibility == Session::MainWindow::ToolBarState::AlwaysHiddenToolBar) ? QLatin1String("hidden") : QLatin1String("visible")));
+					toolBarObject.insert(QLatin1String("fullScreenVisibility"), ((toolBar.fullScreenVisibility == Session::MainWindow::ToolBarState::AlwaysHiddenToolBar) ? QLatin1String("hidden") : QLatin1String("visible")));
 				}
 
-				if (sessionEntry.toolBars.at(j).row >= 0)
+				if (toolBar.row >= 0)
 				{
-					toolBarObject.insert(QLatin1String("row"), sessionEntry.toolBars.at(j).row);
+					toolBarObject.insert(QLatin1String("row"), toolBar.row);
 				}
 
 				toolBarsArray.append(toolBarObject);
@@ -868,9 +888,11 @@ bool SessionsManager::hasUrl(const QUrl &url, bool activate)
 
 	for (int i = 0; i < windows.count(); ++i)
 	{
-		if (windows.at(i) != activeWindow && windows.at(i)->getActiveWindow())
+		MainWindow *window(windows.at(i));
+
+		if (window != activeWindow && window->getActiveWindow())
 		{
-			map.insert(windows.at(i)->getActiveWindow()->getLastActivity().toMSecsSinceEpoch(), windows.at(i));
+			map.insert(window->getActiveWindow()->getLastActivity().toMSecsSinceEpoch(), window);
 		}
 	}
 
@@ -878,9 +900,11 @@ bool SessionsManager::hasUrl(const QUrl &url, bool activate)
 
 	for (int i = (sortedWindows.count() - 1); i >= 0; --i)
 	{
-		if (sortedWindows.at(i)->hasUrl(url, activate))
+		MainWindow *window(sortedWindows.at(i));
+
+		if (window->hasUrl(url, activate))
 		{
-			Application::triggerAction(ActionsManager::ActivateWindowAction, {{QLatin1String("window"), sortedWindows.at(i)->getIdentifier()}}, m_instance);
+			Application::triggerAction(ActionsManager::ActivateWindowAction, {{QLatin1String("window"), window->getIdentifier()}}, m_instance);
 
 			return true;
 		}

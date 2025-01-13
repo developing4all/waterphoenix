@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -117,6 +117,7 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 	}
 
 	QPainter painter(this);
+	const WebWidget::LoadingState loadingState(m_window->getLoadingState());
 
 	if (m_closeButtonRectangle.isValid())
 	{
@@ -132,7 +133,7 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 		else
 		{
 			QStyleOption option;
-			option.init(this);
+			option.initFrom(this);
 			option.rect = m_closeButtonRectangle;
 			option.state = (QStyle::State_Enabled | QStyle::State_AutoRaise);
 
@@ -152,13 +153,18 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 
 	if (m_urlIconRectangle.isValid())
 	{
-		if (m_window->getLoadingState() == WebWidget::OngoingLoadingState && m_spinnerAnimation)
+		if (loadingState == WebWidget::OngoingLoadingState && m_spinnerAnimation)
 		{
 			m_spinnerAnimation->paint(&painter, m_urlIconRectangle);
 		}
 		else
 		{
 			m_window->getIcon().paint(&painter, m_urlIconRectangle);
+
+			if (loadingState == WebWidget::CrashedLoadingState)
+			{
+				ThemesManager::getStyle()->drawIconOverlay(m_urlIconRectangle, ThemesManager::createIcon(QLatin1String("emblem-crashed")), &painter);
+			}
 		}
 	}
 
@@ -172,7 +178,7 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 
 			if (m_thumbnailRectangle.height() >= 16 && m_thumbnailRectangle.width() >= 16)
 			{
-				if (m_window->getLoadingState() == WebWidget::OngoingLoadingState && m_spinnerAnimation)
+				if (loadingState == WebWidget::OngoingLoadingState && m_spinnerAnimation)
 				{
 					m_spinnerAnimation->paint(&painter, {(m_thumbnailRectangle.left() + ((m_thumbnailRectangle.width() - 16) / 2)), (m_thumbnailRectangle.top() + ((m_thumbnailRectangle.height() - 16) / 2)), 16, 16});
 				}
@@ -206,7 +212,7 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 
 		painter.save();
 
-		if (m_window->getLoadingState() == WebWidget::DeferredLoadingState)
+		if (loadingState == WebWidget::DeferredLoadingState)
 		{
 			painter.setOpacity(0.75);
 		}
@@ -309,17 +315,7 @@ void TabHandleWidget::handleLoadingStateChanged(WebWidget::LoadingState state)
 	{
 		if (!m_spinnerAnimation)
 		{
-			const QString path(ThemesManager::getAnimationPath(QLatin1String("spinner")));
-
-			if (path.isEmpty())
-			{
-				m_spinnerAnimation = new SpinnerAnimation(QCoreApplication::instance());
-			}
-			else
-			{
-				m_spinnerAnimation = new GenericAnimation(path, QCoreApplication::instance());
-			}
-
+			m_spinnerAnimation = ThemesManager::createAnimation();
 			m_spinnerAnimation->start();
 		}
 
@@ -515,17 +511,17 @@ void TabHandleWidget::updateTitle()
 	}
 	else
 	{
-		int length(Utils::calculateTextWidth(title, fontMetrics()));
+		int length(fontMetrics().horizontalAdvance(title));
 
 		if (length > m_labelRectangle.width())
 		{
 			title = fontMetrics().elidedText(title, Qt::ElideRight, m_labelRectangle.width());
-			length = Utils::calculateTextWidth(title, fontMetrics());
+			length = fontMetrics().horizontalAdvance(title);
 		}
 
 		m_titleRectangle = m_labelRectangle;
 
-		if (length < m_labelRectangle.width() && Application::getStyle()->getExtraStyleHint(Style::CanAlignTabBarLabelHint) > 0)
+		if (length < m_labelRectangle.width() && ThemesManager::getStyle()->getExtraStyleHint(Style::CanAlignTabBarLabelHint) > 0)
 		{
 			if (isLeftToRight())
 			{
@@ -705,30 +701,34 @@ void TabBarWidget::paintEvent(QPaintEvent *event)
 		}
 	}
 
-	if (!m_dragMovePosition.isNull())
+	if (m_dragMovePosition.isNull())
 	{
-		const int dropIndex(getDropIndex());
-
-		if (dropIndex >= 0)
-		{
-			int lineOffset(0);
-
-			if (count() == 0)
-			{
-				lineOffset = 0;
-			}
-			else if (dropIndex >= count())
-			{
-				lineOffset = tabRect(count() - 1).right();
-			}
-			else
-			{
-				lineOffset = tabRect(dropIndex).left();
-			}
-
-			Application::getStyle()->drawDropZone(((shape() == QTabBar::RoundedNorth || shape() == QTabBar::RoundedSouth) ? QLine(lineOffset, 0, lineOffset, height()) : QLine(0, lineOffset, width(), lineOffset)), &painter);
-		}
+		return;
 	}
+
+	const int dropIndex(getDropIndex());
+
+	if (dropIndex < 0)
+	{
+		return;
+	}
+
+	int lineOffset(0);
+
+	if (count() == 0)
+	{
+		lineOffset = 0;
+	}
+	else if (dropIndex >= count())
+	{
+		lineOffset = tabRect(count() - 1).right();
+	}
+	else
+	{
+		lineOffset = tabRect(dropIndex).left();
+	}
+
+	ThemesManager::getStyle()->drawDropZone((isHorizontal() ? QLine(lineOffset, 0, lineOffset, height()) : QLine(0, lineOffset, width(), lineOffset)), &painter);
 }
 
 void TabBarWidget::enterEvent(QEvent *event)
@@ -1652,7 +1652,7 @@ QStyleOptionTab TabBarWidget::createStyleOptionTab(int index) const
 	{
 		const QPoint position(widget->mapToParent(widget->rect().topLeft()));
 
-		if (shape() == QTabBar::RoundedNorth || shape() == QTabBar::RoundedSouth)
+		if (isHorizontal())
 		{
 			tabOption.rect.moveTo(position.x(), tabOption.rect.y());
 		}
@@ -1667,7 +1667,7 @@ QStyleOptionTab TabBarWidget::createStyleOptionTab(int index) const
 
 QSize TabBarWidget::tabSizeHint(int index) const
 {
-	if (shape() == QTabBar::RoundedNorth || shape() == QTabBar::RoundedSouth)
+	if (isHorizontal())
 	{
 		const Window *window(getWindow(index));
 		const int tabHeight(qBound(m_minimumTabSize.height(), qMax((m_areThumbnailsEnabled ? 200 : 0), (parentWidget() ? parentWidget()->height() : height())), m_maximumTabSize.height()));
@@ -1695,7 +1695,7 @@ QSize TabBarWidget::minimumSizeHint() const
 
 QSize TabBarWidget::sizeHint() const
 {
-	if (shape() == QTabBar::RoundedNorth || shape() == QTabBar::RoundedSouth)
+	if (isHorizontal())
 	{
 		int size(0);
 
@@ -1725,7 +1725,7 @@ int TabBarWidget::getDropIndex() const
 	}
 
 	int index(tabAt(m_dragMovePosition));
-	const bool isHorizontal((shape() == QTabBar::RoundedNorth || shape() == QTabBar::RoundedSouth));
+	const bool isHorizontal(this->isHorizontal());
 
 	if (index >= 0)
 	{
@@ -1762,6 +1762,11 @@ bool TabBarWidget::isCloseButtonEnabled()
 bool TabBarWidget::isUrlIconEnabled()
 {
 	return m_isUrlIconEnabled;
+}
+
+bool TabBarWidget::isHorizontal() const
+{
+	return (shape() == QTabBar::RoundedNorth || shape() == QTabBar::RoundedSouth);
 }
 
 bool TabBarWidget::event(QEvent *event)

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -208,23 +208,25 @@ void OptionWidget::setDefaultValue(const QVariant &value)
 		}
 	}
 
-	if (!m_resetButton)
+	if (m_resetButton)
 	{
-		m_resetButton = new QPushButton(tr("Defaults"), this);
-		m_resetButton->setEnabled(m_defaultValue != getValue());
-
-		layout()->addWidget(m_resetButton);
-
-		connect(m_resetButton, &QPushButton::clicked, this, [&]()
-		{
-			setValue(getDefaultValue());
-
-			if (m_resetButton)
-			{
-				m_resetButton->setEnabled(false);
-			}
-		});
+		return;
 	}
+
+	m_resetButton = new QPushButton(tr("Defaults"), this);
+	m_resetButton->setEnabled(m_defaultValue != getValue());
+
+	layout()->addWidget(m_resetButton);
+
+	connect(m_resetButton, &QPushButton::clicked, this, [&]()
+	{
+		setValue(getDefaultValue());
+
+		if (m_resetButton)
+		{
+			m_resetButton->setEnabled(false);
+		}
+	});
 }
 
 void OptionWidget::setValue(const QVariant &value)
@@ -284,13 +286,15 @@ void OptionWidget::setChoices(const QStringList &choices)
 
 	for (int i = 0; i < choices.count(); ++i)
 	{
-		if (choices.at(i).isEmpty())
+		const QString choice(choices.at(i));
+
+		if (choice.isEmpty())
 		{
 			m_comboBox->insertSeparator(i);
 		}
 		else
 		{
-			m_comboBox->addItem(choices.at(i), choices.at(i));
+			m_comboBox->addItem(choice, choice);
 		}
 	}
 
@@ -321,11 +325,13 @@ void OptionWidget::setChoices(const QVector<SettingsManager::OptionDefinition::C
 
 	for (int i = 0; i < choices.count(); ++i)
 	{
-		if (choices.at(i).isValid())
-		{
-			m_comboBox->addItem(choices.at(i).icon, choices.at(i).getTitle(), (choices.at(i).value.isEmpty() ? QVariant() : choices.at(i).value));
+		const SettingsManager::OptionDefinition::Choice choice(choices.at(i));
 
-			if (hasIcons && choices.at(i).icon.isNull())
+		if (choice.isValid())
+		{
+			m_comboBox->addItem(choice.icon, choice.getTitle(), (choice.value.isEmpty() ? QVariant() : choice.value));
+
+			if (hasIcons && choice.icon.isNull())
 			{
 				m_comboBox->setItemData(i, ItemModel::createDecoration(), Qt::DecorationRole);
 			}

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -67,7 +67,6 @@ public:
 	bool forceUpdateCookie(const QNetworkCookie &cookie);
 	bool forceDeleteCookie(const QNetworkCookie &cookie);
 	bool hasCookie(const QNetworkCookie &cookie) const;
-	static bool isDomainTheSame(const QUrl &first, const QUrl &second);
 
 protected:
 	void timerEvent(QTimerEvent *event) override;

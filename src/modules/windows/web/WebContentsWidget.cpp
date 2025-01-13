@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -302,9 +302,11 @@ void WebContentsWidget::mouseMoveEvent(QMouseEvent *event)
 
 	if (m_scrollMode == DragScroll)
 	{
-		scrollContents(m_lastCursorPosition - QCursor::pos());
+		const QPoint position(QCursor::pos());
 
-		m_lastCursorPosition = QCursor::pos();
+		scrollContents(m_lastCursorPosition - position);
+
+		m_lastCursorPosition = position;
 	}
 }
 
@@ -339,40 +341,44 @@ void WebContentsWidget::triggerAction(int identifier, const QVariantMap &paramet
 			{
 				const QString text(m_webWidget->getSelectedText().trimmed());
 
-				if (!text.isEmpty())
+				if (text.isEmpty())
 				{
-					const InputInterpreter::InterpreterResult result(InputInterpreter::interpret(text, (InputInterpreter::NoBookmarkKeywordsFlag | InputInterpreter::NoHostLookupFlag | InputInterpreter::NoSearchKeywordsFlag)));
+					return;
+				}
 
-					if (result.isValid())
-					{
-						const SessionsManager::OpenHints hints(parameters.contains(QLatin1String("hints")) ? SessionsManager::calculateOpenHints(parameters) : SessionsManager::calculateOpenHints());
+				const InputInterpreter::InterpreterResult result(InputInterpreter::interpret(text, (InputInterpreter::NoBookmarkKeywordsFlag | InputInterpreter::NoHostLookupFlag | InputInterpreter::NoSearchKeywordsFlag)));
 
-						switch (result.type)
+				if (!result.isValid())
+				{
+					return;
+				}
+
+				const SessionsManager::OpenHints hints(parameters.contains(QLatin1String("hints")) ? SessionsManager::calculateOpenHints(parameters) : SessionsManager::calculateOpenHints());
+
+				switch (result.type)
+				{
+					case InputInterpreter::InterpreterResult::UrlType:
+						if (hints.testFlag(SessionsManager::CurrentTabOpen) && hints.testFlag(SessionsManager::PrivateOpen) == isPrivate())
 						{
-							case InputInterpreter::InterpreterResult::UrlType:
-								if (hints.testFlag(SessionsManager::CurrentTabOpen) && hints.testFlag(SessionsManager::PrivateOpen) == isPrivate())
-								{
-									setUrl(result.url);
-								}
-								else
-								{
-									MainWindow *mainWindow(MainWindow::findMainWindow(this));
-
-									if (mainWindow)
-									{
-										mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), result.url}, {QLatin1String("hints"), QVariant(hints)}}, trigger);
-									}
-								}
-
-								break;
-							case InputInterpreter::InterpreterResult::SearchType:
-								emit requestedSearch(result.searchQuery, result.searchEngine, hints);
-
-								break;
-							default:
-								break;
+							setUrl(result.url);
 						}
-					}
+						else
+						{
+							MainWindow *mainWindow(MainWindow::findMainWindow(this));
+
+							if (mainWindow)
+							{
+								mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), result.url}, {QLatin1String("hints"), QVariant(hints)}}, trigger);
+							}
+						}
+
+						break;
+					case InputInterpreter::InterpreterResult::SearchType:
+						emit requestedSearch(result.searchQuery, result.searchEngine, hints);
+
+						break;
+					default:
+						break;
 				}
 			}
 
@@ -437,40 +443,42 @@ void WebContentsWidget::triggerAction(int identifier, const QVariantMap &paramet
 			{
 				const InputInterpreter::InterpreterResult result(InputInterpreter::interpret(QGuiApplication::clipboard()->text().trimmed(), (InputInterpreter::NoBookmarkKeywordsFlag | InputInterpreter::NoHostLookupFlag | InputInterpreter::NoSearchKeywordsFlag)));
 
-				if (result.isValid())
+				if (!result.isValid())
 				{
-					SessionsManager::OpenHints hints(SettingsManager::getOption(SettingsManager::Browser_OpenLinksInNewTabOption).toBool() ? SessionsManager::NewTabOpen : SessionsManager::CurrentTabOpen);
+					return;
+				}
 
-					if (parameters.contains(QLatin1String("hints")))
-					{
-						hints = SessionsManager::calculateOpenHints(parameters);
-					}
+				SessionsManager::OpenHints hints(SettingsManager::getOption(SettingsManager::Browser_OpenLinksInNewTabOption).toBool() ? SessionsManager::NewTabOpen : SessionsManager::CurrentTabOpen);
 
-					switch (result.type)
-					{
-						case InputInterpreter::InterpreterResult::UrlType:
-							if (hints.testFlag(SessionsManager::CurrentTabOpen) && hints.testFlag(SessionsManager::PrivateOpen) == isPrivate())
+				if (parameters.contains(QLatin1String("hints")))
+				{
+					hints = SessionsManager::calculateOpenHints(parameters);
+				}
+
+				switch (result.type)
+				{
+					case InputInterpreter::InterpreterResult::UrlType:
+						if (hints.testFlag(SessionsManager::CurrentTabOpen) && hints.testFlag(SessionsManager::PrivateOpen) == isPrivate())
+						{
+							setUrl(result.url);
+						}
+						else
+						{
+							MainWindow *mainWindow(MainWindow::findMainWindow(this));
+
+							if (mainWindow)
 							{
-								setUrl(result.url);
+								mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), result.url}, {QLatin1String("hints"), QVariant(hints)}}, trigger);
 							}
-							else
-							{
-								MainWindow *mainWindow(MainWindow::findMainWindow(this));
+						}
 
-								if (mainWindow)
-								{
-									mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), result.url}, {QLatin1String("hints"), QVariant(hints)}}, trigger);
-								}
-							}
+						break;
+					case InputInterpreter::InterpreterResult::SearchType:
+						emit requestedSearch(result.searchQuery, result.searchEngine, hints);
 
-							break;
-						case InputInterpreter::InterpreterResult::SearchType:
-							emit requestedSearch(result.searchQuery, result.searchEngine, hints);
-
-							break;
-						default:
-							break;
-					}
+						break;
+					default:
+						break;
 				}
 			}
 
@@ -492,8 +500,7 @@ void WebContentsWidget::triggerAction(int identifier, const QVariantMap &paramet
 						m_webWidget->findInPage({}, (flags | WebWidget::HighlightAllFind));
 						m_webWidget->findInPage(m_searchBarWidget->getQuery(), flags);
 					}
-				}
-);
+				});
 				connect(m_webWidget, &WebWidget::findInPageResultsChanged, m_searchBarWidget, &SearchBarWidget::updateResults);
 
 				if (SettingsManager::getOption(SettingsManager::Search_EnableFindInPageAsYouTypeOption).toBool())
@@ -882,7 +889,9 @@ void WebContentsWidget::handleSavePasswordRequest(const PasswordsManager::Passwo
 
 	for (int i = 0; i < password.fields.count(); ++i)
 	{
-		if (password.fields.at(i).type == PasswordsManager::PasswordField && !password.fields.at(i).value.isEmpty())
+		const PasswordsManager::PasswordInformation::Field field(password.fields.at(i));
+
+		if (field.type == PasswordsManager::PasswordField && !field.value.isEmpty())
 		{
 			isValid = true;
 
@@ -925,47 +934,49 @@ void WebContentsWidget::handlePermissionRequest(WebWidget::FeaturePermission fea
 	{
 		for (int i = 0; i < m_permissionBarWidgets.count(); ++i)
 		{
-			if (m_permissionBarWidgets.at(i)->hasMatch(feature, url))
-			{
-				m_layout->removeWidget(m_permissionBarWidgets.at(i));
+			PermissionBarWidget *widget(m_permissionBarWidgets.at(i));
 
-				m_permissionBarWidgets.at(i)->deleteLater();
+			if (widget->hasMatch(feature, url))
+			{
+				m_layout->removeWidget(widget);
+
+				widget->deleteLater();
 
 				m_permissionBarWidgets.removeAt(i);
 
 				break;
 			}
 		}
+
+		return;
 	}
-	else
+
+	for (int i = 0; i < m_permissionBarWidgets.count(); ++i)
 	{
-		for (int i = 0; i < m_permissionBarWidgets.count(); ++i)
+		if (m_permissionBarWidgets.at(i)->hasMatch(feature, url))
 		{
-			if (m_permissionBarWidgets.at(i)->hasMatch(feature, url))
-			{
-				return;
-			}
+			return;
 		}
-
-		PermissionBarWidget *widget(new PermissionBarWidget(feature, url, this));
-
-		addInformationBar(widget);
-
-		m_permissionBarWidgets.append(widget);
-
-		connect(widget, &PermissionBarWidget::permissionChanged, this, [=](WebWidget::PermissionPolicies policies)
-		{
-			m_webWidget->setPermission(feature, url, policies);
-
-			m_permissionBarWidgets.removeAll(widget);
-
-			m_layout->removeWidget(widget);
-
-			widget->deleteLater();
-		});
-
-		emit needsAttention();
 	}
+
+	PermissionBarWidget *widget(new PermissionBarWidget(feature, url, this));
+
+	addInformationBar(widget);
+
+	m_permissionBarWidgets.append(widget);
+
+	connect(widget, &PermissionBarWidget::permissionChanged, this, [=](WebWidget::PermissionPolicies policies)
+	{
+		m_webWidget->setPermission(feature, url, policies);
+
+		m_permissionBarWidgets.removeAll(widget);
+
+		m_layout->removeWidget(widget);
+
+		widget->deleteLater();
+	});
+
+	emit needsAttention();
 }
 
 void WebContentsWidget::handleInspectorVisibilityChangeRequest(bool isVisible)
@@ -1252,14 +1263,19 @@ void WebContentsWidget::setOption(int identifier, const QVariant &value)
 
 void WebContentsWidget::setHistory(const Session::Window::History &history)
 {
-	if (history.entries.count() == 1 && QUrl(history.entries.at(0).url).scheme() == QLatin1String("view-source"))
+	if (history.entries.count() == 1)
 	{
-		setUrl(QUrl(history.entries.at(0).url), true);
+		const QUrl url(history.entries.at(0).url);
+
+		if (url.scheme() == QLatin1String("view-source"))
+		{
+			setUrl(url, true);
+
+			return;
+		}
 	}
-	else
-	{
-		m_webWidget->setHistory(history);
-	}
+
+	m_webWidget->setHistory(history);
 }
 
 void WebContentsWidget::setZoom(int zoom)
@@ -1339,40 +1355,43 @@ QString WebContentsWidget::parseQuery(const QString &query) const
 
 	for (int i = 0; i < placeholders.count(); ++i)
 	{
-		const QString placeholder(QLatin1Char('{') + placeholders.at(i) + QLatin1Char('}'));
+		const QString placeholder(placeholders.at(i));
+		const QString token(QLatin1Char('{') + placeholder + QLatin1Char('}'));
 
-		if (mutableQuery.contains(placeholder))
+		if (!mutableQuery.contains(token))
 		{
-			if (placeholders.at(i) == QLatin1String("clipboard"))
+			continue;
+		}
+
+		if (placeholder == QLatin1String("clipboard"))
+		{
+			mutableQuery.replace(token, QGuiApplication::clipboard()->text());
+		}
+		else if (m_webWidget)
+		{
+			if (placeholder == QLatin1String("frameUrl"))
 			{
-				mutableQuery.replace(placeholder, QGuiApplication::clipboard()->text());
+				mutableQuery.replace(token, m_webWidget->getActiveFrame().url.toString());
 			}
-			else if (m_webWidget)
+			else if (placeholder == QLatin1String("imageUrl"))
 			{
-				if (placeholders.at(i) == QLatin1String("frameUrl"))
-				{
-					mutableQuery.replace(placeholder, m_webWidget->getActiveFrame().url.toString());
-				}
-				else if (placeholders.at(i) == QLatin1String("imageUrl"))
-				{
-					mutableQuery.replace(placeholder, m_webWidget->getActiveImage().url.toString());
-				}
-				else if (placeholders.at(i) == QLatin1String("linkUrl"))
-				{
-					mutableQuery.replace(placeholder, m_webWidget->getActiveLink().url.toString());
-				}
-				else if (placeholders.at(i) == QLatin1String("mediaUrl"))
-				{
-					mutableQuery.replace(placeholder, m_webWidget->getActiveMedia().url.toString());
-				}
-				else if (placeholders.at(i) == QLatin1String("pageUrl"))
-				{
-					mutableQuery.replace(placeholder, m_webWidget->getUrl().toString());
-				}
-				else if (placeholders.at(i) == QLatin1String("selection"))
-				{
-					mutableQuery.replace(placeholder, m_webWidget->getSelectedText());
-				}
+				mutableQuery.replace(token, m_webWidget->getActiveImage().url.toString());
+			}
+			else if (placeholder == QLatin1String("linkUrl"))
+			{
+				mutableQuery.replace(token, m_webWidget->getActiveLink().url.toString());
+			}
+			else if (placeholder == QLatin1String("mediaUrl"))
+			{
+				mutableQuery.replace(token, m_webWidget->getActiveMedia().url.toString());
+			}
+			else if (placeholder == QLatin1String("pageUrl"))
+			{
+				mutableQuery.replace(token, m_webWidget->getUrl().toString());
+			}
+			else if (placeholder == QLatin1String("selection"))
+			{
+				mutableQuery.replace(token, m_webWidget->getSelectedText());
 			}
 		}
 	}

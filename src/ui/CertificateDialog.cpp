@@ -35,7 +35,7 @@
 namespace Otter
 {
 
-CertificateDialog::CertificateDialog(QVector<QSslCertificate> certificates, QWidget *parent) : Dialog(parent),
+CertificateDialog::CertificateDialog(const QVector<QSslCertificate> &certificates, QWidget *parent) : Dialog(parent),
 	m_certificates(certificates),
 	m_ui(new Ui::CertificateDialog)
 {
@@ -115,33 +115,35 @@ void CertificateDialog::exportCertificate()
 	QString filter;
 	const QString path(QFileDialog::getSaveFileName(this, tr("Select File"), Utils::getStandardLocation(QStandardPaths::HomeLocation), Utils::formatFileTypes({tr("DER encoded X.509 certificates (*.der)"), tr("PEM encoded X.509 certificates (*.pem)"), tr("Text files (*.txt)")}), &filter));
 
-	if (!path.isEmpty())
+	if (path.isEmpty())
 	{
-		QFile file(path);
-
-		if (!file.open(QIODevice::WriteOnly))
-		{
-			QMessageBox::critical(this, tr("Error"), tr("Failed to open file for writing."), QMessageBox::Close);
-
-			return;
-		}
-
-		if (filter.contains(QLatin1String(".der")))
-		{
-			file.write(certificate.toDer());
-		}
-		else if (filter.contains(QLatin1String(".pem")))
-		{
-			file.write(certificate.toPem());
-		}
-		else
-		{
-			QTextStream stream(&file);
-			stream << certificate.toText();
-		}
-
-		file.close();
+		return;
 	}
+
+	QFile file(path);
+
+	if (!file.open(QIODevice::WriteOnly))
+	{
+		QMessageBox::critical(this, tr("Error"), tr("Failed to open file for writing."), QMessageBox::Close);
+
+		return;
+	}
+
+	if (filter.contains(QLatin1String(".der")))
+	{
+		file.write(certificate.toDer());
+	}
+	else if (filter.contains(QLatin1String(".pem")))
+	{
+		file.write(certificate.toPem());
+	}
+	else
+	{
+		QTextStream stream(&file);
+		stream << certificate.toText();
+	}
+
+	file.close();
 }
 
 void CertificateDialog::updateCertificate()
@@ -258,15 +260,17 @@ void CertificateDialog::updateCertificate()
 	m_ui->detailsItemView->expandAll();
 	m_ui->valueTextEditWidget->clear();
 
-	if (!field.isNull())
+	if (field.isNull())
 	{
-		const bool isExtension(static_cast<CertificateField>(field.toInt()) == ExtensionField);
-		const QModelIndexList indexes(m_ui->detailsItemView->getSourceModel()->match(m_ui->detailsItemView->getSourceModel()->index(0, 0), (isExtension ? ExtensionNameRole : CertificateFieldRole), (isExtension ? extension : field), 1, (Qt::MatchExactly | Qt::MatchRecursive | Qt::MatchWrap)));
+		return;
+	}
 
-		if (!indexes.isEmpty())
-		{
-			m_ui->detailsItemView->setCurrentIndex(indexes.value(0));
-		}
+	const bool isExtension(static_cast<CertificateField>(field.toInt()) == ExtensionField);
+	const QModelIndexList indexes(m_ui->detailsItemView->getSourceModel()->match(m_ui->detailsItemView->getSourceModel()->index(0, 0), (isExtension ? ExtensionNameRole : CertificateFieldRole), (isExtension ? extension : field), 1, (Qt::MatchExactly | Qt::MatchRecursive | Qt::MatchWrap)));
+
+	if (!indexes.isEmpty())
+	{
+		m_ui->detailsItemView->setCurrentIndex(indexes.value(0));
 	}
 }
 
@@ -279,11 +283,6 @@ void CertificateDialog::updateValue()
 
 	switch (field)
 	{
-		case ValidityField:
-		case PublicKeyField:
-		case ExtensionsField:
-		case DigestField:
-			break;
 		case VersionField:
 			m_ui->valueTextEditWidget->setPlainText(QString::fromLatin1(certificate.version()));
 
@@ -502,29 +501,31 @@ QString CertificateDialog::formatHex(const QString &source, QChar separator)
 
 	for (int i = 0; i < source.length(); ++i)
 	{
-		if (source.at(i).isLetterOrNumber())
+		if (!source.at(i).isLetterOrNumber())
 		{
-			result.append(source.at(i));
+			continue;
+		}
 
-			++characterCount;
+		result.append(source.at(i));
 
-			if (characterCount == 2)
+		++characterCount;
+
+		if (characterCount == 2)
+		{
+			++pairCount;
+
+			if (pairCount == 16)
 			{
-				++pairCount;
+				result.append(QLatin1Char('\n'));
 
-				if (pairCount == 16)
-				{
-					result.append(QLatin1Char('\n'));
-
-					pairCount = 0;
-				}
-				else
-				{
-					result.append(separator);
-				}
-
-				characterCount = 0;
+				pairCount = 0;
 			}
+			else
+			{
+				result.append(separator);
+			}
+
+			characterCount = 0;
 		}
 	}
 

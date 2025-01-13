@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -184,14 +184,14 @@ void AddressDelegate::drawCompletionText(QPainter *painter, const QFont &font, c
 
 	const QFontMetrics fontMetrics(font);
 	const QFontMetrics highlightFontMetrics(highlightFont);
-	const int xLength(Utils::calculateTextWidth(QString(QLatin1Char('X')), highlightFontMetrics));
+	const int xLength(highlightFontMetrics.horizontalAdvance(QLatin1Char('X')));
 
 	for (int i = 0; i < segments.count(); ++i)
 	{
 		const TextSegment segment(segments.at(i));
 		const QFontMetrics segmentFontMetrics(segment.isHighlighted ? highlightFontMetrics : fontMetrics);
 		const int maximumLength(availableRectangle.width() - xLength);
-		const int length(Utils::calculateTextWidth(segment.text, segmentFontMetrics));
+		const int length(segmentFontMetrics.horizontalAdvance(segment.text));
 
 		painter->setFont(segment.isHighlighted ? highlightFont : font);
 		painter->setPen(segment.color);
@@ -228,7 +228,7 @@ QVector<AddressDelegate::TextSegment> AddressDelegate::highlightSegments(const Q
 	for (int i = 0; i < segments.count(); ++i)
 	{
 		const TextSegment segment(segments.at(i));
-		const QStringList subSegments(segment.text.split(highlight, QString::KeepEmptyParts, Qt::CaseInsensitive));
+		const QStringList subSegments(segment.text.split(highlight, Qt::KeepEmptyParts, Qt::CaseInsensitive));
 		int highlightAmount(0);
 
 		for (int j = 0; j < subSegments.count(); ++j)
@@ -711,9 +711,9 @@ void AddressWidget::mouseReleaseEvent(QMouseEvent *event)
 	{
 		showCompletion(true);
 	}
-	else if (event->button() == Qt::MiddleButton && text().isEmpty() && !QApplication::clipboard()->text().isEmpty() && SettingsManager::getOption(SettingsManager::AddressField_PasteAndGoOnMiddleClickOption).toBool())
+	else if (event->button() == Qt::MiddleButton && text().isEmpty() && !QGuiApplication::clipboard()->text().isEmpty() && SettingsManager::getOption(SettingsManager::AddressField_PasteAndGoOnMiddleClickOption).toBool())
 	{
-		handleUserInput(QApplication::clipboard()->text().trimmed(), SessionsManager::CurrentTabOpen);
+		handleUserInput(QGuiApplication::clipboard()->text().trimmed(), SessionsManager::CurrentTabOpen);
 
 		event->accept();
 	}
@@ -781,7 +781,7 @@ void AddressWidget::showCompletion(bool isTypedHistory)
 			QMenu menu(this);
 			menu.addAction(ThemesManager::createIcon(QLatin1String("edit-copy")), QCoreApplication::translate("actons", "Copy"), this, [&]()
 			{
-				QApplication::clipboard()->setText(index.data(AddressCompletionModel::UrlRole).toUrl().toString());
+				QGuiApplication::clipboard()->setText(index.data(AddressCompletionModel::UrlRole).toUrl().toString());
 			});
 
 			if (isTypedHistory && index.data(AddressCompletionModel::IsRemovableRole).toBool() && type == AddressCompletionModel::CompletionEntry::TypedHistoryType)
@@ -1019,6 +1019,10 @@ void AddressWidget::updateEntries(const QVector<EntryIdentifier> &identifiers)
 					{
 						definition.iconName = QLatin1String("badge-fraud");
 					}
+					else if (state.testFlag(WebWidget::AmbiguousContentState))
+					{
+						definition.iconName = QLatin1String("badge-ambiguous");
+					}
 					else if (state.testFlag(WebWidget::MixedContentState))
 					{
 						definition.iconName = QLatin1String("badge-mixed");
@@ -1172,8 +1176,6 @@ void AddressWidget::updateGeometries()
 
 	for (int i = 0; i < m_layout.count(); ++i)
 	{
-		const EntryDefinition definition(m_entries.value(m_layout.at(i)));
-
 		if (m_layout.at(i) == AddressEntry)
 		{
 			isLeading = !isLeading;
@@ -1195,6 +1197,8 @@ void AddressWidget::updateGeometries()
 
 				break;
 		}
+
+		const EntryDefinition definition(m_entries.value(m_layout.at(i)));
 
 		if (isLeading)
 		{
@@ -1416,11 +1420,13 @@ void AddressWidget::setWindow(Window *window)
 			}
 		});
 
-		if (window->getWebWidget())
-		{
-			window->getWebWidget()->startWatchingChanges(this, WebWidget::FeedsWatcher);
+		WebWidget *webWidget(window->getWebWidget());
 
-			connect(window->getWebWidget(), &WebWidget::watchedDataChanged, this, &AddressWidget::handleWatchedDataChanged);
+		if (webWidget)
+		{
+			webWidget->startWatchingChanges(this, WebWidget::FeedsWatcher);
+
+			connect(webWidget, &WebWidget::watchedDataChanged, this, &AddressWidget::handleWatchedDataChanged);
 		}
 
 		const ToolBarWidget *toolBar(qobject_cast<ToolBarWidget*>(parentWidget()));

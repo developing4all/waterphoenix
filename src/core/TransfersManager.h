@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -62,7 +62,7 @@ public:
 
 	~Transfer();
 
-	void setHash(const QByteArray &hash, QCryptographicHash::Algorithm algorithm);
+	void setHash(QCryptographicHash::Algorithm algorithm, const QByteArray &hash = {});
 	virtual void setUpdateInterval(int interval);
 	virtual QUrl getSource() const;
 	virtual QString getSuggestedFileName();
@@ -161,6 +161,7 @@ public:
 	static Transfer* startTransfer(QNetworkReply *reply, const QString &target = {}, Transfer::TransferOptions options = Transfer::CanAskForPathOption);
 	static QVector<Transfer*> getTransfers();
 	static ActiveTransfersInformation getActiveTransfersInformation();
+	static int getRunningTransfersCount();
 	static bool removeTransfer(Transfer *transfer, bool keepFile = true);
 	static bool isDownloading(const QString &source, const QString &target = {});
 	static bool hasRunningTransfers();

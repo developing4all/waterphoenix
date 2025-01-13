@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -43,9 +43,11 @@ ActionComboBoxWidget::ActionComboBoxWidget(QWidget *parent) : ComboBoxWidget(par
 
 	for (int i = 0; i < definitions.count(); ++i)
 	{
-		if (!definitions.at(i).flags.testFlag(ActionsManager::ActionDefinition::IsDeprecatedFlag) && !definitions.at(i).flags.testFlag(ActionsManager::ActionDefinition::RequiresParameters))
+		const ActionsManager::ActionDefinition definition(definitions.at(i));
+
+		if (!definition.flags.testFlag(ActionsManager::ActionDefinition::IsDeprecatedFlag) && !definition.flags.testFlag(ActionsManager::ActionDefinition::RequiresParameters))
 		{
-			addDefinition(definitions.at(i));
+			addDefinition(definition);
 		}
 	}
 
@@ -126,18 +128,18 @@ void ActionComboBoxWidget::setActionIdentifier(int action)
 	if (index >= 0)
 	{
 		setCurrentIndex(index);
+
+		return;
 	}
-	else
+
+	const ActionsManager::ActionDefinition definition(ActionsManager::getActionDefinition(action));
+
+	if (definition.isValid())
 	{
-		const ActionsManager::ActionDefinition definition(ActionsManager::getActionDefinition(action));
+		addDefinition(definition);
+		setCurrentIndex(count() - 1);
 
-		if (definition.isValid())
-		{
-			addDefinition(definition);
-			setCurrentIndex(count() - 1);
-
-			m_model->sort(0);
-		}
+		m_model->sort(0);
 	}
 }
 
@@ -162,14 +164,16 @@ bool ActionComboBoxWidget::eventFilter(QObject *object, QEvent *event)
 		case QEvent::Show:
 			if (!m_filterLineEditWidget)
 			{
-				m_filterLineEditWidget = new LineEditWidget(getView()->viewport()->parentWidget());
+				ItemViewWidget *view(getView());
+
+				m_filterLineEditWidget = new LineEditWidget(view->viewport()->parentWidget());
 				m_filterLineEditWidget->setClearButtonEnabled(true);
 				m_filterLineEditWidget->setPlaceholderText(tr("Search…"));
 
-				getView()->setFilterRoles({Qt::DisplayRole, NameRole});
-				getView()->setStyleSheet(QStringLiteral("QAbstractItemView {padding:0 0 %1px 0;}").arg(m_filterLineEditWidget->height()));
+				view->setFilterRoles({Qt::DisplayRole, NameRole});
+				view->setStyleSheet(QStringLiteral("QAbstractItemView {padding:0 0 %1px 0;}").arg(m_filterLineEditWidget->height()));
 
-				connect(m_filterLineEditWidget, &LineEditWidget::textChanged, getView(), &ItemViewWidget::setFilterString);
+				connect(m_filterLineEditWidget, &LineEditWidget::textChanged, view, &ItemViewWidget::setFilterString);
 			}
 
 			if (event->type() == QEvent::Show)
@@ -178,8 +182,10 @@ bool ActionComboBoxWidget::eventFilter(QObject *object, QEvent *event)
 			}
 			else
 			{
-				m_filterLineEditWidget->resize(getView()->width(), m_filterLineEditWidget->height());
-				m_filterLineEditWidget->move(0, (getView()->height() - m_filterLineEditWidget->height()));
+				ItemViewWidget *view(getView());
+
+				m_filterLineEditWidget->resize(view->width(), m_filterLineEditWidget->height());
+				m_filterLineEditWidget->move(0, (view->height() - m_filterLineEditWidget->height()));
 			}
 
 			break;

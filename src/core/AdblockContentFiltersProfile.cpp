@@ -2,7 +2,7 @@
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2010 - 2014 David Rosca <nowrep@gmail.com>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 #include <QtCore/QBuffer>
 #include <QtCore/QCoreApplication>
-#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 #include <QtCore/QSaveFile>
 #include <QtCore/QTextStream>
 #include <QtWidgets/QApplication>
@@ -56,7 +56,7 @@ AdblockContentFiltersProfile::AdblockContentFiltersProfile(const ContentFiltersP
 		{
 			const QLocale::Language language(QLocale(languages.at(i)).language());
 
-			if (language != QLocale::AnyLanguage)
+			if (language != QLocale::AnyLanguage && !m_languages.contains(language))
 			{
 				m_languages.append(language);
 			}
@@ -168,7 +168,7 @@ void AdblockContentFiltersProfile::parseRuleLine(const QString &rule)
 	}
 
 	const int optionsSeparator(rule.indexOf(QLatin1Char('$')));
-	const QStringList options((optionsSeparator >= 0) ? rule.mid(optionsSeparator + 1).split(QLatin1Char(','), QString::SkipEmptyParts) : QStringList());
+	const QStringList options((optionsSeparator >= 0) ? rule.mid(optionsSeparator + 1).split(QLatin1Char(','), Qt::SkipEmptyParts) : QStringList());
 	QString line(rule);
 
 	if (optionsSeparator >= 0)
@@ -223,41 +223,44 @@ void AdblockContentFiltersProfile::parseRuleLine(const QString &rule)
 
 	for (int i = 0; i < options.count(); ++i)
 	{
-		const bool isOptionException(options.at(i).startsWith(QLatin1Char('~')));
-		const QString optionName(isOptionException ? options.at(i).mid(1) : options.at(i));
+		const QString option(options.at(i));
+		const bool isOptionException(option.startsWith(QLatin1Char('~')));
+		const QString optionName(isOptionException ? option.mid(1) : option);
 
 		if (m_options.contains(optionName))
 		{
-			const RuleOption option(m_options.value(optionName));
+			const RuleOption ruleOption(m_options.value(optionName));
 
-			if ((!definition->isException || isOptionException) && (option == ElementHideOption || option == GenericHideOption))
+			if ((!definition->isException || isOptionException) && (ruleOption == ElementHideOption || ruleOption == GenericHideOption))
 			{
 				continue;
 			}
 
 			if (!isOptionException)
 			{
-				definition->ruleOptions |= option;
+				definition->ruleOptions |= ruleOption;
 			}
-			else if (option != WebSocketOption && option != PopupOption)
+			else if (ruleOption != WebSocketOption && ruleOption != PopupOption)
 			{
-				definition->ruleExceptions |= option;
+				definition->ruleExceptions |= ruleOption;
 			}
 		}
 		else if (optionName.startsWith(QLatin1String("domain")))
 		{
-			const QStringList parsedDomains(options.at(i).mid(options.at(i).indexOf(QLatin1Char('=')) + 1).split(QLatin1Char('|'), QString::SkipEmptyParts));
+			const QStringList parsedDomains(option.mid(option.indexOf(QLatin1Char('=')) + 1).split(QLatin1Char('|'), Qt::SkipEmptyParts));
 
 			for (int j = 0; j < parsedDomains.count(); ++j)
 			{
-				if (parsedDomains.at(j).startsWith(QLatin1Char('~')))
+				const QString parsedDomain(parsedDomains.at(j));
+
+				if (parsedDomain.startsWith(QLatin1Char('~')))
 				{
-					definition->allowedDomains.append(parsedDomains.at(j).mid(1));
-
-					continue;
+					definition->allowedDomains.append(parsedDomain.mid(1));
 				}
-
-				definition->blockedDomains.append(parsedDomains.at(j));
+				else
+				{
+					definition->blockedDomains.append(parsedDomain);
+				}
 			}
 		}
 		else
@@ -422,18 +425,20 @@ ContentFiltersManager::CheckResult AdblockContentFiltersProfile::checkUrlSubstri
 
 	for (int i = 0; i < node->children.count(); ++i)
 	{
-		if (node->children.at(i)->value == QLatin1Char('^'))
+		if (node->children.at(i)->value != QLatin1Char('^'))
 		{
-			currentResult = evaluateNodeRules(node, currentRule, request);
+			continue;
+		}
 
-			if (currentResult.isBlocked)
-			{
-				result = currentResult;
-			}
-			else if (currentResult.isException)
-			{
-				return currentResult;
-			}
+		currentResult = evaluateNodeRules(node, currentRule, request);
+
+		if (currentResult.isBlocked)
+		{
+			result = currentResult;
+		}
+		else if (currentResult.isException)
+		{
+			return currentResult;
 		}
 	}
 
@@ -517,20 +522,22 @@ ContentFiltersManager::CheckResult AdblockContentFiltersProfile::checkRuleMatch(
 		{
 			const bool supportsException(iterator.value() != WebSocketOption && iterator.value() != PopupOption);
 
-			if (rule->ruleOptions.testFlag(iterator.value()) || (supportsException && rule->ruleExceptions.testFlag(iterator.value())))
+			if (!rule->ruleOptions.testFlag(iterator.value()) && !(supportsException && rule->ruleExceptions.testFlag(iterator.value())))
 			{
-				if (request.resourceType == iterator.key())
-				{
-					isBlocked = (isBlocked ? rule->ruleOptions.testFlag(iterator.value()) : isBlocked);
-				}
-				else if (supportsException)
-				{
-					isBlocked = (isBlocked ? rule->ruleExceptions.testFlag(iterator.value()) : isBlocked);
-				}
-				else
-				{
-					isBlocked = false;
-				}
+				continue;
+			}
+
+			if (request.resourceType == iterator.key())
+			{
+				isBlocked = (isBlocked ? rule->ruleOptions.testFlag(iterator.value()) : isBlocked);
+			}
+			else if (supportsException)
+			{
+				isBlocked = (isBlocked ? rule->ruleExceptions.testFlag(iterator.value()) : isBlocked);
+			}
+			else
+			{
+				isBlocked = false;
 			}
 		}
 	}
@@ -539,34 +546,34 @@ ContentFiltersManager::CheckResult AdblockContentFiltersProfile::checkRuleMatch(
 		isBlocked = false;
 	}
 
-	if (isBlocked)
+	if (!isBlocked)
 	{
-		ContentFiltersManager::CheckResult result;
-		result.rule = rule->rule;
+		return {};
+	}
 
-		if (rule->isException)
+	ContentFiltersManager::CheckResult result;
+	result.rule = rule->rule;
+
+	if (rule->isException)
+	{
+		result.isBlocked = false;
+		result.isException = true;
+
+		if (rule->ruleOptions.testFlag(ElementHideOption))
 		{
-			result.isBlocked = false;
-			result.isException = true;
-
-			if (rule->ruleOptions.testFlag(ElementHideOption))
-			{
-				result.comesticFiltersMode = ContentFiltersManager::NoFilters;
-			}
-			else if (rule->ruleOptions.testFlag(GenericHideOption))
-			{
-				result.comesticFiltersMode = ContentFiltersManager::DomainOnlyFilters;
-			}
-
-			return result;
+			result.comesticFiltersMode = ContentFiltersManager::NoFilters;
 		}
-
-		result.isBlocked = true;
+		else if (rule->ruleOptions.testFlag(GenericHideOption))
+		{
+			result.comesticFiltersMode = ContentFiltersManager::DomainOnlyFilters;
+		}
 
 		return result;
 	}
 
-	return {};
+	result.isBlocked = true;
+
+	return result;
 }
 
 void AdblockContentFiltersProfile::raiseError(const QString &message, ProfileError error)
@@ -612,7 +619,7 @@ void AdblockContentFiltersProfile::handleJobFinished(bool isSuccess)
 		return;
 	}
 
-	QDir().mkpath(SessionsManager::getWritableDataPath(QLatin1String("contentBlocking")));
+	Utils::ensureDirectoryExists(SessionsManager::getWritableDataPath(QLatin1String("contentBlocking")));
 
 	QSaveFile file(getPath());
 
@@ -753,18 +760,22 @@ ContentFiltersManager::CheckResult AdblockContentFiltersProfile::evaluateNodeRul
 
 	for (int i = 0; i < node->rules.count(); ++i)
 	{
-		if (node->rules.at(i))
-		{
-			ContentFiltersManager::CheckResult currentResult(checkRuleMatch(node->rules.at(i), currentRule, request));
+		Node::Rule *rule(node->rules.at(i));
 
-			if (currentResult.isBlocked)
-			{
-				result = currentResult;
-			}
-			else if (currentResult.isException)
-			{
-				return currentResult;
-			}
+		if (!rule)
+		{
+			continue;
+		}
+
+		ContentFiltersManager::CheckResult currentResult(checkRuleMatch(rule, currentRule, request));
+
+		if (currentResult.isBlocked)
+		{
+			result = currentResult;
+		}
+		else if (currentResult.isException)
+		{
+			return currentResult;
 		}
 	}
 
@@ -797,7 +808,7 @@ AdblockContentFiltersProfile::HeaderInformation AdblockContentFiltersProfile::lo
 		{
 			information.title = line.section(QLatin1Char(':'), 1).trimmed();
 
-			continue;
+			break;
 		}
 
 		if (lineNumber > 50)
@@ -820,7 +831,7 @@ QHash<AdblockContentFiltersProfile::RuleType, quint32> AdblockContentFiltersProf
 
 	while (!stream.atEnd())
 	{
-		const QString line(stream.readLine().simplified());
+		const QString line(stream.readLine().trimmed());
 
 		if (line.isEmpty() || line.startsWith(QLatin1Char('!')))
 		{
@@ -931,7 +942,7 @@ bool AdblockContentFiltersProfile::create(const ContentFiltersProfile::ProfileSu
 
 	if (rulesDevice)
 	{
-		QDir().mkpath(SessionsManager::getWritableDataPath(QLatin1String("contentBlocking")));
+		Utils::ensureDirectoryExists(SessionsManager::getWritableDataPath(QLatin1String("contentBlocking")));
 
 		QFile file(path);
 
@@ -976,7 +987,7 @@ bool AdblockContentFiltersProfile::create(const QUrl &url, bool canOverwriteExis
 
 	if (QMessageBox::question(QApplication::activeWindow(), tr("Question"), tr("Do you want to add content blocking profile from this URL?\n\n%1").arg(url.toString()), QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
 	{
-		return  false;
+		return false;
 	}
 
 	ContentFiltersProfile::ProfileSummary profileSummary;
@@ -995,7 +1006,7 @@ bool AdblockContentFiltersProfile::create(const QUrl &url, bool canOverwriteExis
 
 	if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
 	{
-		QMessageBox::critical(QApplication::activeWindow(), tr("Error"), tr("Failed to create profile file."), QMessageBox::Close);
+		QMessageBox::critical(QApplication::activeWindow(), tr("Error"), tr("Failed to create content blocking profile file."), QMessageBox::Close);
 
 		return false;
 	}
@@ -1006,7 +1017,7 @@ bool AdblockContentFiltersProfile::create(const QUrl &url, bool canOverwriteExis
 
 	if (!result)
 	{
-		QMessageBox::critical(QApplication::activeWindow(), tr("Error"), tr("Failed to create profile file."), QMessageBox::Close);
+		QMessageBox::critical(QApplication::activeWindow(), tr("Error"), tr("Failed to create content blocking profile file."), QMessageBox::Close);
 	}
 
 	file.close();
@@ -1041,7 +1052,7 @@ bool AdblockContentFiltersProfile::loadRules()
 
 	QTextStream stream(&file);
 	stream.setCodec("UTF-8");
-	stream.readLine(); // header
+	stream.readLine(); // skip header
 
 	m_root = new Node();
 

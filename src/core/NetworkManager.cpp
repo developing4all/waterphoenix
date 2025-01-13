@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -66,6 +66,7 @@ NetworkManager::NetworkManager(bool isPrivate, QObject *parent) : QNetworkAccess
 	connect(this, &NetworkManager::authenticationRequired, this, &NetworkManager::handleAuthenticationRequired);
 	connect(this, &NetworkManager::proxyAuthenticationRequired, this, &NetworkManager::handleProxyAuthenticationRequired);
 	connect(this, &NetworkManager::sslErrors, this, &NetworkManager::handleSslErrors);
+#if QT_VERSION < 0x060000
 	connect(NetworkManagerFactory::getInstance(), &NetworkManagerFactory::onlineStateChanged, this, [&](bool isOnline)
 	{
 		if (isOnline)
@@ -73,6 +74,7 @@ NetworkManager::NetworkManager(bool isPrivate, QObject *parent) : QNetworkAccess
 			setNetworkAccessible(QNetworkAccessManager::Accessible);
 		}
 	});
+#endif
 }
 
 void NetworkManager::handleAuthenticationRequired(QNetworkReply *reply, QAuthenticator *authenticator)
@@ -110,16 +112,20 @@ void NetworkManager::handleSslErrors(QNetworkReply *reply, const QList<QSslError
 
 	for (int i = 0; i < errors.count(); ++i)
 	{
-		if (errors.at(i).error() != QSslError::NoError)
+		const QSslError error(errors.at(i));
+
+		if (error.error() == QSslError::NoError)
 		{
-			if (exceptions.contains(QString::fromLatin1(errors.at(i).certificate().digest().toBase64())))
-			{
-				errorsToIgnore.append(errors.at(i));
-			}
-			else
-			{
-				messages.append(errors.at(i).errorString());
-			}
+			continue;
+		}
+
+		if (exceptions.contains(QString::fromLatin1(error.certificate().digest().toBase64())))
+		{
+			errorsToIgnore.append(error);
+		}
+		else
+		{
+			messages.append(error.errorString());
 		}
 	}
 
@@ -155,7 +161,7 @@ QNetworkReply* NetworkManager::createRequest(QNetworkAccessManager::Operation op
 
 	if (operation == PostOperation && mutableRequest.header(QNetworkRequest::ContentTypeHeader).isNull())
 	{
-		mutableRequest.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QLatin1String("application/x-www-form-urlencoded")));
+		mutableRequest.setHeader(QNetworkRequest::ContentTypeHeader, QLatin1String("application/x-www-form-urlencoded"));
 	}
 
 	if (NetworkManagerFactory::isWorkingOffline())
@@ -187,7 +193,7 @@ NetworkManager::ResourceType NetworkManager::getResourceType(const QNetworkReque
 		return SubFrameType;
 	}
 
-	if (acceptHeader.contains(QByteArrayLiteral("image/")) || path.endsWith(QLatin1String(".png")) || path.endsWith(QLatin1String(".jpg")) || path.endsWith(QLatin1String(".gif")))
+	if (acceptHeader.contains(QByteArrayLiteral("image/")) || path.endsWith(QLatin1String(".png")) || path.endsWith(QLatin1String(".jpg")) || path.endsWith(QLatin1String(".jpeg")) || path.endsWith(QLatin1String(".gif")) || path.endsWith(QLatin1String(".webp")))
 	{
 		return ImageType;
 	}

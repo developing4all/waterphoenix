@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include "../../../core/NetworkManagerFactory.h"
 #include "../../../core/SettingsManager.h"
 #include "../../../core/ThemesManager.h"
+#include "../../../core/Utils.h"
 #include "../../../ui/ColorWidget.h"
 #include "../../../ui/OptionWidget.h"
 
@@ -82,9 +83,11 @@ void ConfigurationOptionDelegate::initStyleOption(QStyleOptionViewItem *option, 
 
 				for (int i = 0; i < definition.choices.count(); ++i)
 				{
-					if (definition.choices.at(i).value == value)
+					const SettingsManager::OptionDefinition::Choice choice(definition.choices.at(i));
+
+					if (choice.value == value)
 					{
-						option->icon = definition.choices.at(i).icon;
+						option->icon = choice.icon;
 
 						break;
 					}
@@ -115,21 +118,23 @@ void ConfigurationOptionDelegate::setModelData(QWidget *editor, QAbstractItemMod
 {
 	const OptionWidget *widget(qobject_cast<OptionWidget*>(editor));
 
-	if (widget)
+	if (!widget)
 	{
-		const QModelIndex optionIndex(index.sibling(index.row(), 0));
-
-		if (m_shouldMarkAsModified)
-		{
-			QFont font(optionIndex.data(Qt::FontRole).value<QFont>());
-			font.setBold(widget->getValue() != widget->getDefaultValue());
-
-			model->setData(optionIndex, font, Qt::FontRole);
-		}
-
-		model->setData(optionIndex, true, ConfigurationContentsWidget::IsModifiedRole);
-		model->setData(index, widget->getValue(), Qt::EditRole);
+		return;
 	}
+
+	const QModelIndex optionIndex(index.sibling(index.row(), 0));
+
+	if (m_shouldMarkAsModified)
+	{
+		QFont font(optionIndex.data(Qt::FontRole).value<QFont>());
+		font.setBold(widget->getValue() != widget->getDefaultValue());
+
+		model->setData(optionIndex, font, Qt::FontRole);
+	}
+
+	model->setData(optionIndex, true, ConfigurationContentsWidget::IsModifiedRole);
+	model->setData(index, widget->getValue(), Qt::EditRole);
 }
 
 QWidget* ConfigurationOptionDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const
@@ -162,6 +167,7 @@ ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &para
 	NetworkManagerFactory::initialize();
 
 	const QMetaEnum metaEnum(SettingsManager::getInstance()->metaObject()->enumerator(SettingsManager::getInstance()->metaObject()->indexOfEnumerator(QLatin1String("OptionType").data())));
+	const EnumeratorMapper enumeratorMapper(metaEnum, QLatin1String("Type"));
 	const QStringList options(SettingsManager::getOptions());
 	QStandardItem *groupItem(nullptr);
 	const QString fragment(parameters.value(QLatin1String("url")).toUrl().fragment());
@@ -170,9 +176,8 @@ ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &para
 
 	for (int i = 0; i < options.count(); ++i)
 	{
-		const int identifier(SettingsManager::getOptionIdentifier(options.at(i)));
-		const QStringList option(options.at(i).split(QLatin1Char('/')));
-		const QVariant value(SettingsManager::getOption(identifier));
+		const QString name(options.at(i));
+		const int identifier(SettingsManager::getOptionIdentifier(name));
 		const SettingsManager::OptionDefinition definition(SettingsManager::getOptionDefinition(identifier));
 
 		if (!definition.flags.testFlag(SettingsManager::OptionDefinition::IsEnabledFlag) || !definition.flags.testFlag(SettingsManager::OptionDefinition::IsVisibleFlag))
@@ -180,24 +185,23 @@ ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &para
 			continue;
 		}
 
-		if (!groupItem || groupItem->text() != option.value(0))
+		const QStringList nameParts(name.split(QLatin1Char('/')));
+
+		if (!groupItem || groupItem->text() != nameParts.value(0))
 		{
-			groupItem = new QStandardItem(ThemesManager::createIcon(QLatin1String("inode-directory")), option.value(0));
+			groupItem = new QStandardItem(ThemesManager::createIcon(QLatin1String("inode-directory")), nameParts.value(0));
 
 			m_model->appendRow(groupItem);
 		}
 
-		QString type(metaEnum.valueToKey(definition.type));
-		type.chop(4);
-
-		QList<QStandardItem*> optionItems({new QStandardItem(option.last()), new QStandardItem(type.toLower()), new QStandardItem(QString::number(SettingsManager::getOverridesCount(identifier))), new QStandardItem()});
+		QList<QStandardItem*> optionItems({new QStandardItem(nameParts.last()), new QStandardItem(enumeratorMapper.mapToName(definition.type)), new QStandardItem(QString::number(SettingsManager::getOverridesCount(identifier))), new QStandardItem()});
 		optionItems[0]->setFlags(optionItems[0]->flags() | Qt::ItemNeverHasChildren);
 		optionItems[1]->setFlags(optionItems[1]->flags() | Qt::ItemNeverHasChildren);
 		optionItems[2]->setFlags(optionItems[2]->flags() | Qt::ItemNeverHasChildren);
-		optionItems[3]->setData(value, Qt::EditRole);
+		optionItems[3]->setData(SettingsManager::getOption(identifier), Qt::EditRole);
 		optionItems[3]->setData(QSize(-1, 30), Qt::SizeHintRole);
 		optionItems[3]->setData(identifier, IdentifierRole);
-		optionItems[3]->setData(options.at(i), NameRole);
+		optionItems[3]->setData(name, NameRole);
 		optionItems[3]->setFlags(optionItems[2]->flags() | Qt::ItemNeverHasChildren);
 
 		if (definition.flags.testFlag(SettingsManager::OptionDefinition::RequiresRestartFlag))
@@ -205,7 +209,7 @@ ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &para
 			optionItems[3]->setData(true, RequiresRestartRole);
 		}
 
-		if (value != definition.defaultValue)
+		if (!SettingsManager::isDefault(identifier))
 		{
 			QFont font(optionItems[0]->font());
 			font.setBold(true);
@@ -220,7 +224,7 @@ ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &para
 
 		groupItem->appendRow(optionItems);
 
-		if (!fragment.isEmpty() && fragment == options.at(i))
+		if (!selectedIndex.isValid() && !fragment.isEmpty() && fragment == name)
 		{
 			selectedIndex = optionItems[0]->index();
 		}
@@ -380,31 +384,33 @@ void ConfigurationContentsWidget::saveAll(bool reset)
 			const QModelIndex optionIndex(m_model->index(j, 0, groupIndex));
 			const bool isModified(optionIndex.data(IsModifiedRole).toBool());
 
-			if (reset || isModified)
+			if (!reset && !isModified)
 			{
-				const QModelIndex valueIndex(m_model->index(j, 3, groupIndex));
-				const int identifier(valueIndex.data(IdentifierRole).toInt());
-				const QVariant defaultValue(SettingsManager::getOptionDefinition(identifier).defaultValue);
+				continue;
+			}
 
-				if (reset && identifier != SettingsManager::Browser_MigrationsOption && valueIndex.data(Qt::EditRole) != defaultValue)
-				{
-					SettingsManager::setOption(identifier, defaultValue);
+			const QModelIndex valueIndex(m_model->index(j, 3, groupIndex));
+			const int identifier(valueIndex.data(IdentifierRole).toInt());
+			const QVariant defaultValue(SettingsManager::getOptionDefinition(identifier).defaultValue);
 
-					QFont font(optionIndex.data(Qt::FontRole).isNull() ? m_ui->configurationViewWidget->font() : optionIndex.data(Qt::FontRole).value<QFont>());
-					font.setBold(false);
+			if (reset && identifier != SettingsManager::Browser_MigrationsOption && valueIndex.data(Qt::EditRole) != defaultValue)
+			{
+				SettingsManager::setOption(identifier, defaultValue);
 
-					m_model->setData(optionIndex, font, Qt::FontRole);
-					m_model->setData(valueIndex, defaultValue, Qt::EditRole);
-				}
-				else if (!reset && isModified)
-				{
-					SettingsManager::setOption(identifier, valueIndex.data(Qt::EditRole));
-				}
+				QFont font(optionIndex.data(Qt::FontRole).isNull() ? m_ui->configurationViewWidget->font() : optionIndex.data(Qt::FontRole).value<QFont>());
+				font.setBold(false);
 
-				if (isModified)
-				{
-					m_model->setData(optionIndex, false, IsModifiedRole);
-				}
+				m_model->setData(optionIndex, font, Qt::FontRole);
+				m_model->setData(valueIndex, defaultValue, Qt::EditRole);
+			}
+			else if (!reset && isModified)
+			{
+				SettingsManager::setOption(identifier, valueIndex.data(Qt::EditRole));
+			}
+
+			if (isModified)
+			{
+				m_model->setData(optionIndex, false, IsModifiedRole);
 			}
 		}
 	}
@@ -424,41 +430,31 @@ void ConfigurationContentsWidget::saveAll(bool reset)
 
 void ConfigurationContentsWidget::handleOptionChanged(int identifier, const QVariant &value)
 {
-	const QString name(SettingsManager::getOptionName(identifier));
-	const QString group(name.mid(0, name.indexOf(QLatin1Char('/'))));
+	const QModelIndex groupIndex(findGroup(identifier));
+	const int optionAmount(m_model->rowCount(groupIndex));
 	const bool wasModified(m_ui->configurationViewWidget->isModified());
 
-	for (int i = 0; i < m_model->rowCount(); ++i)
+	for (int i = 0; i < optionAmount; ++i)
 	{
-		const QModelIndex groupIndex(m_model->index(i, 0));
+		const QModelIndex valueIndex(m_model->index(i, 3, groupIndex));
 
-		if (groupIndex.data(Qt::DisplayRole).toString() != group)
+		if (valueIndex.data(IdentifierRole).toInt() != identifier)
 		{
 			continue;
 		}
 
-		const int optionAmount(m_model->rowCount(groupIndex));
+		const QModelIndex optionIndex(m_model->index(i, 0, groupIndex));
 
-		for (int j = 0; j < optionAmount; ++j)
+		if (!optionIndex.data(IsModifiedRole).toBool())
 		{
-			const QModelIndex valueIndex(m_model->index(j, 3, groupIndex));
+			QFont font(optionIndex.data(Qt::FontRole).isNull() ? m_ui->configurationViewWidget->font() : optionIndex.data(Qt::FontRole).value<QFont>());
+			font.setBold(!SettingsManager::isDefault(identifier));
 
-			if (valueIndex.data(IdentifierRole).toInt() == identifier)
-			{
-				const QModelIndex optionIndex(m_model->index(j, 0, groupIndex));
-
-				if (!optionIndex.data(IsModifiedRole).toBool())
-				{
-					QFont font(optionIndex.data(Qt::FontRole).isNull() ? m_ui->configurationViewWidget->font() : optionIndex.data(Qt::FontRole).value<QFont>());
-					font.setBold(value != SettingsManager::getOptionDefinition(identifier).defaultValue);
-
-					m_model->setData(optionIndex, font, Qt::FontRole);
-					m_model->setData(valueIndex, value, Qt::EditRole);
-				}
-
-				break;
-			}
+			m_model->setData(optionIndex, font, Qt::FontRole);
+			m_model->setData(valueIndex, value, Qt::EditRole);
 		}
+
+		break;
 	}
 
 	if (!wasModified)
@@ -471,35 +467,23 @@ void ConfigurationContentsWidget::handleOptionChanged(int identifier, const QVar
 
 void ConfigurationContentsWidget::handleHostOptionChanged(int identifier)
 {
-	const QString name(SettingsManager::getOptionName(identifier));
-	const QString group(name.mid(0, name.indexOf(QLatin1Char('/'))));
-	const bool isModified(m_ui->configurationViewWidget->isModified());
+	const QModelIndex groupIndex(findGroup(identifier));
+	const int optionAmount(m_model->rowCount(groupIndex));
+	const bool wasModified(m_ui->configurationViewWidget->isModified());
 
-	for (int i = 0; i < m_model->rowCount(); ++i)
+	for (int i = 0; i < optionAmount; ++i)
 	{
-		const QModelIndex groupIndex(m_model->index(i, 0));
+		const QModelIndex valueIndex(m_model->index(i, 3, groupIndex));
 
-		if (groupIndex.data(Qt::DisplayRole).toString() != group)
+		if (valueIndex.data(IdentifierRole).toInt() == identifier)
 		{
-			continue;
-		}
+			m_model->setData(m_model->index(i, 2, groupIndex), QString::number(SettingsManager::getOverridesCount(identifier)), Qt::DisplayRole);
 
-		const int optionAmount(m_model->rowCount(groupIndex));
-
-		for (int j = 0; j < optionAmount; ++j)
-		{
-			const QModelIndex valueIndex(m_model->index(j, 3, groupIndex));
-
-			if (valueIndex.data(IdentifierRole).toInt() == identifier)
-			{
-				m_model->setData(m_model->index(j, 2, groupIndex), QString::number(SettingsManager::getOverridesCount(identifier)), Qt::DisplayRole);
-
-				break;
-			}
+			break;
 		}
 	}
 
-	if (!isModified)
+	if (!wasModified)
 	{
 		m_ui->configurationViewWidget->setModified(false);
 	}
@@ -518,14 +502,14 @@ void ConfigurationContentsWidget::showContextMenu(const QPoint &position)
 		{
 			if (valueIndex.isValid())
 			{
-				QApplication::clipboard()->setText(valueIndex.data(NameRole).toString());
+				QGuiApplication::clipboard()->setText(valueIndex.data(NameRole).toString());
 			}
 		});
 		menu.addAction(tr("Copy Option Value"), this, [&]()
 		{
 			if (valueIndex.isValid())
 			{
-				QApplication::clipboard()->setText(valueIndex.data(Qt::EditRole).toString());
+				QGuiApplication::clipboard()->setText(valueIndex.data(Qt::EditRole).toString());
 			}
 		});
 		menu.addSeparator();
@@ -538,7 +522,7 @@ void ConfigurationContentsWidget::showContextMenu(const QPoint &position)
 		});
 		menu.addSeparator();
 		menu.addAction(tr("Save Value"), this, &ConfigurationContentsWidget::saveOption)->setEnabled(index.sibling(index.row(), 0).data(IsModifiedRole).toBool());
-		menu.addAction(tr("Restore Default Value"), this, &ConfigurationContentsWidget::resetOption)->setEnabled(index.sibling(index.row(), 3).data(Qt::EditRole) != SettingsManager::getOptionDefinition(index.sibling(index.row(), 3).data(IdentifierRole).toInt()).defaultValue);
+		menu.addAction(tr("Restore Default Value"), this, &ConfigurationContentsWidget::resetOption)->setEnabled(!SettingsManager::isDefault(index.sibling(index.row(), 3).data(IdentifierRole).toInt()));
 		menu.addSeparator();
 	}
 
@@ -586,18 +570,35 @@ QIcon ConfigurationContentsWidget::getIcon() const
 	return ThemesManager::createIcon(QLatin1String("configuration"), false);
 }
 
-bool ConfigurationContentsWidget::canClose()
+QModelIndex ConfigurationContentsWidget::findGroup(int identifier) const
 {
-	const int result(QMessageBox::question(this, tr("Question"), tr("The settings have been changed.\nDo you want to save them?"), QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel));
+	const QString group(SettingsManager::getOptionName(identifier).section(QLatin1Char('/'), 0, 0));
 
-	if (result == QMessageBox::Cancel)
+	for (int i = 0; i < m_model->rowCount(); ++i)
 	{
-		return false;
+		const QModelIndex groupIndex(m_model->index(i, 0));
+
+		if (groupIndex.data(Qt::DisplayRole).toString() == group)
+		{
+			return groupIndex;
+		}
 	}
 
-	if (result == QMessageBox::Yes)
+	return {};
+}
+
+bool ConfigurationContentsWidget::canClose()
+{
+	switch (QMessageBox::question(this, tr("Question"), tr("The settings have been changed.\nDo you want to save them?"), QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel))
 	{
-		saveAll(false);
+		case QMessageBox::Cancel:
+			return false;
+		case QMessageBox::Yes:
+			saveAll(false);
+
+			break;
+		default:
+			break;
 	}
 
 	return true;

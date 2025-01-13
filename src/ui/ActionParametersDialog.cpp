@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2021 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 #include "ActionParametersDialog.h"
 #include "../core/ActionsManager.h"
 
+#include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
 
 #include "ui_ActionParametersDialog.h"
@@ -51,11 +52,37 @@ ActionParametersDialog::ActionParametersDialog(int action, const QVariantMap &pa
 
 	QMenu *menu(new QMenu(m_ui->addButton));
 	menu->addAction(tr("String"))->setData(QVariant::String);
+	menu->addAction(tr("Integer"))->setData(QVariant::Int);
+	menu->addAction(tr("Boolean"))->setData(QVariant::Bool);
 	menu->addAction(tr("Map"))->setData(QVariant::Map);
 	menu->addAction(tr("List"))->setData(QVariant::List);
 
 	m_ui->addButton->setMenu(menu);
 
+	connect(menu, &QMenu::triggered, this, [&](QAction *action)
+	{
+		if (!action)
+		{
+			return;
+		}
+
+		const QString key(QInputDialog::getText(this, tr("Select Key Name"), tr("Enter key name:")));
+
+		if (key.isEmpty())
+		{
+			return;
+		}
+
+		const QModelIndex currentIndex(m_ui->parametersViewWidget->getCurrentIndex());
+		QModelIndex parentIndex(currentIndex);
+
+		if (currentIndex.sibling(currentIndex.row(), 1).data().toString() != QLatin1String("Map"))
+		{
+			parentIndex = currentIndex.parent();
+		}
+
+		addItem(key, action->data(), m_ui->parametersViewWidget->getSourceModel()->itemFromIndex(parentIndex));
+	});
 	connect(m_ui->filterLineEditWidget, &QLineEdit::textChanged, m_ui->parametersViewWidget, &ItemViewWidget::setFilterString);
 	connect(m_ui->parametersViewWidget, &ItemViewWidget::needsActionsUpdate, this, [&]()
 	{
@@ -84,7 +111,9 @@ void ActionParametersDialog::changeEvent(QEvent *event)
 QStandardItem* ActionParametersDialog::addItem(const QString &key, const QVariant &value, QStandardItem *parent)
 {
 	QList<QStandardItem*> items({new QStandardItem(key), new QStandardItem(), new QStandardItem()});
-	items[1]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+	items[0]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+	items[1]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
+	items[2]->setFlags(items[2]->flags() | Qt::ItemNeverHasChildren);
 
 	switch (value.type())
 	{
@@ -93,11 +122,9 @@ QStandardItem* ActionParametersDialog::addItem(const QString &key, const QVarian
 			{
 				const QStringList list(value.toStringList());
 
-				items[0]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
 				items[1]->setText(tr("List"));
 				items[2]->setText(list.join(QLatin1String(", ")));
 				items[2]->setData(list, Qt::UserRole);
-				items[2]->setFlags(items[2]->flags() | Qt::ItemNeverHasChildren);
 			}
 
 			break;
@@ -118,10 +145,26 @@ QStandardItem* ActionParametersDialog::addItem(const QString &key, const QVarian
 
 			break;
 		default:
-			items[0]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
-			items[1]->setText(tr("String"));
-			items[2]->setText(value.toString());
-			items[2]->setFlags(items[2]->flags() | Qt::ItemNeverHasChildren);
+			{
+				QString text(tr("String"));
+
+				switch (value.type())
+				{
+					case QVariant::Int:
+						text = tr("Integer");
+
+						break;
+					case QVariant::Bool:
+						text = tr("Bolean");
+
+						break;
+					default:
+						break;
+				}
+
+				items[1]->setText(text);
+				items[2]->setText(value.toString());
+			}
 
 			break;
 	}
@@ -138,13 +181,30 @@ QStandardItem* ActionParametersDialog::addItem(const QString &key, const QVarian
 	return items[0];
 }
 
+QVariantMap ActionParametersDialog::getMap(const QModelIndex &parent) const
+{
+	QVariantMap map;
+
+	for (int i = 0; i < m_ui->parametersViewWidget->getRowCount(parent); ++i)
+	{
+		const QString key(m_ui->parametersViewWidget->getIndex(i, 0, parent).data().toString());
+
+		if (m_ui->parametersViewWidget->getIndex(i, 1, parent).data().toString() == QLatin1String("Map"))
+		{
+			map[key] = getMap(m_ui->parametersViewWidget->getIndex(i, 0, parent));
+		}
+		else
+		{
+			map[key] = m_ui->parametersViewWidget->getIndex(i, 2, parent).data();
+		}
+	}
+
+	return map;
+}
+
 QVariantMap ActionParametersDialog::getParameters() const
 {
-	QVariantMap parameters;
-
-///TODO
-
-	return parameters;
+	return getMap();
 }
 
 bool ActionParametersDialog::isModified() const

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -86,8 +86,6 @@ protected slots:
 	void editProxy();
 	void updateProxiesActions();
 	void saveProxies(QJsonArray *proxies, const QStandardItem *parent);
-	void addCipher(QAction *action);
-	void removeCipher();
 	void updateCiphersActions();
 	void updateUpdateChannelsActions();
 	void addMouseProfile();

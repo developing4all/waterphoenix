@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -71,7 +71,8 @@ void ProxiesModel::populateProxies(const QStringList &proxies, QStandardItem *pa
 {
 	for (int i = 0; i < proxies.count(); ++i)
 	{
-		const ProxyDefinition proxy(proxies.at(i).isEmpty() ? ProxyDefinition() : NetworkManagerFactory::getProxy(proxies.at(i)));
+		const QString identifier(proxies.at(i));
+		const ProxyDefinition proxy(identifier.isEmpty() ? ProxyDefinition() : NetworkManagerFactory::getProxy(identifier));
 		ItemType type(EntryType);
 		QStandardItem *item(new QStandardItem(proxy.isValid() ? proxy.getTitle() : QString()));
 		item->setData(item->data(Qt::DisplayRole), Qt::ToolTipRole);
@@ -96,7 +97,7 @@ void ProxiesModel::populateProxies(const QStringList &proxies, QStandardItem *pa
 		}
 		else
 		{
-			if (proxies.at(i).isEmpty())
+			if (identifier.isEmpty())
 			{
 				type = SeparatorType;
 
@@ -107,7 +108,7 @@ void ProxiesModel::populateProxies(const QStringList &proxies, QStandardItem *pa
 			}
 			else
 			{
-				item->setData(proxies.at(i), IdentifierRole);
+				item->setData(identifier, IdentifierRole);
 
 				if (m_isEditor)
 				{
@@ -142,7 +143,8 @@ void UserAgentsModel::populateUserAgents(const QStringList &userAgents, QStandar
 {
 	for (int i = 0; i < userAgents.count(); ++i)
 	{
-		const UserAgentDefinition userAgent(userAgents.at(i).isEmpty() ? UserAgentDefinition() : NetworkManagerFactory::getUserAgent(userAgents.at(i)));
+		const QString identifier(userAgents.at(i));
+		const UserAgentDefinition userAgent(identifier.isEmpty() ? UserAgentDefinition() : NetworkManagerFactory::getUserAgent(identifier));
 		ItemType type(EntryType);
 		QList<QStandardItem*> items({new QStandardItem(userAgent.isValid() ? userAgent.getTitle() : QString())});
 		items[0]->setData(items[0]->data(Qt::DisplayRole), Qt::ToolTipRole);
@@ -168,7 +170,7 @@ void UserAgentsModel::populateUserAgents(const QStringList &userAgents, QStandar
 		}
 		else
 		{
-			if (userAgents.at(i).isEmpty())
+			if (identifier.isEmpty())
 			{
 				type = SeparatorType;
 
@@ -179,7 +181,7 @@ void UserAgentsModel::populateUserAgents(const QStringList &userAgents, QStandar
 			}
 			else
 			{
-				items[0]->setData(userAgents.at(i), IdentifierRole);
+				items[0]->setData(identifier, IdentifierRole);
 				items[0]->setData(userAgent.value, UserAgentRole);
 
 				if (m_isEditor)
@@ -212,19 +214,19 @@ NetworkManagerFactory::NetworkManagerFactory(QObject *parent) : QObject(parent)
 
 	for (int i = 0; i < paths.count(); ++i)
 	{
-		if (QFile::exists(paths.at(i)))
+		const QString path(paths.at(i));
+
+		if (QFile::exists(path))
 		{
-#if QT_VERSION >= 0x050F00
-			configuration.addCaCertificates(QDir(paths.at(i)).filePath(QLatin1String("*")), QSsl::Pem, QSslCertificate::PatternSyntax::Wildcard);
-#else
-			QSslSocket::addDefaultCaCertificates(QDir(paths.at(i)).filePath(QLatin1String("*")), QSsl::Pem, QRegExp::Wildcard);
-#endif
+			configuration.addCaCertificates(QDir(path).filePath(QLatin1String("*")), QSsl::Pem, QSslCertificate::PatternSyntax::Wildcard);
 		}
 	}
 
 	QSslConfiguration::setDefaultConfiguration(configuration);
 
+#if QT_VERSION < 0x060000
 	connect(new QNetworkConfigurationManager(this), &QNetworkConfigurationManager::onlineStateChanged, this, &NetworkManagerFactory::onlineStateChanged);
+#endif
 }
 
 void NetworkManagerFactory::createInstance()
@@ -252,7 +254,9 @@ void NetworkManagerFactory::initialize()
 
 	for (int i = (m_defaultCiphers.count() - 1); i >= 0; --i)
 	{
-		if (m_defaultCiphers.at(i).isNull() || (m_defaultCiphers.at(i).keyExchangeMethod() == QLatin1String("DH") && m_defaultCiphers.at(i).supportedBits() < 1024) || m_defaultCiphers.at(i).supportedBits() < 128 || m_defaultCiphers.at(i).authenticationMethod() == QLatin1String("PSK") || m_defaultCiphers.at(i).authenticationMethod() == QLatin1String("EXP") || m_defaultCiphers.at(i).authenticationMethod() == QLatin1String("nullptr") || m_defaultCiphers.at(i).encryptionMethod().startsWith(QLatin1String("RC4(")) || m_defaultCiphers.at(i).authenticationMethod() == QLatin1String("ADH"))
+		const QSslCipher cipher(m_defaultCiphers.at(i));
+
+		if (cipher.isNull() || cipher.supportedBits() < 128 || (cipher.keyExchangeMethod() == QLatin1String("DH") && cipher.supportedBits() < 1024) || cipher.authenticationMethod() == QLatin1String("PSK") || cipher.authenticationMethod() == QLatin1String("EXP") || cipher.authenticationMethod() == QLatin1String("nullptr") || cipher.encryptionMethod().startsWith(QLatin1String("RC4(")) || cipher.authenticationMethod() == QLatin1String("ADH"))
 		{
 			m_defaultCiphers.removeAt(i);
 		}
@@ -302,12 +306,12 @@ void NetworkManagerFactory::loadProxies()
 		return;
 	}
 
-	const QJsonArray proxies(QJsonDocument::fromJson(file.readAll()).array());
+	const QJsonArray proxiesArray(QJsonDocument::fromJson(file.readAll()).array());
 	ProxyDefinition root;
 
-	for (int i = 0; i < proxies.count(); ++i)
+	for (int i = 0; i < proxiesArray.count(); ++i)
 	{
-		readProxy(proxies.at(i), &root);
+		readProxy(proxiesArray.at(i), &root);
 	}
 
 	file.close();
@@ -330,12 +334,12 @@ void NetworkManagerFactory::loadUserAgents()
 		return;
 	}
 
-	const QJsonArray userAgents(QJsonDocument::fromJson(file.readAll()).array());
+	const QJsonArray userAgentsArray(QJsonDocument::fromJson(file.readAll()).array());
 	UserAgentDefinition root;
 
-	for (int i = 0; i < userAgents.count(); ++i)
+	for (int i = 0; i < userAgentsArray.count(); ++i)
 	{
-		readUserAgent(userAgents.at(i), &root);
+		readUserAgent(userAgentsArray.at(i), &root);
 	}
 
 	file.close();
@@ -582,9 +586,11 @@ void NetworkManagerFactory::updateProxiesOption()
 
 	for (iterator = m_proxies.begin(); iterator != m_proxies.end(); ++iterator)
 	{
-		if (!iterator.value().isFolder && !iterator.value().identifier.isEmpty())
+		const ProxyDefinition proxy(iterator.value());
+
+		if (!proxy.isFolder && !proxy.identifier.isEmpty())
 		{
-			proxiesOption.choices.append({iterator.value().getTitle(), iterator.value().identifier, {}});
+			proxiesOption.choices.append({proxy.getTitle(), proxy.identifier, {}});
 		}
 	}
 
@@ -603,9 +609,11 @@ void NetworkManagerFactory::updateUserAgentsOption()
 
 	for (iterator = m_userAgents.begin(); iterator != m_userAgents.end(); ++iterator)
 	{
-		if (!iterator.value().isFolder && !iterator.value().identifier.isEmpty() && iterator.value().identifier != QLatin1String("default"))
+		const UserAgentDefinition userAgent(iterator.value());
+
+		if (!userAgent.isFolder && !userAgent.identifier.isEmpty() && userAgent.identifier != QLatin1String("default"))
 		{
-			userAgentsOption.choices.append({iterator.value().getTitle(), iterator.value().identifier, {}});
+			userAgentsOption.choices.append({userAgent.getTitle(), userAgent.identifier, {}});
 		}
 	}
 
@@ -669,7 +677,9 @@ QString NetworkManagerFactory::getAcceptLanguage()
 
 QString NetworkManagerFactory::getUserAgent()
 {
-	return AddonsManager::getWebBackend()->getUserAgent();
+	const WebBackend *webBackend(AddonsManager::getWebBackend());
+
+	return (webBackend ? webBackend->getUserAgent() : QString());
 }
 
 QStringList NetworkManagerFactory::getProxies()

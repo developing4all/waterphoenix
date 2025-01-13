@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -209,10 +209,10 @@ void SearchWidget::changeEvent(QEvent *event)
 	{
 		case QEvent::LanguageChange:
 			{
-				const QString title(SearchEnginesManager::getSearchEngine(m_searchEngine).title);
+				const QString text(tr("Search using %1").arg(SearchEnginesManager::getSearchEngine(m_searchEngine).title));
 
-				setToolTip(tr("Search using %1").arg(title));
-				setPlaceholderText(tr("Search using %1").arg(title));
+				setToolTip(text);
+				setPlaceholderText(text);
 			}
 
 			break;
@@ -242,14 +242,16 @@ void SearchWidget::paintEvent(QPaintEvent *event)
 		style()->drawPrimitive(QStyle::PE_IndicatorArrowDown, &dropdownArrowOption, &painter, this);
 	}
 
+	const QIcon::Mode iconMode(isEnabled() ? QIcon::Active : QIcon::Disabled);
+
 	if (m_addButtonRectangle.isValid())
 	{
-		painter.drawPixmap(m_addButtonRectangle, ThemesManager::createIcon(QLatin1String("list-add")).pixmap(m_addButtonRectangle.size(), (isEnabled() ? QIcon::Active : QIcon::Disabled)));
+		painter.drawPixmap(m_addButtonRectangle, ThemesManager::createIcon(QLatin1String("list-add")).pixmap(m_addButtonRectangle.size(), iconMode));
 	}
 
 	if (m_searchButtonRectangle.isValid())
 	{
-		painter.drawPixmap(m_searchButtonRectangle, ThemesManager::createIcon(QLatin1String("edit-find")).pixmap(m_searchButtonRectangle.size(), (isEnabled() ? QIcon::Active : QIcon::Disabled)));
+		painter.drawPixmap(m_searchButtonRectangle, ThemesManager::createIcon(QLatin1String("edit-find")).pixmap(m_searchButtonRectangle.size(), iconMode));
 	}
 }
 
@@ -709,16 +711,11 @@ void SearchWidget::setSearchEngine(const QModelIndex &index, bool canSendRequest
 void SearchWidget::setOptions(const QVariantMap &options)
 {
 	m_options = options;
+	m_isSearchEngineLocked = m_options.contains(QLatin1String("searchEngine"));
 
-	if (m_options.contains(QLatin1String("searchEngine")))
+	if (m_isSearchEngineLocked)
 	{
-		m_isSearchEngineLocked = true;
-
 		setSearchEngine(m_options[QLatin1String("searchEngine")].toString());
-	}
-	else
-	{
-		m_isSearchEngineLocked = false;
 	}
 
 	resize(size());

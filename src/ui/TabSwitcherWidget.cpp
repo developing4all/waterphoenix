@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,12 +20,14 @@
 #include "TabSwitcherWidget.h"
 #include "Animation.h"
 #include "MainWindow.h"
+#include "Style.h"
 #include "Window.h"
 #include "../core/Application.h"
 #include "../core/SessionModel.h"
 #include "../core/ThemesManager.h"
 
 #include <QtGui/QKeyEvent>
+#include <QtGui/QPainter>
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QHeaderView>
@@ -71,7 +73,15 @@ TabSwitcherWidget::TabSwitcherWidget(MainWindow *parent) : QWidget(parent),
 	m_previewLabel->setAlignment(Qt::AlignCenter);
 	m_previewLabel->setStyleSheet(QLatin1String("border:1px solid gray;"));
 
-	connect(m_tabsView, &ItemViewWidget::clicked, this, &TabSwitcherWidget::handleIndexClicked);
+	connect(m_tabsView, &ItemViewWidget::clicked, this, [&](const QModelIndex &index)
+	{
+		if (index.isValid())
+		{
+			m_mainWindow->setActiveWindowByIdentifier(index.data(IdentifierRole).toULongLong());
+
+			hide();
+		}
+	});
 	connect(m_tabsView->selectionModel(), &QItemSelectionModel::currentChanged, this, &TabSwitcherWidget::handleCurrentTabChanged);
 }
 
@@ -179,16 +189,6 @@ void TabSwitcherWidget::selectTab(bool next)
 	m_tabsView->setCurrentIndex(m_model->index((next ? ((currentRow == (m_model->rowCount() - 1)) ? 0 : (currentRow + 1)) : ((currentRow == 0) ? (m_model->rowCount() - 1) : (currentRow - 1))), 0));
 }
 
-void TabSwitcherWidget::handleIndexClicked(const QModelIndex &index)
-{
-	if (index.isValid())
-	{
-		m_mainWindow->setActiveWindowByIdentifier(index.data(IdentifierRole).toULongLong());
-
-		hide();
-	}
-}
-
 void TabSwitcherWidget::handleCurrentTabChanged(const QModelIndex &index)
 {
 	const Window *window(m_mainWindow->getWindowByIdentifier(index.data(IdentifierRole).toULongLong()));
@@ -201,20 +201,13 @@ void TabSwitcherWidget::handleCurrentTabChanged(const QModelIndex &index)
 		return;
 	}
 
-	if (window->getLoadingState() == WebWidget::DeferredLoadingState || window->getLoadingState() == WebWidget::OngoingLoadingState)
+	const WebWidget::LoadingState loadingState(window->getLoadingState());
+
+	if (loadingState == WebWidget::DeferredLoadingState || loadingState == WebWidget::OngoingLoadingState)
 	{
 		if (!m_spinnerAnimation)
 		{
-			const QString path(ThemesManager::getAnimationPath(QLatin1String("spinner")));
-
-			if (path.isEmpty())
-			{
-				m_spinnerAnimation = new SpinnerAnimation(this);
-			}
-			else
-			{
-				m_spinnerAnimation = new GenericAnimation(path, this);
-			}
+			m_spinnerAnimation = ThemesManager::createAnimation(QLatin1String("spinner"), this);
 
 			connect(m_spinnerAnimation, &Animation::frameChanged, m_previewLabel, [&]()
 			{
@@ -233,7 +226,31 @@ void TabSwitcherWidget::handleCurrentTabChanged(const QModelIndex &index)
 			m_spinnerAnimation->stop();
 		}
 
-		m_previewLabel->setPixmap((window->getLoadingState() == WebWidget::CrashedLoadingState) ? ThemesManager::createIcon(QLatin1String("tab-crashed")).pixmap(32, 32) : window->createThumbnail());
+		QPixmap pixmap;
+
+		if (loadingState != WebWidget::CrashedLoadingState)
+		{
+			pixmap = window->createThumbnail();
+		}
+
+		if (pixmap.isNull())
+		{
+			pixmap = QPixmap(32, 32);
+			pixmap.setDevicePixelRatio(devicePixelRatio());
+			pixmap.fill(Qt::transparent);
+
+			QRect rectangle(0, 0, 32, 32);
+			QPainter painter(&pixmap);
+
+			window->getIcon().paint(&painter, rectangle);
+
+			if (loadingState == WebWidget::CrashedLoadingState)
+			{
+				ThemesManager::getStyle()->drawIconOverlay(rectangle, ThemesManager::createIcon(QLatin1String("emblem-crashed")), &painter);
+			}
+		}
+
+		m_previewLabel->setPixmap(pixmap);
 	}
 }
 

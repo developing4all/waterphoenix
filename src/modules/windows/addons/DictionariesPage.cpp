@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2022 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2022 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,9 @@
 
 namespace Otter
 {
+///TODO
+/// allow to disable dictionaries
+/// connect to dictionaries changed signal
 
 DictionariesPage::DictionariesPage(bool needsDetails, QWidget *parent) : AddonsPage(needsDetails, parent)
 {
@@ -88,7 +91,6 @@ void DictionariesPage::addAddon()
 
 	QString language;
 	bool hasAff(false);
-	bool hasDic(false);
 
 	for (int i = 0; i < sourcePaths.count(); ++i)
 	{
@@ -102,11 +104,10 @@ void DictionariesPage::addAddon()
 		else if (suffix == QLatin1String("dic"))
 		{
 			language = fileInformation.baseName();
-			hasDic = true;
 		}
 	}
 
-	if (hasAff && hasDic)
+	if (hasAff && !language.isEmpty())
 	{
 		SpellCheckManager::DictionaryInformation dictionary;
 		dictionary.language = language;
@@ -196,14 +197,11 @@ void DictionariesPage::save()
 	const QString dictionariesPath(SpellCheckManager::getDictionariesPath());
 	const QDir dictionariesDirectory(dictionariesPath);
 
-	QDir().mkpath(dictionariesPath);
-
-	for (int i = 0; i < m_filesToRemove.count(); ++i)
-	{
-		QFile::remove(m_filesToRemove.at(i));
-	}
+	Utils::removeFiles(m_filesToRemove);
 
 	m_filesToRemove.clear();
+
+	Utils::ensureDirectoryExists(dictionariesPath);
 
 	for (int i = 0; i < m_dictionariesToAdd.count(); ++i)
 	{

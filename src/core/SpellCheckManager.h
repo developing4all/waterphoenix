@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -39,16 +39,20 @@ public:
 
 		bool isValid()
 		{
-			return !language.isEmpty();
+			return (!language.isEmpty() && !paths.isEmpty());
 		}
 	};
 
 	static void createInstance();
+	static void addIgnoredWord(const QString &word);
+	static void removeIgnoredWord(const QString &word);
 	static SpellCheckManager* getInstance();
 	static QString getDefaultDictionary();
 	static QString getDictionariesPath();
 	static DictionaryInformation getDictionary(const QString &language);
 	static QVector<DictionaryInformation> getDictionaries();
+	static QStringList getIgnoredWords();
+	static bool isIgnoringWord(const QString &word);
 	bool event(QEvent *event) override;
 
 protected:
@@ -56,14 +60,18 @@ protected:
 
 	static void updateDefaultDictionary();
 	static void loadDictionaries();
+	static void saveIgnoredWords();
 
 private:
 	static SpellCheckManager *m_instance;
 	static QString m_defaultDictionary;
 	static QVector<DictionaryInformation> m_dictionaries;
+	static QSet<QString> m_ignoredWords;
 
 signals:
 	void dictionariesChanged();
+	void ignoredWordAdded(const QString &word);
+	void ignoredWordRemoved(const QString &word);
 };
 
 class Dictionary final : public QObject, public Addon

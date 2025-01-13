@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -134,13 +134,13 @@ void MarginWidget::mouseReleaseEvent(QMouseEvent *event)
 
 void MarginWidget::updateNumbers(const QRect &rectangle, int offset)
 {
-	if (offset)
+	if (offset == 0)
 	{
-		scroll(0, offset);
+		update(0, rectangle.y(), width(), rectangle.height());
 	}
 	else
 	{
-		update(0, rectangle.y(), width(), rectangle.height());
+		scroll(0, offset);
 	}
 }
 
@@ -156,7 +156,7 @@ void MarginWidget::updateWidth()
 		++digits;
 	}
 
-	setFixedWidth((Utils::calculateCharacterWidth(QLatin1Char('9'), fontMetrics()) * digits) + 8);
+	setFixedWidth((fontMetrics().horizontalAdvance(QLatin1Char('9')) * digits) + 8);
 
 	if (isRightToLeft())
 	{
@@ -417,23 +417,25 @@ void SourceEditWidget::updateSelection()
 		{
 			textCursor = document()->find(m_findText, textCursor, nativeFlags);
 
-			if (!textCursor.isNull())
+			if (textCursor.isNull())
 			{
-				if (textCursor == m_findTextSelection)
-				{
-					findTextActiveResult = (findTextMatchesAmount + 1);
-				}
-				else
-				{
-					QTextEdit::ExtraSelection extraResultSelection;
-					extraResultSelection.format.setBackground(QColor(255, 255, 0));
-					extraResultSelection.cursor = textCursor;
-
-					extraSelections.append(extraResultSelection);
-				}
-
-				++findTextMatchesAmount;
+				break;
 			}
+
+			if (textCursor == m_findTextSelection)
+			{
+				findTextActiveResult = (findTextMatchesAmount + 1);
+			}
+			else
+			{
+				QTextEdit::ExtraSelection extraResultSelection;
+				extraResultSelection.format.setBackground(QColor(255, 255, 0));
+				extraResultSelection.cursor = textCursor;
+
+				extraSelections.append(extraResultSelection);
+			}
+
+			++findTextMatchesAmount;
 		}
 	}
 
@@ -459,21 +461,23 @@ void SourceEditWidget::setSyntax(SyntaxHighlighter::HighlightingSyntax syntax)
 
 void SourceEditWidget::setZoom(int zoom)
 {
-	if (zoom != m_zoom)
+	if (zoom == m_zoom)
 	{
-		m_zoom = zoom;
-
-		const QFont font(Utils::multiplyFontSize(QFontDatabase::systemFont(QFontDatabase::FixedFont), (static_cast<qreal>(zoom) / 100)));
-
-		setFont(font);
-
-		if (m_marginWidget)
-		{
-			m_marginWidget->setFont(font);
-		}
-
-		emit zoomChanged(zoom);
+		return;
 	}
+
+	m_zoom = zoom;
+
+	const QFont font(Utils::multiplyFontSize(QFontDatabase::systemFont(QFontDatabase::FixedFont), (static_cast<qreal>(zoom) / 100)));
+
+	setFont(font);
+
+	if (m_marginWidget)
+	{
+		m_marginWidget->setFont(font);
+	}
+
+	emit zoomChanged(zoom);
 }
 
 ActionsManager::ActionDefinition::State SourceEditWidget::getActionState(int identifier, const QVariantMap &parameters) const
@@ -496,7 +500,14 @@ QRect SourceEditWidget::getMarginGeometry() const
 		return {};
 	}
 
-	return {(isRightToLeft() ? (contentsRect().right() - m_marginWidget->width()) : contentsRect().left()), contentsRect().top(), m_marginWidget->width(), contentsRect().height()};
+	QRect geometry({contentsRect().left(), contentsRect().top(), m_marginWidget->width(), contentsRect().height()});
+
+	if (isRightToLeft())
+	{
+		geometry.setX(contentsRect().right() - m_marginWidget->width());
+	}
+
+	return geometry;
 }
 
 int SourceEditWidget::getInitialRevision() const

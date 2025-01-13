@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -69,11 +69,11 @@ MouseProfile::Gesture::Step::Step(const QInputEvent *event) : type(event->type()
 
 				if (qAbs(delta.x()) > qAbs(delta.y()))
 				{
-					direction = (delta.x() > 0) ? MouseGestures::MoveRightMouseAction : MouseGestures::MoveLeftMouseAction;
+					direction = ((delta.x() > 0) ? MouseGestures::MoveRightMouseAction : MouseGestures::MoveLeftMouseAction);
 				}
 				else if (qAbs(delta.y()) > 0)
 				{
-					direction = (delta.y() > 0) ? MouseGestures::MoveUpMouseAction : MouseGestures::MoveDownMouseAction;
+					direction = ((delta.y() > 0) ? MouseGestures::MoveUpMouseAction : MouseGestures::MoveDownMouseAction);
 				}
 			}
 
@@ -293,7 +293,7 @@ MouseProfile::Gesture::Step MouseProfile::Gesture::Step::fromString(const QStrin
 		{
 			const int number(QRegularExpression(QLatin1String("Extra(\\d{1,2})$")).match(event).captured(1).toInt());
 
-			if (1 <= number && number <= 24)
+			if (number > 0 && number < 25)
 			{
 				step.button = static_cast<Qt::MouseButton>(Qt::ExtraButton1 << (number - 1));
 			}
@@ -302,19 +302,21 @@ MouseProfile::Gesture::Step MouseProfile::Gesture::Step::fromString(const QStrin
 
 	for (int i = 1; i < parts.count(); ++i)
 	{
-		if (parts.at(i) == QLatin1String("shift"))
+		const QString part(parts.at(i));
+
+		if (part == QLatin1String("shift"))
 		{
 			step.modifiers |= Qt::ShiftModifier;
 		}
-		else if (parts.at(i) == QLatin1String("ctrl"))
+		else if (part == QLatin1String("ctrl"))
 		{
 			step.modifiers |= Qt::ControlModifier;
 		}
-		else if (parts.at(i) == QLatin1String("alt"))
+		else if (part == QLatin1String("alt"))
 		{
 			step.modifiers |= Qt::AltModifier;
 		}
-		else if (parts.at(i) == QLatin1String("meta"))
+		else if (part == QLatin1String("meta"))
 		{
 			step.modifiers |= Qt::MetaModifier;
 		}
@@ -352,8 +354,9 @@ MouseProfile::MouseProfile(const QString &identifier, LoadMode mode) :
 
 	for (int i = 0; i < comments.count(); ++i)
 	{
-		const QString key(comments.at(i).section(QLatin1Char(':'), 0, 0).trimmed());
-		const QString value(comments.at(i).section(QLatin1Char(':'), 1).trimmed());
+		const QString comment(comments.at(i));
+		const QString key(comment.section(QLatin1Char(':'), 0, 0).trimmed());
+		const QString value(comment.section(QLatin1Char(':'), 1).trimmed());
 
 		if (key == QLatin1String("Title"))
 		{
@@ -543,11 +546,12 @@ bool MouseProfile::save()
 
 	for (contextsIterator = m_definitions.constBegin(); contextsIterator != m_definitions.constEnd(); ++contextsIterator)
 	{
+		const QVector<MouseProfile::Gesture> gestures(contextsIterator.value());
 		QJsonArray gesturesArray;
 
-		for (int i = 0; i < contextsIterator.value().count(); ++i)
+		for (int i = 0; i < gestures.count(); ++i)
 		{
-			const MouseProfile::Gesture &gesture(contextsIterator.value().at(i));
+			const MouseProfile::Gesture &gesture(gestures.at(i));
 			QJsonArray stepsArray;
 
 			for (int j = 0; j < gesture.steps.count(); ++j)
@@ -593,7 +597,7 @@ QVector<MouseProfile::Gesture::Step> GesturesManager::m_steps;
 QVector<GesturesManager::GesturesContext> GesturesManager::m_contexts;
 int GesturesManager::m_gesturesContextEnumerator(0);
 bool GesturesManager::m_isReleasing(false);
-bool GesturesManager::m_afterScroll(false);
+bool GesturesManager::m_isAfterScroll(false);
 
 GesturesManager::GesturesManager(QObject *parent) : QObject(parent),
 	m_reloadTimer(0)
@@ -672,13 +676,16 @@ void GesturesManager::loadProfiles()
 
 			for (int j = 0; j < gestures.count(); ++j)
 			{
+				const MouseProfile::Gesture gesture(gestures.at(j));
 				bool isAllowed(true);
 
 				if (!areMouseGesturesEnabled)
 				{
-					for (int k = 0; k < gestures.at(j).steps.count(); ++k)
+					const QVector<MouseProfile::Gesture::Step> steps(gesture.steps);
+
+					for (int k = 0; k < steps.count(); ++k)
 					{
-						if (gestures.at(j).steps.at(k).type == QEvent::MouseMove)
+						if (steps.at(k).type == QEvent::MouseMove)
 						{
 							isAllowed = false;
 
@@ -689,7 +696,7 @@ void GesturesManager::loadProfiles()
 
 				if (isAllowed)
 				{
-					m_gestures[static_cast<GesturesContext>(iterator.key())].append(gestures.at(j));
+					m_gestures[static_cast<GesturesContext>(iterator.key())].append(gesture);
 				}
 			}
 		}
@@ -831,16 +838,17 @@ MouseProfile::Gesture GesturesManager::matchGesture()
 
 		for (int j = 0; j < gestures.count(); ++j)
 		{
-			const int difference(calculateGesturesDifference(gestures.at(j).steps));
+			const MouseProfile::Gesture gesture(gestures.at(j));
+			const int difference(calculateGesturesDifference(gesture.steps));
 
 			if (difference == 0)
 			{
-				return gestures.at(j);
+				return gesture;
 			}
 
 			if (difference < lowestDifference)
 			{
-				bestGesture = gestures.at(j);
+				bestGesture = gesture;
 				lowestDifference = difference;
 			}
 		}
@@ -871,15 +879,15 @@ int GesturesManager::calculateLastMoveDistance(bool measureFinished)
 
 	for (; index > 0 && m_events.at(index - 1)->type() == QEvent::MouseMove; --index)
 	{
-		const QMouseEvent *current(static_cast<QMouseEvent*>(m_events.at(index)));
-		const QMouseEvent *previous(static_cast<QMouseEvent*>(m_events.at(index - 1)));
+		const QMouseEvent *currentEvent(static_cast<QMouseEvent*>(m_events.at(index)));
+		const QMouseEvent *previousEvent(static_cast<QMouseEvent*>(m_events.at(index - 1)));
 
-		if (!current || !previous)
+		if (!currentEvent || !previousEvent)
 		{
 			break;
 		}
 
-		result += (previous->pos() - current->pos()).manhattanLength();
+		result += (previousEvent->pos() - currentEvent->pos()).manhattanLength();
 	}
 
 	return result;
@@ -892,6 +900,7 @@ int GesturesManager::calculateGesturesDifference(const QVector<MouseProfile::Ges
 		return std::numeric_limits<int>::max();
 	}
 
+	const QHash<Qt::KeyboardModifier, int> modifierDifferences({{Qt::MetaModifier, 1}, {Qt::AltModifier, 2}, {Qt::ShiftModifier, 4}, {Qt::ControlModifier, 8}});
 	int difference(0);
 
 	for (int i = 0; i < steps.count(); ++i)
@@ -907,24 +916,14 @@ int GesturesManager::calculateGesturesDifference(const QVector<MouseProfile::Ges
 
 		if (recordedStep.type == matchedStep.type && (matchedStep.type == QEvent::MouseButtonPress || matchedStep.type == QEvent::MouseButtonRelease || matchedStep.type == QEvent::MouseButtonDblClick) && recordedStep.button == matchedStep.button && (recordedStep.modifiers | matchedStep.modifiers) == recordedStep.modifiers)
 		{
-			if (recordedStep.modifiers.testFlag(Qt::ControlModifier) && !matchedStep.modifiers.testFlag(Qt::ControlModifier))
-			{
-				stepDifference += 8;
-			}
+			QHash<Qt::KeyboardModifier, int>::const_iterator iterator;
 
-			if (recordedStep.modifiers.testFlag(Qt::ShiftModifier) && !matchedStep.modifiers.testFlag(Qt::ShiftModifier))
+			for (iterator = modifierDifferences.begin(); iterator != modifierDifferences.end(); ++iterator)
 			{
-				stepDifference += 4;
-			}
-
-			if (recordedStep.modifiers.testFlag(Qt::AltModifier) && !matchedStep.modifiers.testFlag(Qt::AltModifier))
-			{
-				stepDifference += 2;
-			}
-
-			if (recordedStep.modifiers.testFlag(Qt::MetaModifier) && !matchedStep.modifiers.testFlag(Qt::MetaModifier))
-			{
-				stepDifference += 1;
+				if (recordedStep.modifiers.testFlag(iterator.key()) && !matchedStep.modifiers.testFlag(iterator.key()))
+				{
+					stepDifference += iterator.value();
+				}
 			}
 		}
 
@@ -971,7 +970,7 @@ bool GesturesManager::startGesture(QObject *object, QEvent *event, const QVector
 	{
 		m_contexts = contexts;
 		m_isReleasing = false;
-		m_afterScroll = false;
+		m_isAfterScroll = false;
 	}
 
 	createInstance();
@@ -1097,7 +1096,7 @@ bool GesturesManager::eventFilter(QObject *object, QEvent *event)
 
 			m_events.append(new QMouseEvent(event->type(), mouseEvent->localPos(), mouseEvent->windowPos(), mouseEvent->screenPos(), mouseEvent->button(), mouseEvent->buttons(), mouseEvent->modifiers()));
 
-			if (m_afterScroll && event->type() == QEvent::MouseButtonRelease)
+			if (m_isAfterScroll && event->type() == QEvent::MouseButtonRelease)
 			{
 				break;
 			}
@@ -1138,7 +1137,7 @@ bool GesturesManager::eventFilter(QObject *object, QEvent *event)
 				m_isReleasing = true;
 			}
 
-			m_afterScroll = false;
+			m_isAfterScroll = false;
 
 			break;
 		case QEvent::MouseMove:
@@ -1151,7 +1150,7 @@ bool GesturesManager::eventFilter(QObject *object, QEvent *event)
 
 			m_events.append(new QMouseEvent(event->type(), mouseEvent->localPos(), mouseEvent->windowPos(), mouseEvent->screenPos(), mouseEvent->button(), mouseEvent->buttons(), mouseEvent->modifiers()));
 
-			m_afterScroll = false;
+			m_isAfterScroll = false;
 
 			if (!m_recognizer)
 			{
@@ -1176,7 +1175,7 @@ bool GesturesManager::eventFilter(QObject *object, QEvent *event)
 				}
 				else
 				{
-					m_steps.pop_back();
+					m_steps.removeLast();
 				}
 			}
 
@@ -1190,13 +1189,13 @@ bool GesturesManager::eventFilter(QObject *object, QEvent *event)
 					break;
 				}
 
-				m_events.append(new QWheelEvent(wheelEvent->pos(), wheelEvent->globalPos(), wheelEvent->pixelDelta(), wheelEvent->angleDelta(), wheelEvent->delta(), wheelEvent->orientation(), wheelEvent->buttons(), wheelEvent->modifiers()));
+				m_events.append(new QWheelEvent(wheelEvent->position(), wheelEvent->globalPosition(), wheelEvent->pixelDelta(), wheelEvent->angleDelta(), wheelEvent->buttons(), wheelEvent->modifiers(), wheelEvent->phase(), wheelEvent->inverted(), wheelEvent->source()));
 
 				recognizeMoveStep(wheelEvent);
 
 				m_steps.append(MouseProfile::Gesture::Step(wheelEvent));
 
-				m_lastClick = wheelEvent->pos();
+				m_lastClick = wheelEvent->position().toPoint();
 
 				if (m_recognizer)
 				{
@@ -1219,7 +1218,7 @@ bool GesturesManager::eventFilter(QObject *object, QEvent *event)
 					m_events.removeAt(m_events.count() - 1);
 				}
 
-				m_afterScroll = true;
+				m_isAfterScroll = true;
 
 				break;
 			}

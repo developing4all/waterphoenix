@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -60,7 +60,7 @@ QtWebKitWebBackend::QtWebKitWebBackend(QObject *parent) : WebBackend(parent),
 
 	if (!cachePath.isEmpty())
 	{
-		QDir().mkpath(cachePath);
+		Utils::ensureDirectoryExists(cachePath);
 
 		QWebSettings::setIconDatabasePath(cachePath);
 		QWebSettings::setOfflineStoragePath(cachePath + QLatin1String("/offlineStorage/"));
@@ -127,11 +127,13 @@ void QtWebKitWebBackend::handleOptionChanged(int identifier)
 	}
 	else if (optionName.startsWith(QLatin1String("Permissions/")))
 	{
+#ifdef OTTER_QTWEBKIT_PLUGINS_AVAILABLE
 		const bool arePluginsEnabled(SettingsManager::getOption(SettingsManager::Permissions_EnablePluginsOption).toString() != QLatin1String("disabled"));
 
-		settings->setAttribute(QWebSettings::AutoLoadImages, (SettingsManager::getOption(SettingsManager::Permissions_EnableImagesOption).toString() != QLatin1String("onlyCached")));
 		settings->setAttribute(QWebSettings::PluginsEnabled, arePluginsEnabled);
 		settings->setAttribute(QWebSettings::JavaEnabled, arePluginsEnabled);
+#endif
+		settings->setAttribute(QWebSettings::AutoLoadImages, (SettingsManager::getOption(SettingsManager::Permissions_EnableImagesOption).toString() != QLatin1String("onlyCached")));
 		settings->setAttribute(QWebSettings::JavascriptEnabled, SettingsManager::getOption(SettingsManager::Permissions_EnableJavaScriptOption).toBool());
 		settings->setAttribute(QWebSettings::JavascriptCanAccessClipboard, SettingsManager::getOption(SettingsManager::Permissions_ScriptsCanAccessClipboardOption).toBool());
 		settings->setAttribute(QWebSettings::JavascriptCanOpenWindows, (SettingsManager::getOption(SettingsManager::Permissions_ScriptsCanOpenWindowsOption).toString() != QLatin1String("blockAll")));
@@ -157,10 +159,12 @@ WebWidget* QtWebKitWebBackend::createWidget(const QVariantMap &parameters, Conte
 		settings->setAttribute(QWebSettings::PrintElementBackgrounds, SettingsManager::getOption(SettingsManager::Browser_PrintElementBackgroundsOption).toBool());
 		settings->setAttribute(QWebSettings::ScrollAnimatorEnabled, SettingsManager::getOption(SettingsManager::Interface_EnableSmoothScrollingOption).toBool());
 
+#ifdef OTTER_QTWEBKIT_PLUGINS_AVAILABLE
 		QStringList pluginSearchPaths(QWebSettings::pluginSearchPaths());
 		pluginSearchPaths.append(QDir::toNativeSeparators(Application::getApplicationDirectoryPath()));
 
 		QWebSettings::setPluginSearchPaths(pluginSearchPaths);
+#endif
 		QWebSettings::setMaximumPagesInCache(SettingsManager::getOption(SettingsManager::Cache_PagesInMemoryLimitOption).toInt());
 		QWebSettings::setOfflineStorageDefaultQuota(SettingsManager::getOption(SettingsManager::Browser_OfflineStorageLimitOption).toInt() * 1024);
 		QWebSettings::setOfflineWebApplicationCacheQuota(SettingsManager::getOption(SettingsManager::Browser_OfflineWebApplicationCacheLimitOption).toInt() * 1024);
@@ -191,6 +195,14 @@ BookmarksImportJob* QtWebKitWebBackend::createBookmarksImportJob(BookmarksModel:
 WebPageThumbnailJob* QtWebKitWebBackend::createPageThumbnailJob(const QUrl &url, const QSize &size)
 {
 	return new QtWebKitWebPageThumbnailJob(url, size, this);
+}
+
+WebBackend::CookieJarInformation QtWebKitWebBackend::getCookieJar() const
+{
+	CookieJarInformation information;
+	information.cookieJar = NetworkManagerFactory::getCookieJar();
+
+	return information;
 }
 
 QtWebKitWebBackend* QtWebKitWebBackend::getInstance()
@@ -281,7 +293,9 @@ WebBackend::CapabilityScopes QtWebKitWebBackend::getCapabilityScopes(WebBackend:
 		case ContentFilteringCapability:
 		case DoNotTrackCapability:
 		case FindInPageHighlightAllCapability:
+#ifdef OTTER_QTWEBKIT_PLUGINS_AVAILABLE
 		case PluginsOnDemandCapability:
+#endif
 		case ProxyCapability:
 		case ReferrerCapability:
 		case UserAgentCapability:

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -23,6 +23,7 @@
 #define OTTER_ACTIONSMANAGER_H
 
 #include "AddonsManager.h"
+#include "Utils.h"
 
 #include <QtCore/QVariantMap>
 #include <QtGui/QIcon>
@@ -386,12 +387,12 @@ public:
 	static void createInstance();
 	static void loadProfiles();
 	static ActionsManager* getInstance();
-	static QString createReport();
 	static QString getActionName(int identifier);
 	static QKeySequence getActionShortcut(int identifier, const QVariantMap &parameters = {});
 	static QVector<QKeySequence> getActionShortcuts(int identifier, const QVariantMap &parameters = {});
 	static QVector<ActionDefinition> getActionDefinitions();
 	static QVector<KeyboardProfile::Action> getShortcutDefinitions();
+	static DiagnosticReport::Section createReport();
 	static ActionDefinition getActionDefinition(int identifier);
 	static int getActionIdentifier(const QString &name);
 	static bool isShortcutAllowed(const QKeySequence &shortcut, ShortcutCheck check = AllChecks, bool areSingleKeyShortcutsAllowed = true);

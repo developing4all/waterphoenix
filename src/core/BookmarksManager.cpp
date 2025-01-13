@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -100,24 +100,37 @@ void BookmarksManager::updateVisits(const QUrl &url)
 {
 	ensureInitialized();
 
-	if (m_model->hasBookmark(url))
+	if (!m_model->hasBookmark(url))
 	{
-		const QVector<BookmarksModel::Bookmark*> bookmarks(m_model->getBookmarks(url));
-
-		for (int i = 0; i < bookmarks.count(); ++i)
-		{
-			BookmarksModel::Bookmark *bookmark(bookmarks.at(i));
-			bookmark->setData((bookmark->getVisits() + 1), BookmarksModel::VisitsRole);
-			bookmark->setData(QDateTime::currentDateTimeUtc(), BookmarksModel::TimeVisitedRole);
-		}
-
-		m_instance->scheduleSave();
+		return;
 	}
+
+	const QVector<BookmarksModel::Bookmark*> bookmarks(m_model->getBookmarks(url));
+
+	for (int i = 0; i < bookmarks.count(); ++i)
+	{
+		BookmarksModel::Bookmark *bookmark(bookmarks.at(i));
+		bookmark->setData((bookmark->getVisits() + 1), BookmarksModel::VisitsRole);
+		bookmark->setData(QDateTime::currentDateTimeUtc(), BookmarksModel::TimeVisitedRole);
+	}
+
+	m_instance->scheduleSave();
 }
 
-void BookmarksManager::setLastUsedFolder(BookmarksModel::Bookmark *folder)
+void BookmarksManager::setLastUsedFolder(BookmarksModel::Bookmark *bookmark)
 {
-	m_lastUsedFolder = (folder ? folder->getIdentifier() : 0);
+	if (bookmark)
+	{
+		if (!bookmark->isFolder())
+		{
+			bookmark = bookmark->getParent();
+		}
+
+		if (bookmark->isFolder())
+		{
+			m_lastUsedFolder = bookmark->getIdentifier();
+		}
+	}
 }
 
 BookmarksManager* BookmarksManager::getInstance()
@@ -145,12 +158,12 @@ BookmarksModel::Bookmark* BookmarksManager::getBookmark(const QString &text)
 
 	if (text.startsWith(QLatin1Char('#')))
 	{
-		return m_model->getBookmark(text.midRef(1).toULongLong());
+		return m_model->getBookmark(text.mid(1).toULongLong());
 	}
 
 	if (text.startsWith(QLatin1String("bookmarks:")))
 	{
-		return (text.startsWith(QLatin1String("bookmarks:/")) ? m_model->getBookmarkByPath(text.mid(11)) : getBookmark(text.midRef(10).toULongLong()));
+		return (text.startsWith(QLatin1String("bookmarks:/")) ? m_model->getBookmarkByPath(text.mid(11)) : getBookmark(text.mid(10).toULongLong()));
 	}
 
 	return m_model->getBookmarkByKeyword(text);

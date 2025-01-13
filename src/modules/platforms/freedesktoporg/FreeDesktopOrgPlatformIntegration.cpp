@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2010 David Sansome <me@davidsansome.com>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -88,11 +88,7 @@ QDBusArgument& operator<<(QDBusArgument &argument, const QImage &image)
 
 	argument << (target.depth() / channels);
 	argument << channels;
-#if QT_VERSION >= 0x050A00
 	argument << QByteArray(reinterpret_cast<const char*>(target.bits()), target.sizeInBytes());
-#else
-	argument << QByteArray(reinterpret_cast<const char*>(target.bits()), target.byteCount());
-#endif
 	argument.endStructure();
 
 	return argument;
@@ -110,12 +106,12 @@ const QDBusArgument& operator>>(const QDBusArgument &argument, QImage &image)
 namespace Otter
 {
 
-FreeDesktopOrgPlatformIntegration::FreeDesktopOrgPlatformIntegration(QObject *parent) : PlatformIntegration(parent),
-	m_notificationsInterface(nullptr)
-{
-#if QT_VERSION >= 0x050700
-	QGuiApplication::setDesktopFileName(QLatin1String(DESKTOP_ENTRY_NAME) + QLatin1String(".desktop"));
+FreeDesktopOrgPlatformIntegration::FreeDesktopOrgPlatformIntegration(QObject *parent) : PlatformIntegration(parent)
+#ifdef OTTER_ENABLE_DBUS
+	, m_notificationsInterface(nullptr)
 #endif
+{
+	QGuiApplication::setDesktopFileName(QLatin1String(DESKTOP_ENTRY_NAME) + QLatin1String(".desktop"));
 
 	QTimer::singleShot(250, this, [&]()
 	{
@@ -303,7 +299,9 @@ QVector<ApplicationInformation> FreeDesktopOrgPlatformIntegration::getApplicatio
 
 	for (std::vector<LibMimeApps::DesktopEntry>::size_type i = 0; i < entries.size(); ++i)
 	{
-		applications.append({QString::fromStdString(entries.at(i).executable()), QString::fromStdString(entries.at(i).name()), QIcon::fromTheme(QString::fromStdString(entries.at(i).icon()))});
+		const LibMimeApps::DesktopEntry entry(entries.at(i));
+
+		applications.append({QString::fromStdString(entry.executable()), QString::fromStdString(entry.name()), QIcon::fromTheme(QString::fromStdString(entry.icon()))});
 	}
 
 	m_applicationsCache[mimeType.name()] = applications;

@@ -69,7 +69,7 @@ DataExchangerDialog::DataExchangerDialog(ExportDataExchanger *exporter, QWidget 
 
 		if (exists && !isManuallySpecified)
 		{
-			canExport = QMessageBox::warning(this, tr("Warning"), tr("%1 already exists.\nDo you want to replace it?").arg(QFileInfo(path).fileName()), (QMessageBox::Yes | QMessageBox::No), QMessageBox::No) == QMessageBox::Yes;
+			canExport = QMessageBox::warning(this, tr("Warning"), tr("File \"%1\" already exists.\nDo you want to replace it?").arg(QFileInfo(path).fileName()), (QMessageBox::Yes | QMessageBox::No), QMessageBox::No) == QMessageBox::Yes;
 		}
 
 		if (canExport)
@@ -201,13 +201,6 @@ void DataExchangerDialog::createDialog(const QString &exchangerName, QWidget *pa
 	}
 }
 
-void DataExchangerDialog::handleExchangeStarted(DataExchanger::ExchangeType type, int total)
-{
-	handleExchangeProgress(type, total, 0);
-
-	m_ui->messageTextLabel->setText(tr("Processing…"));
-}
-
 void DataExchangerDialog::handleExchangeProgress(DataExchanger::ExchangeType type, int total, int amount)
 {
 	Q_UNUSED(type)
@@ -228,7 +221,18 @@ void DataExchangerDialog::handleExchangeFinished(DataExchanger::ExchangeType typ
 {
 	handleExchangeProgress(type, total, total);
 
-	m_ui->messageIconLabel->setPixmap(ThemesManager::createIcon((result == DataExchanger::SuccessfullOperation) ? QLatin1String("task-complete") : QLatin1String("task-reject")).pixmap(32, 32));
+	QString iconName;
+
+	if (result == DataExchanger::SuccessfullOperation)
+	{
+		iconName = QLatin1String("task-complete");
+	}
+	else
+	{
+		iconName = QLatin1String("task-reject");
+	}
+
+	m_ui->messageIconLabel->setPixmap(ThemesManager::createIcon(iconName).pixmap(32, 32));
 	m_ui->buttonBox->clear();
 	m_ui->buttonBox->addButton(QDialogButtonBox::Close);
 	m_ui->buttonBox->setEnabled(true);
@@ -300,7 +304,12 @@ void DataExchangerDialog::setupResults(DataExchanger *exchanger)
 	}
 
 	connect(m_ui->buttonBox, &QDialogButtonBox::rejected, exchanger, &DataExchanger::cancel);
-	connect(exchanger, &DataExchanger::exchangeStarted, this, &DataExchangerDialog::handleExchangeStarted);
+	connect(exchanger, &DataExchanger::exchangeStarted, this, [&](DataExchanger::ExchangeType type, int total)
+	{
+		handleExchangeProgress(type, total, 0);
+
+		m_ui->messageTextLabel->setText(tr("Processing…"));
+	});
 	connect(exchanger, &DataExchanger::exchangeProgress, this, &DataExchangerDialog::handleExchangeProgress);
 	disconnect(m_ui->buttonBox, &QDialogButtonBox::rejected, this, &DataExchangerDialog::reject);
 }

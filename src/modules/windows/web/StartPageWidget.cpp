@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -59,8 +59,10 @@ QPointer<StartPagePreferencesDialog> StartPageWidget::m_preferencesDialog(nullpt
 
 TileDelegate::TileDelegate(QWidget *parent) : QStyledItemDelegate(parent),
 	m_widget(parent),
-	m_mode(NoBackground),
-	m_needsBlur(true)
+	m_mode(NoBackground)
+#ifdef OTTER_ENABLE_STARTPAGEBLUR
+	, m_needsBlur(true)
+#endif
 {
 	handleOptionChanged(SettingsManager::StartPage_BackgroundModeOption, SettingsManager::getOption(SettingsManager::StartPage_BackgroundModeOption));
 	handleOptionChanged(SettingsManager::StartPage_TileBackgroundModeOption, SettingsManager::getOption(SettingsManager::StartPage_TileBackgroundModeOption));
@@ -129,7 +131,9 @@ void TileDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, 
 	{
 		pixmapPainter.setBrush(QColor(179, 229, 252, 192));
 
+#ifdef OTTER_ENABLE_STARTPAGEBLUR
 		drawBlurBehind(&pixmapPainter, tileRectangle);
+#endif
 
 		pixmapPainter.drawPath(path);
 
@@ -146,6 +150,7 @@ void TileDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, 
 
 	pixmapPainter.setClipPath(path);
 
+#ifdef OTTER_ENABLE_STARTPAGEBLUR
 	if (type == BookmarksModel::FolderBookmark || m_mode != ThumbnailBackground)
 	{
 		drawBlurBehind(&pixmapPainter, tileRectangle);
@@ -154,6 +159,7 @@ void TileDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, 
 	{
 		drawBlurBehind(&pixmapPainter, textRectangle);
 	}
+#endif
 
 	pixmapPainter.fillRect(tileRectangle, QColor(179, 229, 252, 128));
 
@@ -233,9 +239,9 @@ void TileDelegate::drawAnimation(QPainter *painter, const QRect &rectangle) cons
 	}
 }
 
+#ifdef OTTER_ENABLE_STARTPAGEBLUR
 void TileDelegate::drawBlurBehind(QPainter *painter, const QRect &rectangle) const
 {
-#ifdef OTTER_ENABLE_STARTPAGEBLUR
 	if (!m_needsBlur)
 	{
 		return;
@@ -264,34 +270,34 @@ void TileDelegate::drawBlurBehind(QPainter *painter, const QRect &rectangle) con
 	blurredRectangle.moveTo(8, 8);
 
 	painter->drawPixmap(rectangle, blurredPixmap, blurredRectangle);
-#else
-	Q_UNUSED(painter)
-	Q_UNUSED(rectangle)
-#endif
 }
+#endif
 
 void TileDelegate::drawFocusIndicator(QPainter *painter, const QPainterPath &path, const QStyleOptionViewItem &option, QPalette::ColorGroup colorGroup) const
 {
-	if (option.state.testFlag(QStyle::State_MouseOver) || option.state.testFlag(QStyle::State_HasFocus))
+	if (!option.state.testFlag(QStyle::State_MouseOver) && !option.state.testFlag(QStyle::State_HasFocus))
 	{
-		QColor highlightColor(QGuiApplication::palette().color(colorGroup, QPalette::Highlight));
-
-		if (option.state.testFlag(QStyle::State_MouseOver))
-		{
-			highlightColor.setAlpha(150);
-		}
-
-		painter->setPen(QPen(highlightColor, 3));
-		painter->setClipping(false);
-		painter->setBrush(Qt::transparent);
-		painter->drawPath(path);
+		return;
 	}
+
+	QColor highlightColor(QGuiApplication::palette().color(colorGroup, QPalette::Highlight));
+
+	if (option.state.testFlag(QStyle::State_MouseOver))
+	{
+		highlightColor.setAlpha(150);
+	}
+
+	painter->setPen(QPen(highlightColor, 3));
+	painter->setClipping(false);
+	painter->setBrush(Qt::transparent);
+	painter->drawPath(path);
 }
 
 void TileDelegate::handleOptionChanged(int identifier, const QVariant &value)
 {
 	switch (identifier)
 	{
+#ifdef OTTER_ENABLE_STARTPAGEBLUR
 		case SettingsManager::StartPage_BackgroundModeOption:
 		case SettingsManager::StartPage_BackgroundPathOption:
 			{
@@ -301,6 +307,7 @@ void TileDelegate::handleOptionChanged(int identifier, const QVariant &value)
 			}
 
 			break;
+#endif
 		case SettingsManager::StartPage_TileBackgroundModeOption:
 			{
 				const QString mode(value.toString());
@@ -319,6 +326,8 @@ void TileDelegate::handleOptionChanged(int identifier, const QVariant &value)
 				}
 			}
 
+			break;
+		default:
 			break;
 	}
 }
@@ -538,9 +547,7 @@ StartPageWidget::StartPageWidget(Window *parent) : QScrollArea(parent),
 
 StartPageWidget::~StartPageWidget()
 {
-#if QT_VERSION >= 0x050700
 	QDrag::cancel();
-#endif
 }
 
 void StartPageWidget::timerEvent(QTimerEvent *event)
@@ -599,44 +606,44 @@ void StartPageWidget::dragEnterEvent(QDragEnterEvent *event)
 
 void StartPageWidget::dropEvent(QDropEvent *event)
 {
-	if (event->mimeData()->hasUrls() || event->mimeData()->hasText())
+	if (!event->mimeData()->hasUrls() && !event->mimeData()->hasText())
 	{
-		event->accept();
+		event->ignore();
 
-		const QVector<QUrl> urls(Utils::extractUrls(event->mimeData()));
+		return;
+	}
 
-		if (urls.isEmpty())
+	event->accept();
+
+	const QVector<QUrl> urls(Utils::extractUrls(event->mimeData()));
+
+	if (urls.isEmpty())
+	{
+		const InputInterpreter::InterpreterResult result(InputInterpreter::interpret(event->mimeData()->text(), (InputInterpreter::NoBookmarkKeywordsFlag | InputInterpreter::NoSearchKeywordsFlag)));
+
+		if (result.isValid())
 		{
-			const InputInterpreter::InterpreterResult result(InputInterpreter::interpret(event->mimeData()->text(), (InputInterpreter::NoBookmarkKeywordsFlag | InputInterpreter::NoSearchKeywordsFlag)));
-
-			if (result.isValid())
+			switch (result.type)
 			{
-				switch (result.type)
-				{
-					case InputInterpreter::InterpreterResult::UrlType:
-						Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), result.url}}, parentWidget());
+				case InputInterpreter::InterpreterResult::UrlType:
+					Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), result.url}}, parentWidget());
 
-						break;
-					case InputInterpreter::InterpreterResult::SearchType:
-						m_window->search(result.searchQuery, result.searchEngine);
+					break;
+				case InputInterpreter::InterpreterResult::SearchType:
+					m_window->search(result.searchQuery, result.searchEngine);
 
-						break;
-					default:
-						break;
-				}
-			}
-		}
-		else
-		{
-			for (int i = 0; i < urls.count(); ++i)
-			{
-				Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), urls.at(i)}}, parentWidget());
+					break;
+				default:
+					break;
 			}
 		}
 	}
 	else
 	{
-		event->ignore();
+		for (int i = 0; i < urls.count(); ++i)
+		{
+			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), urls.at(i)}}, parentWidget());
+		}
 	}
 }
 
@@ -751,28 +758,32 @@ void StartPageWidget::addTile()
 
 	m_isIgnoringEnter = true;
 
-	if (dialog.exec() == QDialog::Accepted && dialog.getResult().isValid())
+	const InputInterpreter::InterpreterResult result(dialog.getResult());
+
+	if (dialog.exec() != QDialog::Accepted || !result.isValid())
 	{
-		QModelIndex index;
+		return;
+	}
 
-		switch (dialog.getResult().type)
-		{
-			case InputInterpreter::InterpreterResult::BookmarkType:
-				index = m_model->addTile(dialog.getResult().bookmark->getUrl());
+	QModelIndex index;
 
-				break;
-			case InputInterpreter::InterpreterResult::UrlType:
-				index = m_model->addTile(dialog.getResult().url);
+	switch (result.type)
+	{
+		case InputInterpreter::InterpreterResult::BookmarkType:
+			index = m_model->addTile(result.bookmark->getUrl());
 
-				break;
-			default:
-				return;
-		}
+			break;
+		case InputInterpreter::InterpreterResult::UrlType:
+			index = m_model->addTile(result.url);
 
-		if (index.isValid())
-		{
-			startReloadingAnimation();
-		}
+			break;
+		default:
+			return;
+	}
+
+	if (index.isValid())
+	{
+		startReloadingAnimation();
 	}
 }
 
@@ -797,7 +808,7 @@ void StartPageWidget::openTile()
 	{
 		const BookmarksModel::Bookmark *bookmark(StartPageModel::getBookmark(m_currentIndex));
 
-		if (bookmark && bookmark->rowCount() > 0)
+		if (bookmark && bookmark->hasChildren())
 		{
 			m_urlOpenTime = QTime::currentTime();
 
@@ -872,17 +883,7 @@ void StartPageWidget::startReloadingAnimation()
 {
 	if (!m_spinnerAnimation)
 	{
-		const QString path(ThemesManager::getAnimationPath(QLatin1String("spinner")));
-
-		if (path.isEmpty())
-		{
-			m_spinnerAnimation = new SpinnerAnimation(QCoreApplication::instance());
-		}
-		else
-		{
-			m_spinnerAnimation = new GenericAnimation(path, QCoreApplication::instance());
-		}
-
+		m_spinnerAnimation = ThemesManager::createAnimation();
 		m_spinnerAnimation->start();
 	}
 
@@ -1126,7 +1127,7 @@ bool StartPageWidget::eventFilter(QObject *object, QEvent *event)
 	{
 		if (event->type() == QEvent::Wheel)
 		{
-			m_currentIndex = m_listView->indexAt(m_listView->mapFromGlobal(static_cast<QWheelEvent*>(event)->globalPos()));
+			m_currentIndex = m_listView->indexAt(m_listView->mapFromGlobal(static_cast<QWheelEvent*>(event)->globalPosition().toPoint()));
 		}
 		else
 		{
@@ -1170,7 +1171,7 @@ bool StartPageWidget::eventFilter(QObject *object, QEvent *event)
 					{
 						const BookmarksModel::Bookmark *bookmark(StartPageModel::getBookmark(m_currentIndex));
 
-						if (bookmark && bookmark->rowCount() > 0)
+						if (bookmark && bookmark->hasChildren())
 						{
 							m_isIgnoringEnter = true;
 
@@ -1241,7 +1242,7 @@ bool StartPageWidget::eventFilter(QObject *object, QEvent *event)
 				{
 					const BookmarksModel::Bookmark *bookmark(StartPageModel::getBookmark(m_currentIndex));
 
-					if (bookmark && bookmark->rowCount() > 0)
+					if (bookmark && bookmark->hasChildren())
 					{
 						m_isIgnoringEnter = true;
 

@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 #ifndef OTTER_PROXYMODEL_H
 #define OTTER_PROXYMODEL_H
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QIdentityProxyModel>
 #include <QtGui/QStandardItemModel>
 
@@ -32,7 +33,24 @@ class ProxyModel final : public QIdentityProxyModel
 	Q_OBJECT
 
 public:
-	explicit ProxyModel(QStandardItemModel *model, const QVector<QPair<QString, int> > &mapping, QObject *parent = nullptr);
+	struct Column final
+	{
+		QString title;
+		int role = -1;
+
+		Column(const QString &titleValue, int roleValue) :
+			title(titleValue),
+			role(roleValue)
+		{
+		}
+
+		QString getTitle() const
+		{
+			return QCoreApplication::translate("views", title.toUtf8().constData());
+		}
+	};
+
+	explicit ProxyModel(QStandardItemModel *model, const QVector<Column> &mapping, QObject *parent = nullptr);
 
 	QMimeData* mimeData(const QModelIndexList &indexes) const override;
 	QVariant data(const QModelIndex &index, int role) const override;
@@ -46,7 +64,7 @@ public:
 
 private:
 	QStandardItemModel *m_model;
-	QVector<QPair<QString, int> > m_mapping;
+	QVector<Column> m_mapping;
 	QMap<int, QMap<int, QVariant> > m_headerData;
 };
 

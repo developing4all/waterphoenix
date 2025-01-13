@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2014 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2014 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -25,9 +25,7 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDate>
 #include <QtCore/QFile>
-#if QT_VERSION >= 0x050C00
 #include <QtCore/QRegularExpression>
-#endif
 #include <QtNetwork/QHostInfo>
 #include <QtNetwork/QNetworkInterface>
 
@@ -80,7 +78,7 @@ int PacUtils::dnsDomainLevels(const QString &host) const
 {
 	if (host.startsWith(QLatin1String("www."), Qt::CaseInsensitive))
 	{
-		return host.midRef(4).count(QLatin1Char('.'));
+		return host.mid(4).count(QLatin1Char('.'));
 	}
 
 	return host.count(QLatin1Char('.'));
@@ -127,11 +125,7 @@ bool PacUtils::dnsDomainIs(const QString &host, const QString &domain) const
 
 bool PacUtils::shExpMatch(const QString &string, const QString &expression) const
 {
-#if QT_VERSION >= 0x050C00
 	return QRegularExpression(QRegularExpression::wildcardToRegularExpression(expression)).match(string).hasMatch();
-#else
-	return QRegExp(expression, Qt::CaseInsensitive, QRegExp::Wildcard).exactMatch(string);
-#endif
 }
 
 bool PacUtils::weekdayRange(QString fromDay, QString toDay, const QString &gmt) const
@@ -145,12 +139,14 @@ bool PacUtils::weekdayRange(QString fromDay, QString toDay, const QString &gmt) 
 
 	for (int i = 0; i < m_days.count(); ++i)
 	{
-		if (fromDay == m_days.at(i))
+		const QString day(m_days.at(i));
+
+		if (fromDay == day)
 		{
 			fromDayNumber = (i + 1);
 		}
 
-		if (toDay == m_days.at(i))
+		if (toDay == day)
 		{
 			toDayNumber = (i + 1);
 		}
@@ -173,14 +169,16 @@ bool PacUtils::dateRange(const QVariant &arg1, const QVariant &arg2, const QVari
 
 	for (int i = 0; i < rawArguments.count(); ++i)
 	{
-		if (rawArguments.at(i).isNull())
+		const QVariant rawArgument(rawArguments.at(i));
+
+		if (rawArgument.isNull())
 		{
 			break;
 		}
 
-		if (rawArguments.at(i).type() == QVariant::String)
+		if (rawArgument.type() == QVariant::String)
 		{
-			const int month(m_months.indexOf(rawArguments.at(i).toString().toLower()) + 1);
+			const int month(m_months.indexOf(rawArgument.toString().toLower()) + 1);
 
 			if (month < 1)
 			{
@@ -191,7 +189,7 @@ bool PacUtils::dateRange(const QVariant &arg1, const QVariant &arg2, const QVari
 		}
 		else
 		{
-			arguments.append(rawArguments.at(i).toInt());
+			arguments.append(rawArgument.toInt());
 		}
 	}
 
@@ -259,18 +257,22 @@ bool PacUtils::timeRange(const QVariant &arg1, const QVariant &arg2, const QVari
 
 	for (int i = 0; i < rawArguments.count(); ++i)
 	{
-		if (rawArguments.at(i).isNull())
+		const QVariant rawArgument(rawArguments.at(i));
+
+		if (rawArgument.isNull())
 		{
 			break;
 		}
 
-		if (rawArguments.at(i).type() != QVariant::Int)
+		if (rawArgument.type() != QVariant::Int)
 		{
 			return false;
 		}
 
-		arguments.append(rawArguments.at(i).toInt());
+		arguments.append(rawArgument.toInt());
 	}
+
+	arguments.squeeze();
 
 	if (arguments.count() == 1)
 	{
@@ -345,35 +347,35 @@ void NetworkAutomaticProxy::setPath(const QString &path)
 		{
 			Console::addMessage(tr("Failed to load proxy auto-config (PAC): %1").arg(file.errorString()), Console::NetworkCategory, Console::ErrorLevel, path);
 		}
+
+		return;
+	}
+
+	const QUrl url(path);
+
+	if (url.isValid())
+	{
+		DataFetchJob *job(new DataFetchJob(url, this));
+
+		connect(job, &Job::jobFinished, this, [=](bool isSuccess)
+		{
+			QIODevice *device(job->getData());
+
+			if (isSuccess && device && setup(QString::fromLatin1(device->readAll())))
+			{
+				m_isValid = true;
+			}
+			else
+			{
+				Console::addMessage(tr("Failed to load proxy auto-config (PAC): %1").arg(device ? device->errorString() : tr("Download failure")), Console::NetworkCategory, Console::ErrorLevel, url.url());
+			}
+		});
+
+		job->start();
 	}
 	else
 	{
-		const QUrl url(path);
-
-		if (url.isValid())
-		{
-			DataFetchJob *job(new DataFetchJob(url, this));
-
-			connect(job, &Job::jobFinished, this, [=](bool isSuccess)
-			{
-				QIODevice *device(job->getData());
-
-				if (isSuccess && device && setup(QString::fromLatin1(device->readAll())))
-				{
-					m_isValid = true;
-				}
-				else
-				{
-					Console::addMessage(tr("Failed to load proxy auto-config (PAC): %1").arg(device ? device->errorString() : tr("Download failure")), Console::NetworkCategory, Console::ErrorLevel, url.url());
-				}
-			});
-
-			job->start();
-		}
-		else
-		{
-			Console::addMessage(tr("Failed to load proxy auto-config (PAC). Invalid URL: %1").arg(url.url()), Console::NetworkCategory, Console::ErrorLevel);
-		}
+		Console::addMessage(tr("Failed to load proxy auto-config (PAC). Invalid URL: %1").arg(url.url()), Console::NetworkCategory, Console::ErrorLevel);
 	}
 }
 
@@ -384,7 +386,7 @@ QString NetworkAutomaticProxy::getPath() const
 
 QVector<QNetworkProxy> NetworkAutomaticProxy::getProxy(const QString &url, const QString &host)
 {
-	const QJSValue result(m_findProxy.call(QJSValueList({m_engine.toScriptValue(url), m_engine.toScriptValue(host)})));
+	const QJSValue result(m_findProxyFunction.call(QJSValueList({m_engine.toScriptValue(url), m_engine.toScriptValue(host)})));
 
 	if (result.isError())
 	{
@@ -407,22 +409,28 @@ QVector<QNetworkProxy> NetworkAutomaticProxy::getProxy(const QString &url, const
 	{
 		const QStringList proxy(proxies.at(i).split(QLatin1Char(':')));
 		QString proxyHost(proxy.at(0));
+		const int proxyCount(proxy.count());
 
-		if (proxy.count() == 2 && proxyHost.indexOf(QLatin1String("PROXY"), Qt::CaseInsensitive) == 0)
+		if (proxyCount == 2)
 		{
-			proxiesForQuery.append(QNetworkProxy(QNetworkProxy::HttpProxy, proxyHost.replace(0, 5, QString()), proxy.at(1).toUShort()));
+			const ushort proxyPort(proxy.at(1).toUShort());
 
-			continue;
+			if (proxyHost.indexOf(QLatin1String("PROXY"), Qt::CaseInsensitive) == 0)
+			{
+				proxiesForQuery.append(QNetworkProxy(QNetworkProxy::HttpProxy, proxyHost.remove(0, 5), proxyPort));
+
+				continue;
+			}
+
+			if (proxyHost.indexOf(QLatin1String("SOCKS"), Qt::CaseInsensitive) == 0)
+			{
+				proxiesForQuery.append(QNetworkProxy(QNetworkProxy::Socks5Proxy, proxyHost.remove(0, 5), proxyPort));
+
+				continue;
+			}
 		}
 
-		if (proxy.count() == 2 && proxyHost.indexOf(QLatin1String("SOCKS"), Qt::CaseInsensitive) == 0)
-		{
-			proxiesForQuery.append(QNetworkProxy(QNetworkProxy::Socks5Proxy, proxyHost.replace(0, 5, QString()), proxy.at(1).toUShort()));
-
-			continue;
-		}
-
-		if (proxy.count() == 1 && proxyHost.indexOf(QLatin1String("DIRECT"), Qt::CaseInsensitive) == 0)
+		if (proxyCount == 1 && proxyHost.indexOf(QLatin1String("DIRECT"), Qt::CaseInsensitive) == 0)
 		{
 			proxiesForQuery.append(QNetworkProxy(QNetworkProxy::NoProxy));
 
@@ -451,9 +459,9 @@ bool NetworkAutomaticProxy::setup(const QString &script)
 		return false;
 	}
 
-	m_findProxy = m_engine.globalObject().property(QLatin1String("FindProxyForURL"));
+	m_findProxyFunction = m_engine.globalObject().property(QLatin1String("FindProxyForURL"));
 
-	return m_findProxy.isCallable();
+	return m_findProxyFunction.isCallable();
 }
 
 }

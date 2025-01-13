@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -67,6 +67,9 @@ void UserScript::reload()
 		return;
 	}
 
+	QRegularExpression uriExpression(QLatin1String("^.+://.*/.*"));
+	uriExpression.optimize();
+
 	QTextStream stream(&file);
 	bool hasHeader(false);
 
@@ -131,7 +134,7 @@ void UserScript::reload()
 		{
 			line = value;
 
-			if (QRegularExpression(QLatin1String("^.+://.*/.*")).match(line).hasMatch() && (!line.startsWith(QLatin1Char('*')) || line.at(1) == QLatin1Char(':')))
+			if (uriExpression.match(line).hasMatch() && (!line.startsWith(QLatin1Char('*')) || line.at(1) == QLatin1Char(':')))
 			{
 				const QString scheme(line.left(line.indexOf(QLatin1String("://"))));
 
@@ -285,9 +288,10 @@ QString UserScript::checkUrlSubString(const QString &rule, const QString &urlSub
 
 	for (int i = 0; i < urlSubString.length(); ++i)
 	{
-		const QChar character(urlSubString.at(i));
+		const QChar urlCharacter(urlSubString.at(i));
+		const QChar ruleCharacter(rule.at(position));
 
-		if (rule.at(position) == QLatin1Char('*'))
+		if (ruleCharacter == QLatin1Char('*'))
 		{
 			const QString wildcardString(urlSubString.mid(i));
 
@@ -301,14 +305,14 @@ QString UserScript::checkUrlSubString(const QString &rule, const QString &urlSub
 				}
 			}
 		}
-		else if (rule.at(position) != character)
+		else if (ruleCharacter != urlCharacter)
 		{
 			return {};
 		}
 
 		++position;
 
-		generatedUrl += character;
+		generatedUrl += urlCharacter;
 
 		if (position == rule.length())
 		{
@@ -422,7 +426,7 @@ bool UserScript::checkUrl(const QUrl &url, const QStringList &rules) const
 
 		if (rule.contains(QLatin1String(".tld"), Qt::CaseInsensitive))
 		{
-			rule.replace(QLatin1String(".tld"), url.topLevelDomain(), Qt::CaseInsensitive);
+			rule.replace(QLatin1String(".tld"), Utils::getTopLevelDomain(url), Qt::CaseInsensitive);
 		}
 
 		bool useExactMatch(true);

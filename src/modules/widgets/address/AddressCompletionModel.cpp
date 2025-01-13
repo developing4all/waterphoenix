@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -113,8 +113,9 @@ void AddressCompletionModel::updateModel()
 
 		for (int i = 0; i < bookmarks.count(); ++i)
 		{
-			CompletionEntry completionEntry(bookmarks.at(i).bookmark->getUrl(), bookmarks.at(i).bookmark->getTitle(), bookmarks.at(i).match, bookmarks.at(i).bookmark->getIcon(), {}, CompletionEntry::BookmarkType);
-			completionEntry.keyword = bookmarks.at(i).bookmark->getKeyword();
+			const BookmarksModel::BookmarkMatch bookmark(bookmarks.at(i));
+			CompletionEntry completionEntry(bookmark.bookmark->getUrl(), bookmark.bookmark->getTitle(), bookmark.match, bookmark.bookmark->getIcon(), {}, CompletionEntry::BookmarkType);
+			completionEntry.keyword = bookmark.bookmark->getKeyword();
 
 			if (completionEntry.keyword.startsWith(m_filter))
 			{
@@ -136,9 +137,11 @@ void AddressCompletionModel::updateModel()
 
 		for (int i = 0; i < entries.count(); ++i)
 		{
-			if (entries.at(i).fileName().startsWith(prefix, Qt::CaseInsensitive))
+			const QFileInfo entry(entries.at(i));
+
+			if (entry.fileName().startsWith(prefix, Qt::CaseInsensitive))
 			{
-				const QString path(directory + entries.at(i).fileName());
+				const QString path(directory + entry.fileName());
 
 				if (!headerWasAdded)
 				{
@@ -147,7 +150,7 @@ void AddressCompletionModel::updateModel()
 					headerWasAdded = true;
 				}
 
-				completions.append(CompletionEntry(QUrl::fromLocalFile(QDir::toNativeSeparators(path)), path, path, QIcon::fromTheme(mimeDatabase.mimeTypeForFile(entries.at(i), QMimeDatabase::MatchExtension).iconName(), iconProvider.icon(entries.at(i))), {}, CompletionEntry::LocalPathType));
+				completions.append(CompletionEntry(QUrl::fromLocalFile(QDir::toNativeSeparators(path)), path, path, QIcon::fromTheme(mimeDatabase.mimeTypeForFile(entry, QMimeDatabase::MatchExtension).iconName(), iconProvider.icon(entry)), {}, CompletionEntry::LocalPathType));
 			}
 		}
 	}
@@ -163,7 +166,9 @@ void AddressCompletionModel::updateModel()
 
 		for (int i = 0; i < entries.count(); ++i)
 		{
-			completions.append(CompletionEntry(entries.at(i).entry->getUrl(), entries.at(i).entry->getTitle(), entries.at(i).match, entries.at(i).entry->getIcon(), entries.at(i).entry->getTimeVisited(), (entries.at(i).isTypedIn ? CompletionEntry::TypedHistoryType : CompletionEntry::HistoryType)));
+			HistoryModel::Entry *entry(entries.at(i).entry);
+
+			completions.append(CompletionEntry(entry->getUrl(), entry->getTitle(), entries.at(i).match, entry->getIcon(), entry->getTimeVisited(), (entries.at(i).isTypedIn ? CompletionEntry::TypedHistoryType : CompletionEntry::HistoryType)));
 		}
 	}
 
@@ -178,7 +183,9 @@ void AddressCompletionModel::updateModel()
 
 		for (int i = 0; i < entries.count(); ++i)
 		{
-			completions.append(CompletionEntry(entries.at(i).entry->getUrl(), entries.at(i).entry->getTitle(), entries.at(i).match, entries.at(i).entry->getIcon(), entries.at(i).entry->getTimeVisited(), CompletionEntry::TypedHistoryType, entries.at(i).entry->getIdentifier()));
+			HistoryModel::Entry *entry(entries.at(i).entry);
+
+			completions.append(CompletionEntry(entry->getUrl(), entry->getTitle(), entries.at(i).match, entry->getIcon(), entry->getTimeVisited(), CompletionEntry::TypedHistoryType, entry->getIdentifier()));
 		}
 	}
 
@@ -244,53 +251,59 @@ void AddressCompletionModel::setFilter(const QString &filter)
 
 void AddressCompletionModel::setTypes(CompletionTypes types, bool force)
 {
-	if (force || types != m_types)
+	if (!force && types == m_types)
 	{
-		m_types = types;
-
-		if (types.testFlag(TypedHistoryCompletionType))
-		{
-			m_filter.clear();
-		}
-
-		if (m_types.testFlag(SearchSuggestionsCompletionType))
-		{
-			m_defaultSearchEngine = SearchEnginesManager::getSearchEngine();
-		}
-
-		updateModel();
+		return;
 	}
+
+	m_types = types;
+
+	if (types.testFlag(TypedHistoryCompletionType))
+	{
+		m_filter.clear();
+	}
+
+	if (m_types.testFlag(SearchSuggestionsCompletionType))
+	{
+		m_defaultSearchEngine = SearchEnginesManager::getSearchEngine();
+	}
+
+	updateModel();
 }
 
 QVariant AddressCompletionModel::data(const QModelIndex &index, int role) const
 {
-	if (index.column() == 0 && index.row() >= 0 && index.row() < m_completions.count())
+	if (index.column() != 0 || !(index.row() >= 0 && index.row() < m_completions.count()))
 	{
-		switch (role)
-		{
-			case Qt::DecorationRole:
-				return m_completions.at(index.row()).icon;
-			case HistoryIdentifierRole:
-				return (m_completions.at(index.row()).historyIdentifier);
-			case IsRemovableRole:
-				return (m_completions.at(index.row()).type == CompletionEntry::TypedHistoryType);
-			case TextRole:
-				return (m_completions.at(index.row()).text.isEmpty() ? m_completions.at(index.row()).url.toString() : m_completions.at(index.row()).text);
-			case UrlRole:
-				return m_completions.at(index.row()).url;
-			case TitleRole:
-				return m_completions.at(index.row()).title;
-			case KeywordRole:
-				return m_completions.at(index.row()).keyword;
-			case MatchRole:
-				return (m_completions.at(index.row()).match.isEmpty() ? m_completions.at(index.row()).url.toString() : m_completions.at(index.row()).match);
-			case TimeVisitedRole:
-				return m_completions.at(index.row()).timeVisited;
-			case TypeRole:
-				return static_cast<int>(m_completions.at(index.row()).type);
-			default:
-				return {};
-		}
+		return {};
+	}
+
+	const CompletionEntry entry(m_completions.at(index.row()));
+
+	switch (role)
+	{
+		case Qt::DecorationRole:
+			return entry.icon;
+		case HistoryIdentifierRole:
+			return entry.historyIdentifier;
+		case IsRemovableRole:
+			return (entry.type == CompletionEntry::TypedHistoryType);
+		case TextRole:
+			return (entry.text.isEmpty() ? entry.url.toString() : entry.text);
+		case UrlRole:
+			return entry.url;
+		case TitleRole:
+			return entry.title;
+		case KeywordRole:
+			return entry.keyword;
+		case MatchRole:
+			return (entry.match.isEmpty() ? entry.url.toString() : entry.match);
+		case TimeVisitedRole:
+			return entry.timeVisited;
+		case TypeRole:
+			return static_cast<int>(entry.type);
+		default:
+			return {};
 	}
 
 	return {};

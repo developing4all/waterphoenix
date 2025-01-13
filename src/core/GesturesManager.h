@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -158,7 +158,7 @@ private:
 	static QVector<GesturesContext> m_contexts;
 	static int m_gesturesContextEnumerator;
 	static bool m_isReleasing;
-	static bool m_afterScroll;
+	static bool m_isAfterScroll;
 };
 
 }

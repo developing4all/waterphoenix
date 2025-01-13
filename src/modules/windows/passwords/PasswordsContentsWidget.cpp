@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -172,23 +172,26 @@ void PasswordsContentsWidget::populatePasswords()
 
 	for (int i = 0; i < hosts.count(); ++i)
 	{
-		const QUrl url(QStringLiteral("http://%1/").arg(hosts.at(i)));
+		const QString host(hosts.at(i));
+		const QUrl url(QStringLiteral("http://%1/").arg(host));
 		const QVector<PasswordsManager::PasswordInformation> passwords(PasswordsManager::getPasswords(url));
-		QStandardItem *hostItem(new QStandardItem(HistoryManager::getIcon(url), hosts.at(i)));
-		hostItem->setData(hosts.at(i), HostRole);
+		QStandardItem *hostItem(new QStandardItem(HistoryManager::getIcon(url), host));
+		hostItem->setData(host, HostRole);
 		hostItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
 
 		for (int j = 0; j < passwords.count(); ++j)
 		{
+			const PasswordsManager::PasswordInformation password(passwords.at(j));
 			QStandardItem *setItem(new QStandardItem(tr("Set #%1").arg(j + 1)));
-			setItem->setData(passwords.at(j).url, UrlRole);
-			setItem->setData(((passwords.at(j).type == PasswordsManager::AuthPassword) ? QLatin1String("auth") : QLatin1String("form")), AuthTypeRole);
+			setItem->setData(password.url, UrlRole);
+			setItem->setData(((password.type == PasswordsManager::AuthPassword) ? QLatin1String("auth") : QLatin1String("form")), AuthTypeRole);
 			setItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
 
-			for (int k = 0; k < passwords.at(j).fields.count(); ++k)
+			for (int k = 0; k < password.fields.count(); ++k)
 			{
-				QList<QStandardItem*> fieldItems({new QStandardItem(passwords.at(j).fields.at(k).name), new QStandardItem(passwords.at(j).fields.at(k).value)});
-				fieldItems[0]->setData(passwords.at(j).fields.at(k).type, FieldTypeRole);
+				const PasswordsManager::PasswordInformation::Field field(password.fields.at(k));
+				QList<QStandardItem*> fieldItems({new QStandardItem(field.name), new QStandardItem(field.value)});
+				fieldItems[0]->setData(field.type, FieldTypeRole);
 				fieldItems[0]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
 				fieldItems[1]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable | Qt::ItemNeverHasChildren);
 
@@ -198,7 +201,7 @@ void PasswordsContentsWidget::populatePasswords()
 			hostItem->appendRow({setItem, new QStandardItem()});
 		}
 
-		hostItem->setText(QStringLiteral("%1 (%2)").arg(hosts.at(i)).arg(hostItem->rowCount()));
+		hostItem->setText(QStringLiteral("%1 (%2)").arg(host).arg(hostItem->rowCount()));
 
 		m_model->appendRow(hostItem);
 
@@ -283,28 +286,28 @@ void PasswordsContentsWidget::removePasswords()
 
 	for (int i = 0; i < indexes.count(); ++i)
 	{
-		if (!indexes.at(i).isValid() || indexes.at(i).column() > 0)
+		const QModelIndex index(indexes.at(i));
+
+		if (!index.isValid() || index.column() > 0)
 		{
 			continue;
 		}
 
-		if (indexes.at(i).parent() == m_model->invisibleRootItem()->index())
+		if (index.parent() == m_model->invisibleRootItem()->index())
 		{
-			const QModelIndex hostIndex(indexes.at(i));
-
-			if (!hostIndex.isValid())
+			if (!index.isValid())
 			{
 				continue;
 			}
 
-			for (int j = 0; j < m_model->rowCount(hostIndex); ++j)
+			for (int j = 0; j < m_model->rowCount(index); ++j)
 			{
-				passwords.append(getPassword(m_model->index(j, 0, hostIndex)));
+				passwords.append(getPassword(m_model->index(j, 0, index)));
 			}
 		}
 		else
 		{
-			const QModelIndex setIndex((indexes.at(i).parent().parent() == m_model->invisibleRootItem()->index()) ? indexes.at(i) : indexes.at(i).parent());
+			const QModelIndex setIndex((index.parent().parent() == m_model->invisibleRootItem()->index()) ? index : index.parent());
 
 			if (setIndex.isValid())
 			{
@@ -444,20 +447,22 @@ void PasswordsContentsWidget::showContextMenu(const QPoint &position)
 		{
 			if (index.parent().parent().isValid() && index.parent().parent().parent() == m_model->invisibleRootItem()->index())
 			{
-				const QModelIndex valueIndex(index.sibling(index.row(), 0));
-
 				menu.addAction(tr("Copy Field Name"), this, [&]()
 				{
-					if (valueIndex.isValid())
+					const QModelIndex nameIndex(index.sibling(index.row(), 0));
+
+					if (nameIndex.isValid())
 					{
-						QApplication::clipboard()->setText(valueIndex.data(Qt::DisplayRole).toString());
+						QGuiApplication::clipboard()->setText(nameIndex.data(Qt::DisplayRole).toString());
 					}
 				});
 				menu.addAction(tr("Copy Field Value"), this, [&]()
 				{
+					const QModelIndex valueIndex(index.sibling(index.row(), 1));
+
 					if (valueIndex.isValid())
 					{
-						QApplication::clipboard()->setText(valueIndex.data(Qt::DisplayRole).toString());
+						QGuiApplication::clipboard()->setText(valueIndex.data(Qt::DisplayRole).toString());
 					}
 				});
 				menu.addSeparator();
@@ -524,12 +529,12 @@ ActionsManager::ActionDefinition::State PasswordsContentsWidget::getActionState(
 
 			return state;
 		case ActionsManager::DeleteAction:
-			state.isEnabled = (m_ui->passwordsViewWidget->selectionModel() && !m_ui->passwordsViewWidget->selectionModel()->selectedIndexes().isEmpty());
+			state.isEnabled = m_ui->passwordsViewWidget->hasSelection();
 
 			return state;
 		default:
 			break;
-		}
+	}
 
 	return ContentsWidget::getActionState(identifier, parameters);
 }

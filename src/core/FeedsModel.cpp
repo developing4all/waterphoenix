@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -215,7 +215,7 @@ QVector<Feed*> FeedsModel::Entry::getFeeds() const
 
 	for (int i = 0; i < rowCount(); ++i)
 	{
-		const Entry *entry(static_cast<Entry*>(child(i, 0)));
+		const Entry *entry(getChild(i));
 
 		if (!entry)
 		{
@@ -248,6 +248,26 @@ quint64 FeedsModel::Entry::getIdentifier() const
 FeedsModel::EntryType FeedsModel::Entry::getType() const
 {
 	return static_cast<EntryType>(data(TypeRole).toInt());
+}
+
+bool FeedsModel::Entry::isFolder(FeedsModel::EntryType type)
+{
+	switch (type)
+	{
+		case RootEntry:
+		case TrashEntry:
+		case FolderEntry:
+			return true;
+		default:
+			return false;
+	}
+
+	return false;
+}
+
+bool FeedsModel::Entry::isFolder() const
+{
+	return isFolder(getType());
 }
 
 bool FeedsModel::Entry::isAncestorOf(FeedsModel::Entry *child) const
@@ -382,31 +402,33 @@ void FeedsModel::trashEntry(Entry *entry)
 
 	const EntryType type(entry->getType());
 
-	if (type != RootEntry && type != TrashEntry)
+	if (type == RootEntry || type == TrashEntry)
 	{
-		if (entry->data(IsTrashedRole).toBool())
-		{
-			removeEntry(entry);
-		}
-		else
-		{
-			Entry *previousParent(static_cast<Entry*>(entry->parent()));
-			EntryLocation location;
-			location.parent = entry->parent()->index();
-			location.row = entry->row();
-
-			m_trash[entry] = location;
-
-			m_trashEntry->appendRow(entry->parent()->takeRow(entry->row()));
-			m_trashEntry->setEnabled(true);
-
-			removeEntryUrl(entry);
-
-			emit entryModified(entry);
-			emit entryTrashed(entry, previousParent);
-			emit modelModified();
-		}
+		return;
 	}
+
+	if (entry->data(IsTrashedRole).toBool())
+	{
+		removeEntry(entry);
+
+		return;
+	}
+
+	Entry *previousParent(static_cast<Entry*>(entry->parent()));
+	EntryLocation location;
+	location.parent = entry->parent()->index();
+	location.row = entry->row();
+
+	m_trash[entry] = location;
+
+	m_trashEntry->appendRow(entry->parent()->takeRow(entry->row()));
+	m_trashEntry->setEnabled(true);
+
+	removeEntryUrl(entry);
+
+	emit entryModified(entry);
+	emit entryTrashed(entry, previousParent);
+	emit modelModified();
 }
 
 void FeedsModel::restoreEntry(Entry *entry)
@@ -485,34 +507,34 @@ void FeedsModel::readEntry(QXmlStreamReader *reader, Entry *parent)
 
 			parent->appendRow(entry);
 		}
+
+		return;
 	}
-	else
+
+	Entry *entry(new Entry());
+	entry->setData(FolderEntry, TypeRole);
+	entry->setData(title, TitleRole);
+
+	createIdentifier(entry);
+
+	parent->appendRow(entry);
+
+	while (reader->readNext())
 	{
-		Entry *entry(new Entry());
-		entry->setData(FolderEntry, TypeRole);
-		entry->setData(title, TitleRole);
-
-		createIdentifier(entry);
-
-		parent->appendRow(entry);
-
-		while (reader->readNext())
+		if (reader->isStartElement())
 		{
-			if (reader->isStartElement())
+			if (reader->name() == QLatin1String("outline"))
 			{
-				if (reader->name() == QLatin1String("outline"))
-				{
-					readEntry(reader, entry);
-				}
-				else
-				{
-					reader->skipCurrentElement();
-				}
+				readEntry(reader, entry);
 			}
-			else if (reader->hasError())
+			else
 			{
-				return;
+				reader->skipCurrentElement();
 			}
+		}
+		else if (reader->hasError())
+		{
+			return;
 		}
 	}
 }
@@ -533,7 +555,7 @@ void FeedsModel::writeEntry(QXmlStreamWriter *writer, Entry *entry) const
 		case FolderEntry:
 			for (int i = 0; i < entry->rowCount(); ++i)
 			{
-				writeEntry(writer, static_cast<Entry*>(entry->child(i, 0)));
+				writeEntry(writer, entry->getChild(i));
 			}
 
 			break;
@@ -582,7 +604,7 @@ void FeedsModel::removeEntryUrl(Entry *entry)
 		case FolderEntry:
 			for (int i = 0; i < entry->rowCount(); ++i)
 			{
-				removeEntryUrl(static_cast<Entry*>(entry->child(i, 0)));
+				removeEntryUrl(entry->getChild(i));
 			}
 
 			break;
@@ -619,7 +641,7 @@ void FeedsModel::readdEntryUrl(Entry *entry)
 		case FolderEntry:
 			for (int i = 0; i < entry->rowCount(); ++i)
 			{
-				readdEntryUrl(static_cast<Entry*>(entry->child(i, 0)));
+				readdEntryUrl(entry->getChild(i));
 			}
 
 			break;
@@ -804,10 +826,12 @@ QMimeData* FeedsModel::mimeData(const QModelIndexList &indexes) const
 
 	for (int i = 0; i < indexes.count(); ++i)
 	{
-		if (indexes.at(i).isValid() && static_cast<EntryType>(indexes.at(i).data(TypeRole).toInt()) == FeedEntry)
+		const QModelIndex index(indexes.at(i));
+
+		if (index.isValid() && static_cast<EntryType>(index.data(TypeRole).toInt()) == FeedEntry)
 		{
-			texts.append(indexes.at(i).data(UrlRole).toString());
-			urls.append(indexes.at(i).data(UrlRole).toUrl());
+			texts.append(index.data(UrlRole).toString());
+			urls.append(index.data(UrlRole).toUrl());
 		}
 	}
 
@@ -909,33 +933,33 @@ bool FeedsModel::canDropMimeData(const QMimeData *data, Qt::DropAction action, i
 
 bool FeedsModel::dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column, const QModelIndex &parent)
 {
-	const EntryType type(static_cast<EntryType>(parent.data(TypeRole).toInt()));
-
-	if (type == FolderEntry || type == RootEntry || type == TrashEntry)
+	if (!Entry::isFolder(static_cast<EntryType>(parent.data(TypeRole).toInt())))
 	{
-		const QModelIndex index(data->property("x-item-index").toModelIndex());
-
-		if (index.isValid())
-		{
-			return moveEntry(getEntry(index), getEntry(parent), row);
-		}
-
-		if (data->hasUrls())
-		{
-			const QVector<QUrl> urls(Utils::extractUrls(data));
-
-			for (int i = 0; i < urls.count(); ++i)
-			{
-				addEntry(FeedEntry, {{UrlRole, urls.at(i)}, {TitleRole, (data->property("x-url-title").toString().isEmpty() ? urls.at(i).toString() : data->property("x-url-title").toString())}}, getEntry(parent), row);
-			}
-
-			return true;
-		}
-
-		return QStandardItemModel::dropMimeData(data, action, row, column, parent);
+		return false;
 	}
 
-	return false;
+	const QModelIndex index(data->property("x-item-index").toModelIndex());
+
+	if (index.isValid())
+	{
+		return moveEntry(getEntry(index), getEntry(parent), row);
+	}
+
+	if (data->hasUrls())
+	{
+		const QVector<QUrl> urls(Utils::extractUrls(data));
+
+		for (int i = 0; i < urls.count(); ++i)
+		{
+			const QUrl url(urls.at(i));
+
+			addEntry(FeedEntry, {{UrlRole, url}, {TitleRole, (data->property("x-url-title").toString().isEmpty() ? url.toString() : data->property("x-url-title").toString())}}, getEntry(parent), row);
+		}
+
+		return true;
+	}
+
+	return QStandardItemModel::dropMimeData(data, action, row, column, parent);
 }
 
 bool FeedsModel::save(const QString &path) const
@@ -965,7 +989,7 @@ bool FeedsModel::save(const QString &path) const
 
 	for (int i = 0; i < m_rootEntry->rowCount(); ++i)
 	{
-		writeEntry(&writer, static_cast<Entry*>(m_rootEntry->child(i, 0)));
+		writeEntry(&writer, m_rootEntry->getChild(i));
 	}
 
 	writer.writeEndElement();
@@ -983,9 +1007,15 @@ bool FeedsModel::setData(const QModelIndex &index, const QVariant &value, int ro
 		return QStandardItemModel::setData(index, value, role);
 	}
 
-	if (role == UrlRole && value.toUrl() != index.data(UrlRole).toUrl())
+	if (role == UrlRole)
 	{
-		handleUrlChanged(entry, Utils::normalizeUrl(value.toUrl()), Utils::normalizeUrl(index.data(UrlRole).toUrl()));
+		const QUrl oldUrl(index.data(UrlRole).toUrl());
+		const QUrl newUrl(value.toUrl());
+
+		if (oldUrl != newUrl)
+		{
+			handleUrlChanged(entry, Utils::normalizeUrl(newUrl), Utils::normalizeUrl(oldUrl));
+		}
 	}
 
 	entry->setData(value, role);

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Otter::ReportDialog</class>
- <widget class="QDialog" name="Otter::ReportDialog">
+ <class>Otter::DiagnosticReportDialog</class>
+ <widget class="QDialog" name="Otter::DiagnosticReportDialog">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
-    <height>300</height>
+    <width>600</width>
+    <height>600</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -24,8 +24,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>380</width>
-        <height>248</height>
+        <width>580</width>
+        <height>547</height>
        </rect>
       </property>
       <layout class="QVBoxLayout" name="reportLayout">
@@ -60,7 +60,7 @@
   <connection>
    <sender>buttonBox</sender>
    <signal>accepted()</signal>
-   <receiver>Otter::ReportDialog</receiver>
+   <receiver>Otter::DiagnosticReportDialog</receiver>
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -76,7 +76,7 @@
   <connection>
    <sender>buttonBox</sender>
    <signal>rejected()</signal>
-   <receiver>Otter::ReportDialog</receiver>
+   <receiver>Otter::DiagnosticReportDialog</receiver>
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">

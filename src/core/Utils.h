@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -28,8 +28,6 @@
 #include <QtCore/QUrl>
 #include <QtGui/QIcon>
 
-#define SECONDS_IN_DAY 86400
-
 namespace Otter
 {
 
@@ -45,6 +43,18 @@ struct ApplicationInformation final
 	QString command;
 	QString name;
 	QIcon icon;
+};
+
+struct DiagnosticReport final
+{
+	struct Section final
+	{
+		QString title;
+		QVector<QStringList> entries;
+		QVector<int> fieldWidths;
+	};
+
+	QVector<Section> sections;
 };
 
 struct ErrorPageInformation final
@@ -106,6 +116,7 @@ private:
 namespace Utils
 {
 
+void removeFiles(const QStringList &paths);
 void runApplication(const QString &command, const QUrl &url = {});
 void startLinkDrag(const QUrl &url, const QString &title, const QPixmap &pixmap, QObject *parent = nullptr);
 QString matchUrl(const QUrl &url, const QString &prefix);
@@ -122,6 +133,7 @@ QString formatUnit(qint64 value, bool isSpeed = false, int precision = 1, bool a
 QString formatFileTypes(const QStringList &filters = {});
 QString normalizeObjectName(QString name, const QString &suffix = {});
 QString normalizePath(const QString &path);
+QString getTopLevelDomain(const QUrl &url);
 QString getStandardLocation(QStandardPaths::StandardLocation type);
 QUrl expandUrl(const QUrl &url);
 QUrl normalizeUrl(QUrl url);
@@ -134,9 +146,10 @@ QStringList getOpenPaths(const QStringList &fileNames = {}, QStringList filters 
 QVector<QUrl> extractUrls(const QMimeData *mimeData);
 QVector<ApplicationInformation> getApplicationsForMimeType(const QMimeType &mimeType);
 qreal calculatePercent(qint64 amount, qint64 total, int multiplier = 100);
-int calculateCharacterWidth(QChar character, const QFontMetrics &fontMetrics);
-int calculateTextWidth(const QString &text, const QFontMetrics &fontMetrics);
+bool ensureDirectoryExists(const QString &path);
+bool isDomainTheSame(const QUrl &firstUrl, const QUrl &secondUrl);
 bool isUrl(const QString &text);
+bool isUrlAmbiguous(const QUrl &url);
 bool isUrlEmpty(const QUrl &url);
 
 }

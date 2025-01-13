@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -28,7 +28,6 @@
 #include "../../../ui/ActionParametersDialog.h"
 #include "../../../ui/MetaDataDialog.h"
 
-#include <QtCore/QDir>
 #include <QtCore/QTimer>
 #include <QtWidgets/QMessageBox>
 
@@ -266,11 +265,13 @@ void InputPreferencesPage::loadKeyboardDefinitions(const QString &identifier)
 
 	for (int i = 0; i < definitions.count(); ++i)
 	{
-		const ActionsManager::ActionDefinition action(ActionsManager::getActionDefinition(definitions.at(i).action));
-		const QString name(ActionsManager::getActionName(definitions.at(i).action));
+		const KeyboardProfile::Action shortcutsDefinition(definitions.at(i));
+		const ActionsManager::ActionDefinition actionDefinition(ActionsManager::getActionDefinition(shortcutsDefinition.action));
+		const QString name(ActionsManager::getActionName(shortcutsDefinition.action));
+		const QString description(actionDefinition.getText(true));
 
-		addKeyboardShortcuts(m_keyboardShortcutsModel, definitions.at(i).action, name, action.getText(true), action.defaultState.icon, definitions.at(i).parameters, definitions.at(i).shortcuts, false);
-		addKeyboardShortcuts(m_keyboardShortcutsModel, definitions.at(i).action, name, action.getText(true), action.defaultState.icon, definitions.at(i).parameters, definitions.at(i).disabledShortcuts, true);
+		addKeyboardShortcuts(shortcutsDefinition.action, name, description, actionDefinition.defaultState.icon, shortcutsDefinition.parameters, shortcutsDefinition.shortcuts, false);
+		addKeyboardShortcuts(shortcutsDefinition.action, name, description, actionDefinition.defaultState.icon, shortcutsDefinition.parameters, shortcutsDefinition.disabledShortcuts, true);
 	}
 
 	m_keyboardShortcutsModel->sort(1);
@@ -278,7 +279,7 @@ void InputPreferencesPage::loadKeyboardDefinitions(const QString &identifier)
 	m_ui->keyboardShortcutsViewWidget->setModified(profile.isModified());
 }
 
-void InputPreferencesPage::addKeyboardShortcuts(QStandardItemModel *model, int identifier, const QString &name, const QString &text, const QIcon &icon, const QVariantMap &rawParameters, const QVector<QKeySequence> &shortcuts, bool areShortcutsDisabled)
+void InputPreferencesPage::addKeyboardShortcuts(int identifier, const QString &name, const QString &text, const QIcon &icon, const QVariantMap &rawParameters, const QVector<QKeySequence> &shortcuts, bool areShortcutsDisabled)
 {
 	const QString parameters(createParamatersPreview(rawParameters, QLatin1String("\n")));
 
@@ -299,7 +300,7 @@ void InputPreferencesPage::addKeyboardShortcuts(QStandardItemModel *model, int i
 		items[3]->setData(areShortcutsDisabled, IsDisabledRole);
 		items[3]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsEditable | Qt::ItemNeverHasChildren);
 
-		model->appendRow(items);
+		m_keyboardShortcutsModel->appendRow(items);
 
 		if (areShortcutsDisabled)
 		{
@@ -509,14 +510,15 @@ void InputPreferencesPage::load()
 
 	for (int i = 0; i < keyboardProfiles.count(); ++i)
 	{
-		const KeyboardProfile profile(keyboardProfiles.at(i), KeyboardProfile::FullMode);
+		const QString identifier(keyboardProfiles.at(i));
+		const KeyboardProfile profile(identifier, KeyboardProfile::FullMode);
 
 		if (!profile.isValid())
 		{
 			continue;
 		}
 
-		m_keyboardProfiles[keyboardProfiles.at(i)] = profile;
+		m_keyboardProfiles[identifier] = profile;
 
 		QStandardItem *item(new QStandardItem(profile.getTitle()));
 		item->setToolTip(profile.getDescription());
@@ -587,7 +589,11 @@ void InputPreferencesPage::load()
 
 void InputPreferencesPage::save()
 {
-	QDir().mkpath(SessionsManager::getWritableDataPath(QLatin1String("keyboard")));
+	Utils::removeFiles(m_filesToRemove);
+
+	m_filesToRemove.clear();
+
+	Utils::ensureDirectoryExists(SessionsManager::getWritableDataPath(QLatin1String("keyboard")));
 
 	bool needsKeyboardProfilesReload(false);
 	QHash<QString, KeyboardProfile>::iterator keyboardProfilesIterator;
@@ -698,7 +704,7 @@ InputPreferencesPage::ValidationResult InputPreferencesPage::validateShortcut(co
 		const QModelIndex matchedIndex(indexes.value(0));
 		const ActionsManager::ActionDefinition definition(ActionsManager::getActionDefinition(matchedIndex.sibling(matchedIndex.row(), 1).data(IdentifierRole).toInt()));
 
-		messages.append(tr("This shortcut already used by %1").arg(definition.isValid() ? definition.getText(true) : tr("unknown action")));
+		messages.append(tr("This shortcut is already used by %1").arg(definition.isValid() ? definition.getText(true) : tr("unknown action")));
 
 		result.isError = true;
 	}
@@ -758,23 +764,25 @@ QHash<int, QVector<KeyboardProfile::Action> > InputPreferencesPage::getKeyboardD
 
 			for (int j = 0; j < actionVariants.count(); ++j)
 			{
-				if (actionVariants.at(j).parameters == parameters)
+				if (actionVariants.at(j).parameters != parameters)
 				{
-					if (isDisabled)
-					{
-						actionVariants[j].disabledShortcuts.append(shortcut);
-					}
-					else
-					{
-						actionVariants[j].shortcuts.append(shortcut);
-					}
-
-					actions[action] = actionVariants;
-
-					hasMatch = true;
-
-					break;
+					continue;
 				}
+
+				if (isDisabled)
+				{
+					actionVariants[j].disabledShortcuts.append(shortcut);
+				}
+				else
+				{
+					actionVariants[j].shortcuts.append(shortcut);
+				}
+
+				actions[action] = actionVariants;
+
+				hasMatch = true;
+
+				break;
 			}
 		}
 		else
@@ -805,10 +813,11 @@ QHash<int, QVector<KeyboardProfile::Action> > InputPreferencesPage::getKeyboardD
 
 		for (int j = 0; j < actionVariants.count(); ++j)
 		{
+			const ShortcutsDefinition actionVariant(actionVariants.at(j));
 			KeyboardProfile::Action definition;
-			definition.parameters = actionVariants.at(j).parameters;
-			definition.shortcuts = actionVariants.at(j).shortcuts;
-			definition.disabledShortcuts = actionVariants.at(j).disabledShortcuts;
+			definition.parameters = actionVariant.parameters;
+			definition.shortcuts = actionVariant.shortcuts;
+			definition.disabledShortcuts = actionVariant.disabledShortcuts;
 			definition.action = iterator.key();
 
 			definitions.append(definition);

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -47,6 +47,14 @@ namespace Otter
 
 namespace Utils
 {
+
+void removeFiles(const QStringList &paths)
+{
+	for (int i = 0; i < paths.count(); ++i)
+	{
+		QFile::remove(paths.at(i));
+	}
+}
 
 void runApplication(const QString &command, const QUrl &url)
 {
@@ -285,12 +293,13 @@ QString createErrorPage(const ErrorPageInformation &information)
 
 		for (int i = 0; i < actions.count(); ++i)
 		{
+			const ErrorPageInformation::PageAction action(actions.at(i));
 			QString actionHtml(actionTemplate);
-			actionHtml.replace(QLatin1String("{action}"), actions.at(i).name);
-			actionHtml.replace(QLatin1String("{text}"), actions.at(i).title);
-			actionHtml.replace(QLatin1String("{attributes}"), ((actions.at(i).type == ErrorPageInformation::MainAction) ? QLatin1String(" autofocus") : QString()));
+			actionHtml.replace(QLatin1String("{action}"), action.name);
+			actionHtml.replace(QLatin1String("{text}"), action.title);
+			actionHtml.replace(QLatin1String("{attributes}"), ((action.type == ErrorPageInformation::MainAction) ? QLatin1String(" autofocus") : QString()));
 
-			if (actions.at(i).type != ErrorPageInformation::AdvancedAction)
+			if (action.type != ErrorPageInformation::AdvancedAction)
 			{
 				basicActionsHtml.append(actionHtml);
 			}
@@ -425,9 +434,9 @@ QString formatElapsedTime(int value)
 	{
 		QString string(time.toString(QLatin1String("hh:mm:ss")));
 
-		if (value > SECONDS_IN_DAY)
+		if (value > 86400)
 		{
-			string = QCoreApplication::translate("utils", "%n days %1", "", (qFloor(static_cast<qreal>(value) / SECONDS_IN_DAY))).arg(string);
+			string = QCoreApplication::translate("utils", "%n days %1", "", (qFloor(static_cast<qreal>(value) / 86400))).arg(string);
 		}
 
 		return string;
@@ -532,6 +541,11 @@ QString normalizePath(const QString &path)
 	return path;
 }
 
+QString getTopLevelDomain(const QUrl &url)
+{
+	return url.topLevelDomain();
+}
+
 QString getStandardLocation(QStandardPaths::StandardLocation type)
 {
 	const QStringList paths(QStandardPaths::standardLocations(type));
@@ -541,23 +555,23 @@ QString getStandardLocation(QStandardPaths::StandardLocation type)
 
 QUrl expandUrl(const QUrl &url)
 {
-	if (url.isValid() && url.scheme().isEmpty())
+	if (!url.isValid() || !url.scheme().isEmpty())
 	{
-		if (!url.path().startsWith(QLatin1Char('/')))
-		{
-			QUrl httpUrl(url);
-			httpUrl.setScheme(QLatin1String("http"));
-
-			return httpUrl;
-		}
-
-		QUrl localUrl(url);
-		localUrl.setScheme(QLatin1String("file"));
-
-		return localUrl;
+		return url;
 	}
 
-	return url;
+	if (!url.path().startsWith(QLatin1Char('/')))
+	{
+		QUrl httpUrl(url);
+		httpUrl.setScheme(QLatin1String("http"));
+
+		return httpUrl;
+	}
+
+	QUrl localUrl(url);
+	localUrl.setScheme(QLatin1String("file"));
+
+	return localUrl;
 }
 
 QUrl normalizeUrl(QUrl url)
@@ -598,11 +612,11 @@ QFont multiplyFontSize(QFont font, qreal multiplier)
 {
 	if (font.pixelSize() > 0)
 	{
-		font.setPixelSize(font.pixelSize() * 2);
+		font.setPixelSize(font.pixelSize() * multiplier);
 	}
 	else
 	{
-		font.setPointSize(font.pointSize() * 2);
+		font.setPointSize(font.pointSize() * multiplier);
 	}
 
 	return font;
@@ -684,7 +698,7 @@ SaveInformation getSavePath(const QString &fileName, const QString &directory, Q
 
 	do
 	{
-		if (path.isEmpty() || forceAsk)
+		if (forceAsk || path.isEmpty())
 		{
 			QFileDialog dialog(Application::getActiveWindow(), QCoreApplication::translate("utils", "Save File"), SettingsManager::getOption(SettingsManager::Paths_SaveFileOption).toString() + QDir::separator() + fileName);
 			dialog.setNameFilters(filters);
@@ -748,27 +762,43 @@ qreal calculatePercent(qint64 amount, qint64 total, int multiplier)
 	return ((static_cast<qreal>(amount) / static_cast<qreal>(total)) * multiplier);
 }
 
-int calculateCharacterWidth(QChar character, const QFontMetrics &fontMetrics)
+bool ensureDirectoryExists(const QString &path)
 {
-#if QT_VERSION >= 0x050B00
-	return fontMetrics.horizontalAdvance(character);
-#else
-	return fontMetrics.width(character);
-#endif
+	if (QFile::exists(path))
+	{
+		return true;
+	}
+
+	return QDir().mkpath(path);
 }
 
-int calculateTextWidth(const QString &text, const QFontMetrics &fontMetrics)
+bool isDomainTheSame(const QUrl &firstUrl, const QUrl &secondUrl)
 {
-#if QT_VERSION >= 0x050B00
-	return fontMetrics.horizontalAdvance(text);
-#else
-	return fontMetrics.width(text);
-#endif
+	const QString firstTld(getTopLevelDomain(firstUrl));
+	const QString secondTld(getTopLevelDomain(secondUrl));
+
+	if (firstTld != secondTld)
+	{
+		return false;
+	}
+
+	QString firstDomain(QLatin1Char('.') + firstUrl.host().toLower());
+	firstDomain.remove((firstDomain.length() - firstTld.length()), firstTld.length());
+
+	QString secondDomain(QLatin1Char('.') + secondUrl.host().toLower());
+	secondDomain.remove((secondDomain.length() - secondTld.length()), secondTld.length());
+
+	return firstDomain.section(QLatin1Char('.'), -1) == secondDomain.section(QLatin1Char('.'), -1);
 }
 
 bool isUrl(const QString &text)
 {
 	return QRegularExpression(QLatin1String(R"(^[^\s]+\.[^\s]{2,}$)")).match(text).hasMatch();
+}
+
+bool isUrlAmbiguous(const QUrl &url)
+{
+	return (!url.isLocalFile() && url.host(QUrl::FullyEncoded) != url.host(QUrl::FullyDecoded));
 }
 
 bool isUrlEmpty(const QUrl &url)

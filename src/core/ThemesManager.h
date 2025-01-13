@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@
 namespace Otter
 {
 
+class Animation;
 class Style;
 
 class ColorScheme final : public QObject, public Addon
@@ -103,12 +104,21 @@ class ThemesManager final : public QObject
 	Q_OBJECT
 
 public:
+	enum IconContext
+	{
+		GenericContext = 0,
+		ContextMenuContext,
+		MenuBarContext,
+		ToolBarContext
+	};
+
 	static void createInstance();
 	static ThemesManager* getInstance();
 	static ColorScheme* getColorScheme();
+	static Style* getStyle();
 	static Style* createStyle(const QString &name);
-	static QString getAnimationPath(const QString &name);
-	static QIcon createIcon(const QString &name, bool fromTheme = true);
+	static Animation* createAnimation(const QString &name = QLatin1String("spinner"), QObject *parent = nullptr);
+	static QIcon createIcon(const QString &name, bool fromTheme = true, IconContext context = GenericContext);
 
 protected:
 	explicit ThemesManager(QObject *parent);

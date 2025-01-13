@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2019 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2019 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -74,15 +74,17 @@ void ActionsContentsWidget::populateActions()
 
 	for (int i = 0; i < definitions.count(); ++i)
 	{
-		if (definitions.at(i).flags.testFlag(ActionsManager::ActionDefinition::IsDeprecatedFlag) || definitions.at(i).flags.testFlag(ActionsManager::ActionDefinition::RequiresParameters))
+		const ActionsManager::ActionDefinition definition(definitions.at(i));
+
+		if (definition.flags.testFlag(ActionsManager::ActionDefinition::IsDeprecatedFlag) || definition.flags.testFlag(ActionsManager::ActionDefinition::RequiresParameters))
 		{
 			continue;
 		}
 
-		const QString actionName(ActionsManager::getActionName(definitions.at(i).identifier));
-		QList<QStandardItem*> items({new QStandardItem(definitions.at(i).getText(true)), new QStandardItem(QKeySequence::listToString(ActionsManager::getActionShortcuts(definitions.at(i).identifier).toList(), QKeySequence::NativeText)), new QStandardItem()});
-		items[0]->setData(ItemModel::createDecoration(definitions.at(i).defaultState.icon), Qt::DecorationRole);
-		items[0]->setData(definitions.at(i).identifier, IdentifierRole);
+		const QString actionName(ActionsManager::getActionName(definition.identifier));
+		QList<QStandardItem*> items({new QStandardItem(definition.getText(true)), new QStandardItem(QKeySequence::listToString(ActionsManager::getActionShortcuts(definition.identifier).toList(), QKeySequence::NativeText)), new QStandardItem()});
+		items[0]->setData(ItemModel::createDecoration(definition.defaultState.icon), Qt::DecorationRole);
+		items[0]->setData(definition.identifier, IdentifierRole);
 		items[0]->setData(actionName, ActionRole);
 		items[0]->setToolTip(QStringLiteral("%1 (%2)").arg(items[0]->text(), actionName));
 		items[0]->setFlags(items[0]->flags() | Qt::ItemNeverHasChildren);
@@ -97,12 +99,6 @@ void ActionsContentsWidget::updateActions()
 {
 	const QModelIndex index(m_ui->actionsViewWidget->getCurrentIndex().sibling(m_ui->actionsViewWidget->getCurrentRow(), 0));
 
-	m_ui->actionLabelWidget->setText({});
-	m_ui->identifierLabelWidget->setText({});
-	m_ui->parametersLabelWidget->setText({});
-	m_ui->shortcutsLabelWidget->setText({});
-	m_ui->gesturesLabelWidget->setText({});
-
 	if (index.isValid())
 	{
 		m_ui->actionLabelWidget->setText(index.data(Qt::DisplayRole).toString());
@@ -110,6 +106,14 @@ void ActionsContentsWidget::updateActions()
 		m_ui->parametersLabelWidget->setText(index.data(ParametersRole).toString());
 		m_ui->shortcutsLabelWidget->setText(index.sibling(index.row(), 1).data(Qt::DisplayRole).toString());
 		m_ui->gesturesLabelWidget->setText(index.sibling(index.row(), 2).data(Qt::DisplayRole).toString());
+	}
+	else
+	{
+		m_ui->actionLabelWidget->setText({});
+		m_ui->identifierLabelWidget->setText({});
+		m_ui->parametersLabelWidget->setText({});
+		m_ui->shortcutsLabelWidget->setText({});
+		m_ui->gesturesLabelWidget->setText({});
 	}
 }
 

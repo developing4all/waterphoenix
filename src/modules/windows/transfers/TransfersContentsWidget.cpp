@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -45,17 +45,19 @@ void ProgressBarDelegate::setEditorData(QWidget *editor, const QModelIndex &inde
 {
 	ProgressBarWidget *progressBar(qobject_cast<ProgressBarWidget*>(editor->findChild<ProgressBarWidget*>()));
 
-	if (progressBar)
+	if (!progressBar)
 	{
-		const Transfer::TransferState state(static_cast<Transfer::TransferState>(index.data(TransfersContentsWidget::StateRole).toInt()));
-		const bool isIndeterminate(index.data(TransfersContentsWidget::BytesTotalRole).toLongLong() <= 0);
-		const bool hasError(state == Transfer::UnknownState || state == Transfer::ErrorState);
-
-		progressBar->setHasError(hasError);
-		progressBar->setRange(0, ((isIndeterminate && !hasError) ? 0 : 100));
-		progressBar->setValue(isIndeterminate ? (hasError ? 0 : -1) : index.data(TransfersContentsWidget::ProgressRole).toInt());
-		progressBar->setFormat(isIndeterminate ? tr("Unknown") : QLatin1String("%p%"));
+		return;
 	}
+
+	const Transfer::TransferState state(static_cast<Transfer::TransferState>(index.data(TransfersContentsWidget::StateRole).toInt()));
+	const bool isIndeterminate(index.data(TransfersContentsWidget::BytesTotalRole).toLongLong() <= 0);
+	const bool hasError(state == Transfer::UnknownState || state == Transfer::ErrorState);
+
+	progressBar->setHasError(hasError);
+	progressBar->setRange(0, ((isIndeterminate && !hasError) ? 0 : 100));
+	progressBar->setValue(isIndeterminate ? (hasError ? 0 : -1) : index.data(TransfersContentsWidget::ProgressRole).toInt());
+	progressBar->setFormat(isIndeterminate ? tr("Unknown") : QLatin1String("%p%"));
 }
 
 QWidget* ProgressBarDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const
@@ -161,17 +163,14 @@ void TransfersContentsWidget::removeTransfer()
 {
 	Transfer *transfer(getTransfer(m_ui->transfersViewWidget->currentIndex()));
 
-	if (transfer)
+	if (!transfer || (transfer->getState() == Transfer::RunningState && QMessageBox::warning(this, tr("Warning"), tr("This file is still being downloaded.\nDo you really want to remove it?"), (QMessageBox::Yes | QMessageBox::Cancel)) == QMessageBox::Cancel))
 	{
-		if (transfer->getState() == Transfer::RunningState && QMessageBox::warning(this, tr("Warning"), tr("This file is still being downloaded.\nDo you really want to remove it?"), (QMessageBox::Yes | QMessageBox::Cancel)) == QMessageBox::Cancel)
-		{
-			return;
-		}
-
-		m_model->removeRow(m_ui->transfersViewWidget->currentIndex().row());
-
-		TransfersManager::removeTransfer(transfer);
+		return;
 	}
+
+	m_model->removeRow(m_ui->transfersViewWidget->currentIndex().row());
+
+	TransfersManager::removeTransfer(transfer);
 }
 
 void TransfersContentsWidget::openTransfer()
@@ -190,7 +189,7 @@ void TransfersContentsWidget::copyTransferInformation()
 
 	if (index.isValid() && index.data(Qt::ToolTipRole).isValid())
 	{
-		QApplication::clipboard()->setText(index.data(Qt::ToolTipRole).toString().remove(QRegularExpression(QLatin1String("<[^>]*>"))));
+		QGuiApplication::clipboard()->setText(index.data(Qt::ToolTipRole).toString().remove(QRegularExpression(QLatin1String("<[^>]*>"))));
 	}
 }
 
@@ -198,24 +197,26 @@ void TransfersContentsWidget::stopResumeTransfer()
 {
 	Transfer *transfer(getTransfer(m_ui->transfersViewWidget->getCurrentIndex()));
 
-	if (transfer)
+	if (!transfer)
 	{
-		switch (transfer->getState())
-		{
-			case Transfer::RunningState:
-				transfer->stop();
-
-				break;
-			case Transfer::ErrorState:
-				transfer->resume();
-
-				break;
-			default:
-				break;
-		}
-
-		updateActions();
+		return;
 	}
+
+	switch (transfer->getState())
+	{
+		case Transfer::RunningState:
+			transfer->stop();
+
+			break;
+		case Transfer::ErrorState:
+			transfer->resume();
+
+			break;
+		default:
+			break;
+	}
+
+	updateActions();
 }
 
 void TransfersContentsWidget::redownloadTransfer()
@@ -331,27 +332,29 @@ void TransfersContentsWidget::handleTransferChanged(Transfer *transfer)
 		}
 	}
 
-	if (m_ui->transfersViewWidget->selectionModel()->hasSelection())
+	if (m_ui->transfersViewWidget->hasSelection())
 	{
 		updateActions();
 	}
 
 	const bool isRunning(transfer && transfer->getState() == Transfer::RunningState);
 
-	if (isRunning != m_isLoading)
+	if (isRunning == m_isLoading)
 	{
-		if (isRunning)
-		{
-			m_isLoading = true;
+		return;
+	}
 
-			emit loadingStateChanged(WebWidget::OngoingLoadingState);
-		}
-		else if (!TransfersManager::hasRunningTransfers())
-		{
-			m_isLoading = false;
+	if (isRunning)
+	{
+		m_isLoading = true;
 
-			emit loadingStateChanged(WebWidget::FinishedLoadingState);
-		}
+		emit loadingStateChanged(WebWidget::OngoingLoadingState);
+	}
+	else if (!TransfersManager::hasRunningTransfers())
+	{
+		m_isLoading = false;
+
+		emit loadingStateChanged(WebWidget::FinishedLoadingState);
 	}
 }
 
@@ -403,10 +406,7 @@ void TransfersContentsWidget::showContextMenu(const QPoint &position)
 		}
 	}
 
-	menu.addAction(ThemesManager::createIcon(QLatin1String("edit-clear-history")), tr("Clear Finished Transfers"), this, [&]()
-	{
-		TransfersManager::clearTransfers();
-	})->setEnabled(finishedTransfers > 0);
+	menu.addAction(ThemesManager::createIcon(QLatin1String("edit-clear-history")), tr("Clear Finished Transfers"), &TransfersManager::clearTransfers)->setEnabled(finishedTransfers > 0);
 	menu.exec(m_ui->transfersViewWidget->mapToGlobal(position));
 }
 

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -39,6 +39,7 @@ namespace Otter
 
 CookiesContentsWidget::CookiesContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
 	m_model(new QStandardItemModel(this)),
+	m_cookieJar(NetworkManagerFactory::getCookieJar()),
 	m_isLoading(true),
 	m_ui(new Ui::CookiesContentsWidget)
 {
@@ -77,8 +78,7 @@ void CookiesContentsWidget::changeEvent(QEvent *event)
 
 void CookiesContentsWidget::populateCookies()
 {
-	const CookieJar *cookieJar(NetworkManagerFactory::getCookieJar());
-	const QVector<QNetworkCookie> cookies(cookieJar->getCookies());
+	const QVector<QNetworkCookie> cookies(m_cookieJar->getCookies());
 
 	for (int i = 0; i < cookies.count(); ++i)
 	{
@@ -95,8 +95,8 @@ void CookiesContentsWidget::populateCookies()
 
 	emit loadingStateChanged(WebWidget::FinishedLoadingState);
 
-	connect(cookieJar, &CookieJar::cookieAdded, this, &CookiesContentsWidget::handleCookieAdded);
-	connect(cookieJar, &CookieJar::cookieRemoved, this, &CookiesContentsWidget::handleCookieRemoved);
+	connect(m_cookieJar, &CookieJar::cookieAdded, this, &CookiesContentsWidget::handleCookieAdded);
+	connect(m_cookieJar, &CookieJar::cookieRemoved, this, &CookiesContentsWidget::handleCookieRemoved);
 	connect(m_model, &QStandardItemModel::modelReset, this, &CookiesContentsWidget::updateActions);
 	connect(m_ui->cookiesViewWidget, &ItemViewWidget::needsActionsUpdate, this, &CookiesContentsWidget::updateActions);
 }
@@ -107,7 +107,7 @@ void CookiesContentsWidget::addCookie()
 
 	if (dialog.exec() == QDialog::Accepted)
 	{
-		NetworkManagerFactory::getCookieJar()->forceInsertCookie(dialog.getModifiedCookie());
+		m_cookieJar->forceInsertCookie(dialog.getModifiedCookie());
 	}
 }
 
@@ -120,20 +120,21 @@ void CookiesContentsWidget::removeCookies()
 		return;
 	}
 
-	CookieJar *cookieJar(NetworkManagerFactory::getCookieJar());
 	QVector<QNetworkCookie> cookies;
 	cookies.reserve(indexes.count());
 
 	for (int i = 0; i < indexes.count(); ++i)
 	{
-		if (!indexes.at(i).isValid())
+		const QModelIndex index(indexes.at(i));
+
+		if (!index.isValid())
 		{
 			continue;
 		}
 
-		if (indexes.at(i).parent() == m_model->invisibleRootItem()->index())
+		if (index.parent() == m_model->invisibleRootItem()->index())
 		{
-			const QStandardItem *domainItem(m_model->itemFromIndex(indexes.at(i)));
+			const QStandardItem *domainItem(m_model->itemFromIndex(index));
 
 			if (!domainItem)
 			{
@@ -147,7 +148,7 @@ void CookiesContentsWidget::removeCookies()
 		}
 		else
 		{
-			const QStandardItem *cookieItem(m_model->itemFromIndex(indexes.at(i)));
+			const QStandardItem *cookieItem(m_model->itemFromIndex(index));
 
 			if (cookieItem)
 			{
@@ -158,7 +159,7 @@ void CookiesContentsWidget::removeCookies()
 
 	for (int i = 0; i < cookies.count(); ++i)
 	{
-		cookieJar->forceDeleteCookie(cookies.at(i));
+		m_cookieJar->forceDeleteCookie(cookies.at(i));
 	}
 }
 
@@ -176,18 +177,21 @@ void CookiesContentsWidget::removeDomainCookies()
 
 	for (int i = 0; i < indexes.count(); ++i)
 	{
-		const QStandardItem *domainItem((indexes.at(i).isValid() && indexes.at(i).parent() == m_model->invisibleRootItem()->index()) ? findDomainItem(indexes.at(i).sibling(indexes.at(i).row(), 0).data(Qt::ToolTipRole).toString()) : m_model->itemFromIndex(indexes.at(i).parent()));
+		const QModelIndex index(indexes.at(i));
+		const QStandardItem *domainItem((index.isValid() && index.parent() == m_model->invisibleRootItem()->index()) ? findDomainItem(index.sibling(index.row(), 0).data(Qt::ToolTipRole).toString()) : m_model->itemFromIndex(index.parent()));
 
-		if (domainItem)
+		if (!domainItem)
 		{
-			for (int j = 0; j < domainItem->rowCount(); ++j)
-			{
-				const QNetworkCookie cookie(getCookie(ItemModel::getItemData(domainItem->child(j, 0), CookieRole)));
+			continue;
+		}
 
-				if (!cookies.contains(cookie))
-				{
-					cookies.append(cookie);
-				}
+		for (int j = 0; j < domainItem->rowCount(); ++j)
+		{
+			const QNetworkCookie cookie(getCookie(ItemModel::getItemData(domainItem->child(j, 0), CookieRole)));
+
+			if (!cookies.contains(cookie))
+			{
+				cookies.append(cookie);
 			}
 		}
 	}
@@ -196,6 +200,8 @@ void CookiesContentsWidget::removeDomainCookies()
 	{
 		return;
 	}
+
+	cookies.squeeze();
 
 	QMessageBox messageBox;
 	messageBox.setWindowTitle(tr("Question"));
@@ -207,11 +213,9 @@ void CookiesContentsWidget::removeDomainCookies()
 
 	if (messageBox.exec() == QMessageBox::Yes)
 	{
-		CookieJar *cookieJar(NetworkManagerFactory::getCookieJar());
-
 		for (int i = 0; i < cookies.count(); ++i)
 		{
-			cookieJar->forceDeleteCookie(cookies.at(i));
+			m_cookieJar->forceDeleteCookie(cookies.at(i));
 		}
 	}
 }
@@ -228,7 +232,7 @@ void CookiesContentsWidget::removeAllCookies()
 
 	if (messageBox.exec() == QMessageBox::Yes)
 	{
-		NetworkManagerFactory::getCookieJar()->clearCookies();
+		m_cookieJar->clearCookies();
 	}
 }
 
@@ -238,14 +242,14 @@ void CookiesContentsWidget::cookieProperties()
 
 	if (dialog.exec() == QDialog::Accepted && dialog.isModified())
 	{
-		NetworkManagerFactory::getCookieJar()->forceDeleteCookie(dialog.getOriginalCookie());
-		NetworkManagerFactory::getCookieJar()->forceInsertCookie(dialog.getModifiedCookie());
+		m_cookieJar->forceDeleteCookie(dialog.getOriginalCookie());
+		m_cookieJar->forceInsertCookie(dialog.getModifiedCookie());
 	}
 }
 
 void CookiesContentsWidget::handleCookieAdded(const QNetworkCookie &cookie)
 {
-	const QString domain(cookie.domain().startsWith(QLatin1Char('.')) ? cookie.domain().mid(1) : cookie.domain());
+	const QString domain(getCookieDomain(cookie));
 	QStandardItem *domainItem(findDomainItem(domain));
 
 	if (domainItem)
@@ -256,7 +260,7 @@ void CookiesContentsWidget::handleCookieAdded(const QNetworkCookie &cookie)
 
 			if (childItem && cookie.hasSameIdentifier(getCookie(childItem->index().data(CookieRole))))
 			{
-				childItem->setData(cookie.toRawForm());
+				childItem->setData(cookie.toRawForm(), CookieRole);
 
 				updateActions();
 
@@ -288,7 +292,7 @@ void CookiesContentsWidget::handleCookieAdded(const QNetworkCookie &cookie)
 
 void CookiesContentsWidget::handleCookieRemoved(const QNetworkCookie &cookie)
 {
-	const QString domain(cookie.domain().startsWith(QLatin1Char('.')) ? cookie.domain().mid(1) : cookie.domain());
+	const QString domain(getCookieDomain(cookie));
 	QStandardItem *domainItem(findDomainItem(domain));
 
 	if (!domainItem)
@@ -440,6 +444,11 @@ QStandardItem* CookiesContentsWidget::findDomainItem(const QString &domain)
 	}
 
 	return nullptr;
+}
+
+QString CookiesContentsWidget::getCookieDomain(const QNetworkCookie &cookie) const
+{
+	return QString(cookie.domain().startsWith(QLatin1Char('.')) ? cookie.domain().mid(1) : cookie.domain());
 }
 
 QString CookiesContentsWidget::getTitle() const

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -97,6 +97,7 @@ public:
 	static bool isLayoutReversed();
 	static bool isCloseButtonEnabled();
 	static bool isUrlIconEnabled();
+	bool isHorizontal() const;
 
 public slots:
 	void updateSize();

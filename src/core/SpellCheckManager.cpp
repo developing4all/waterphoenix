@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -34,6 +34,7 @@ namespace Otter
 SpellCheckManager* SpellCheckManager::m_instance(nullptr);
 QString SpellCheckManager::m_defaultDictionary;
 QVector<SpellCheckManager::DictionaryInformation> SpellCheckManager::m_dictionaries;
+QSet<QString> SpellCheckManager::m_ignoredWords;
 
 SpellCheckManager::SpellCheckManager(QObject *parent) : QObject(parent)
 {
@@ -59,6 +60,30 @@ void SpellCheckManager::createInstance()
 	}
 }
 
+void SpellCheckManager::addIgnoredWord(const QString &word)
+{
+	if (!isIgnoringWord(word))
+	{
+		m_ignoredWords.insert(word);
+
+		emit m_instance->ignoredWordAdded(word);
+
+		saveIgnoredWords();
+	}
+}
+
+void SpellCheckManager::removeIgnoredWord(const QString &word)
+{
+	if (isIgnoringWord(word))
+	{
+		m_ignoredWords.remove(word);
+
+		emit m_instance->ignoredWordRemoved(word);
+
+		saveIgnoredWords();
+	}
+}
+
 void SpellCheckManager::loadDictionaries()
 {
 #ifdef OTTER_ENABLE_SPELLCHECK
@@ -72,7 +97,7 @@ void SpellCheckManager::loadDictionaries()
 
 	for (int i = 0; i < dictionaries.count(); ++i)
 	{
-		Sonnet::Speller::Dictionary dictionary(dictionaries.at(i));
+		const Sonnet::Speller::Dictionary dictionary(dictionaries.at(i));
 
 		if (ignoredDictionaries.contains(dictionary.langCode))
 		{
@@ -86,7 +111,7 @@ void SpellCheckManager::loadDictionaries()
 
 		for (int j = 0; j < information.paths.count(); ++j)
 		{
-			QFileInfo pathInformation(information.paths.at(j));
+			const QFileInfo pathInformation(information.paths.at(j));
 
 			if (pathInformation.isRelative())
 			{
@@ -109,6 +134,35 @@ void SpellCheckManager::loadDictionaries()
 
 	emit m_instance->dictionariesChanged();
 #endif
+}
+
+void SpellCheckManager::saveIgnoredWords()
+{
+	const QString path(SessionsManager::getWritableDataPath(QLatin1String("personalDictionary.dic")));
+
+	if (m_ignoredWords.isEmpty() && QFile::exists(path))
+	{
+		QFile::remove(path);
+
+		return;
+	}
+
+	QFile file(path);
+
+	if (!file.open(QIODevice::WriteOnly))
+	{
+		return;
+	}
+
+	QTextStream stream(&file);
+	stream.setCodec("UTF-8");
+
+	QSet<QString>::iterator iterator;
+
+	for (iterator = m_ignoredWords.begin(); iterator != m_ignoredWords.end(); ++iterator)
+	{
+		stream << *iterator << QLatin1Char('\n');
+	}
 }
 
 void SpellCheckManager::updateDefaultDictionary()
@@ -200,9 +254,11 @@ SpellCheckManager::DictionaryInformation SpellCheckManager::getDictionary(const 
 {
 	for (int i = 0; i < m_dictionaries.count(); ++i)
 	{
-		if (m_dictionaries.at(i).language == language)
+		const DictionaryInformation dictionary(m_dictionaries.at(i));
+
+		if (dictionary.language == language)
 		{
-			return m_dictionaries.at(i);
+			return dictionary;
 		}
 	}
 
@@ -212,6 +268,39 @@ SpellCheckManager::DictionaryInformation SpellCheckManager::getDictionary(const 
 QVector<SpellCheckManager::DictionaryInformation> SpellCheckManager::getDictionaries()
 {
 	return m_dictionaries;
+}
+
+QStringList SpellCheckManager::getIgnoredWords()
+{
+	const QString path(SessionsManager::getWritableDataPath(QLatin1String("personalDictionary.dic")));
+
+	if (m_ignoredWords.isEmpty() && QFile::exists(path))
+	{
+		QFile file(path);
+
+		if (file.open(QIODevice::ReadOnly))
+		{
+			QTextStream stream(&file);
+			stream.setCodec("UTF-8");
+
+			while (!stream.atEnd())
+			{
+				const QString word(stream.readLine().simplified());
+
+				if (!word.isEmpty())
+				{
+					m_ignoredWords.insert(word);
+				}
+			}
+		}
+	}
+
+	return m_ignoredWords.values();
+}
+
+bool SpellCheckManager::isIgnoringWord(const QString &word)
+{
+	return getIgnoredWords().contains(word);
 }
 
 bool SpellCheckManager::event(QEvent *event)

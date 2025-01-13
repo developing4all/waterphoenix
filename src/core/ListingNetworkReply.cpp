@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -54,7 +54,9 @@ QByteArray ListingNetworkReply::createListing(const QString &title, const QVecto
 
 	for (int i = 0; i < navigation.count(); ++i)
 	{
-		navigationHtml.append(QStringLiteral("<a href=\"%1\">%2</a>").arg(navigation[i].url.toString(), navigation[i].name) + ((i < (navigation.count() - 1)) ? QLatin1String("&shy;") : QString()));
+		const NavigationEntry entry(navigation.at(i));
+
+		navigationHtml.append(QStringLiteral("<a href=\"%1\">%2</a>").arg(entry.url.toString(), entry.name) + ((i < (navigation.count() - 1)) ? QLatin1String("&shy;") : QString()));
 	}
 
 	QHash<QString, QIcon> icons;
@@ -147,12 +149,7 @@ QByteArray ListingNetworkReply::createListing(const QString &title, const QVecto
 
 	for (iterator = icons.begin(); iterator != icons.end(); ++iterator)
 	{
-		QByteArray byteArray;
-		QBuffer buffer(&byteArray);
-
-		iterator.value().pixmap(iconSize, iconSize).save(&buffer, "PNG");
-
-		styleHtml.append(QStringLiteral("tr td:first-child.icon_%1\n{\n\tbackground-image:url(\"data:image/png;base64,%2\");\n}\n").arg(Utils::createIdentifier(iterator.key()), QString::fromLatin1(byteArray.toBase64())));
+		styleHtml.append(QStringLiteral("tr td:first-child.icon_%1\n{\n\tbackground-image:url(\"%2\");\n}\n").arg(Utils::createIdentifier(iterator.key()), Utils::savePixmapAsDataUri(iterator.value().pixmap(iconSize, iconSize))));
 	}
 
 	QHash<QString, QString> variables;

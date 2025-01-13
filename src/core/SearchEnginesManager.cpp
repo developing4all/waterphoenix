@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@
 #include "SettingsManager.h"
 #include "ThemesManager.h"
 
-#include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QXmlStreamReader>
 #include <QtCore/QXmlStreamWriter>
@@ -83,26 +82,27 @@ void SearchEnginesManager::loadSearchEngines()
 
 	for (int i = 0; i < searchEnginesOrder.count(); ++i)
 	{
-		QFile file(SessionsManager::getReadableDataPath(QLatin1String("searchEngines/") + searchEnginesOrder.at(i) + QLatin1String(".xml")));
+		const QString identifier(searchEnginesOrder.at(i));
+		QFile file(SessionsManager::getReadableDataPath(QLatin1String("searchEngines/") + identifier + QLatin1String(".xml")));
 
 		if (!file.open(QIODevice::ReadOnly))
 		{
-			m_searchEnginesOrder.removeAll(searchEnginesOrder.at(i));
+			m_searchEnginesOrder.removeAll(identifier);
 
 			continue;
 		}
 
-		const SearchEngineDefinition searchEngine(loadSearchEngine(&file, searchEnginesOrder.at(i), true));
+		const SearchEngineDefinition searchEngine(loadSearchEngine(&file, identifier, true));
 
 		file.close();
 
 		if (searchEngine.isValid())
 		{
-			m_searchEngines[searchEnginesOrder.at(i)] = searchEngine;
+			m_searchEngines[identifier] = searchEngine;
 		}
 		else
 		{
-			m_searchEnginesOrder.removeAll(searchEnginesOrder.at(i));
+			m_searchEnginesOrder.removeAll(identifier);
 		}
 	}
 
@@ -162,9 +162,10 @@ void SearchEnginesManager::updateSearchEnginesOptions()
 
 	for (int i = 0; i < searchEngines.count(); ++i)
 	{
-		const SearchEngineDefinition searchEngine(getSearchEngine(searchEngines.at(i)));
+		const QString identifier(searchEngines.at(i));
+		const SearchEngineDefinition searchEngine(getSearchEngine(identifier));
 
-		searchEngineChoices.append({(searchEngine.title.isEmpty() ? tr("Unknown") : searchEngine.title), searchEngines.at(i), searchEngine.icon});
+		searchEngineChoices.append({(searchEngine.title.isEmpty() ? tr("Unknown") : searchEngine.title), identifier, searchEngine.icon});
 	}
 
 	SettingsManager::OptionDefinition defaultQuickSearchEngineOption(SettingsManager::getOptionDefinition(SettingsManager::Search_DefaultQuickSearchEngineOption));
@@ -205,15 +206,16 @@ SearchEnginesManager::SearchQuery SearchEnginesManager::setupQuery(const QString
 
 	for (int i = 0; i < parameters.count(); ++i)
 	{
+		const QString key(parameters.at(i).first);
 		const QString value(Utils::substitutePlaceholders(parameters.at(i).second, values));
 
 		if (searchQuery.method == QNetworkAccessManager::GetOperation)
 		{
-			getQuery.addQueryItem(parameters.at(i).first, QString::fromLatin1(QUrl::toPercentEncoding(value)));
+			getQuery.addQueryItem(key, QString::fromLatin1(QUrl::toPercentEncoding(value)));
 		}
 		else if (isUrlEncoded)
 		{
-			postQuery.addQueryItem(parameters.at(i).first, QString::fromLatin1(QUrl::toPercentEncoding(value)));
+			postQuery.addQueryItem(key, QString::fromLatin1(QUrl::toPercentEncoding(value)));
 		}
 		else if (isFormData)
 		{
@@ -238,7 +240,7 @@ SearchEnginesManager::SearchQuery SearchEnginesManager::setupQuery(const QString
 			}
 
 			searchQuery.body += QByteArrayLiteral("--AaB03x\r\ncontent-disposition: form-data; name=\"");
-			searchQuery.body += parameters.at(i).first.toUtf8();
+			searchQuery.body += key.toUtf8();
 			searchQuery.body += QByteArrayLiteral("\"\r\ncontent-type: text/plain;charset=UTF-8\r\ncontent-transfer-encoding: quoted-printable\r\n");
 			searchQuery.body += encodedValue.toUtf8();
 			searchQuery.body += QByteArrayLiteral("\r\n--AaB03x\r\n");
@@ -480,11 +482,12 @@ bool SearchEnginesManager::hasSearchEngine(const QUrl &url)
 
 	ensureInitialized();
 
+	const QUrl normalizedUrl(Utils::normalizeUrl(url));
 	QHash<QString, SearchEngineDefinition>::iterator iterator;
 
 	for (iterator = m_searchEngines.begin(); iterator != m_searchEngines.end(); ++iterator)
 	{
-		if (iterator.value().selfUrl == url)
+		if (Utils::normalizeUrl(iterator.value().selfUrl) == normalizedUrl)
 		{
 			return true;
 		}
@@ -531,7 +534,7 @@ bool SearchEnginesManager::saveSearchEngine(const SearchEngineDefinition &search
 		identifier = searchEngine.createIdentifier();
 	}
 
-	QDir().mkpath(SessionsManager::getWritableDataPath(QLatin1String("searchEngines")));
+	Utils::ensureDirectoryExists(SessionsManager::getWritableDataPath(QLatin1String("searchEngines")));
 
 	QFile file(SessionsManager::getWritableDataPath(QLatin1String("searchEngines/") + identifier + QLatin1String(".xml")));
 
@@ -591,9 +594,11 @@ bool SearchEnginesManager::saveSearchEngine(const SearchEngineDefinition &search
 
 		for (int i = 0; i < parameters.count(); ++i)
 		{
+			const QPair<QString, QString> parameter(parameters.at(i));
+
 			writer.writeStartElement(QLatin1String("Param"));
-			writer.writeAttribute(QLatin1String("name"), parameters.at(i).first);
-			writer.writeAttribute(QLatin1String("value"), parameters.at(i).second);
+			writer.writeAttribute(QLatin1String("name"), parameter.first);
+			writer.writeAttribute(QLatin1String("value"), parameter.second);
 			writer.writeEndElement();
 		}
 
@@ -613,9 +618,11 @@ bool SearchEnginesManager::saveSearchEngine(const SearchEngineDefinition &search
 
 		for (int i = 0; i < parameters.count(); ++i)
 		{
+			const QPair<QString, QString> parameter(parameters.at(i));
+
 			writer.writeStartElement(QLatin1String("Param"));
-			writer.writeAttribute(QLatin1String("name"), parameters.at(i).first);
-			writer.writeAttribute(QLatin1String("value"), parameters.at(i).second);
+			writer.writeAttribute(QLatin1String("name"), parameter.first);
+			writer.writeAttribute(QLatin1String("value"), parameter.second);
 			writer.writeEndElement();
 		}
 

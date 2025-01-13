@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2017 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2017 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -68,7 +68,7 @@ QString Migration::createBackupPath(const QString &sourcePath)
 	}
 	while (true);
 
-	QDir().mkpath(backupPath);
+	Utils::ensureDirectoryExists(backupPath);
 
 	return backupPath;
 }
@@ -101,15 +101,17 @@ bool Migrator::run()
 
 	for (int i = 0; i < availableMigrations.count(); ++i)
 	{
-		if (!processedMigrations.contains(availableMigrations.at(i)->getName()))
+		Migration *availableMigration(availableMigrations.at(i));
+
+		if (!processedMigrations.contains(availableMigration->getName()))
 		{
-			if (Application::isFirstRun() || !availableMigrations.at(i)->needsMigration())
+			if (Application::isFirstRun() || !availableMigration->needsMigration())
 			{
-				processedMigrations.append(availableMigrations.at(i)->getName());
+				processedMigrations.append(availableMigration->getName());
 			}
 			else
 			{
-				possibleMigrations.append(availableMigrations.at(i));
+				possibleMigrations.append(availableMigration);
 			}
 		}
 	}
@@ -137,10 +139,11 @@ bool Migrator::run()
 
 	for (int i = 0; i < possibleMigrations.count(); ++i)
 	{
-		QStandardItem *item(new QStandardItem(QCoreApplication::translate("migrations", possibleMigrations.at(i)->getTitle().toUtf8().constData())));
+		Migration *possibleMigration(possibleMigrations.at(i));
+		QStandardItem *item(new QStandardItem(QCoreApplication::translate("migrations", possibleMigration->getTitle().toUtf8().constData())));
 		item->setFlags(Qt::ItemIsEnabled | Qt::ItemNeverHasChildren | Qt::ItemIsSelectable);
 
-		if (possibleMigrations.at(i)->needsBackup())
+		if (possibleMigration->needsBackup())
 		{
 			needsBackup = true;
 		}
@@ -180,16 +183,18 @@ bool Migrator::run()
 
 		for (int i = 0; i < possibleMigrations.count(); ++i)
 		{
-			processedMigrations.append(possibleMigrations.at(i)->getName());
+			Migration *possibleMigration(possibleMigrations.at(i));
+
+			processedMigrations.append(possibleMigration->getName());
 
 			if (createBackupCheckBox->isChecked())
 			{
-				possibleMigrations.at(i)->createBackup();
+				possibleMigration->createBackup();
 			}
 
 			if (canProceed)
 			{
-				possibleMigrations.at(i)->migrate();
+				possibleMigration->migrate();
 			}
 		}
 	}

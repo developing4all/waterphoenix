@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -23,8 +23,6 @@
 
 #include "BookmarksModel.h"
 
-#include <QtCore/QObject>
-
 namespace Otter
 {
 
@@ -35,7 +33,7 @@ class BookmarksManager final : public QObject
 public:
 	static void createInstance();
 	static void updateVisits(const QUrl &url);
-	static void setLastUsedFolder(BookmarksModel::Bookmark *folder);
+	static void setLastUsedFolder(BookmarksModel::Bookmark *bookmark);
 	static BookmarksManager* getInstance();
 	static BookmarksModel* getModel();
 	static BookmarksModel::Bookmark* addBookmark(BookmarksModel::BookmarkType type, const QMap<int, QVariant> &metaData = {}, BookmarksModel::Bookmark *parent = nullptr, int index = -1);

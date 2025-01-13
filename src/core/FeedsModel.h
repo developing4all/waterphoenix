@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -75,6 +75,8 @@ public:
 		QVector<Feed*> getFeeds() const;
 		quint64 getIdentifier() const;
 		EntryType getType() const;
+		static bool isFolder(EntryType type);
+		bool isFolder() const;
 		bool isAncestorOf(Entry *child) const;
 		bool operator<(const QStandardItem &other) const override;
 
@@ -119,6 +121,7 @@ protected:
 		QModelIndex parent;
 		int row = -1;
 	};
+
 	void readEntry(QXmlStreamReader *reader, Entry *parent);
 	void writeEntry(QXmlStreamWriter *writer, Entry *entry) const;
 	void removeEntryUrl(Entry *entry);

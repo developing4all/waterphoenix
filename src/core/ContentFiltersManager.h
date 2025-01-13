@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ public:
 	static void addProfile(ContentFiltersProfile *profile);
 	static void removeProfile(ContentFiltersProfile *profile, bool removeFile = false);
 	static ContentFiltersManager* getInstance();
-	static ContentFiltersProfile* getProfile(const QString &profile);
+	static ContentFiltersProfile* getProfile(const QString &name);
 	static ContentFiltersProfile* getProfile(const QUrl &url);
 	static ContentFiltersProfile* getProfile(int identifier);
 	static CheckResult checkUrl(const QVector<int> &profiles, const QUrl &baseUrl, const QUrl &requestUrl, NetworkManager::ResourceType resourceType);

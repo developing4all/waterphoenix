@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -215,35 +215,33 @@ void ErrorConsoleWidget::filterCategories()
 
 		for (int i = 0; i < menu->actions().count(); ++i)
 		{
-			if (menu->actions().at(i) && menu->actions().at(i)->isChecked())
+			const QAction *action(menu->actions().at(i));
+
+			if (action && action->isChecked())
 			{
-				messageScopes |= static_cast<MessagesScope>(menu->actions().at(i)->data().toInt());
+				messageScopes |= static_cast<MessagesScope>(action->data().toInt());
 			}
 		}
 
 		m_messageScopes = messageScopes;
 	}
 
-	const QVector<Console::MessageCategory> categories(getCategories());
-	const quint64 activeWindow(getActiveWindow());
-
-	for (int i = 0; i < m_model->rowCount(); ++i)
-	{
-		applyFilters(m_model->index(i, 0), m_ui->filterLineEditWidget->text(), categories, activeWindow);
-	}
+	applyFilters(m_ui->filterLineEditWidget->text(), getCategories(), getActiveWindow());
 }
 
 void ErrorConsoleWidget::filterMessages(const QString &filter)
 {
 	if (m_model)
 	{
-		const QVector<Console::MessageCategory> categories(getCategories());
-		const quint64 activeWindow(getActiveWindow());
+		applyFilters(filter, getCategories(), getActiveWindow());
+	}
+}
 
-		for (int i = 0; i < m_model->rowCount(); ++i)
-		{
-			applyFilters(m_model->index(i, 0), filter, categories, activeWindow);
-		}
+void ErrorConsoleWidget::applyFilters(const QString &filter, const QVector<Console::MessageCategory> &categories, quint64 activeWindow)
+{
+	for (int i = 0; i < m_model->rowCount(); ++i)
+	{
+		applyFilters(m_model->index(i, 0), filter, categories, activeWindow);
 	}
 }
 
@@ -270,7 +268,7 @@ void ErrorConsoleWidget::showContextMenu(const QPoint &position)
 	QMenu menu(m_ui->consoleView);
 	menu.addAction(ThemesManager::createIcon(QLatin1String("edit-copy")), tr("Copy"), this, [&]()
 	{
-		QApplication::clipboard()->setText(m_ui->consoleView->currentIndex().data(Qt::DisplayRole).toString());
+		QGuiApplication::clipboard()->setText(m_ui->consoleView->currentIndex().data(Qt::DisplayRole).toString());
 	});
 	menu.addSeparator();
 	menu.addAction(tr("Expand All"), m_ui->consoleView, &QTreeView::expandAll);

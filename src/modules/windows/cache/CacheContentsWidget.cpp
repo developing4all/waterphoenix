@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,6 @@
 
 #include "ui_CacheContentsWidget.h"
 
-#include <QtCore/QCoreApplication>
 #include <QtCore/QMimeDatabase>
 #include <QtCore/QTimer>
 #include <QtGui/QClipboard>
@@ -190,15 +189,24 @@ void CacheContentsWidget::openEntry()
 
 	const QUrl url(getEntry(index));
 
-	if (url.isValid())
+	if (!url.isValid())
 	{
-		const QAction *action(qobject_cast<QAction*>(sender()));
-		MainWindow *mainWindow(MainWindow::findMainWindow(this));
+		return;
+	}
 
-		if (mainWindow)
+	const QAction *action(qobject_cast<QAction*>(sender()));
+	MainWindow *mainWindow(MainWindow::findMainWindow(this));
+
+	if (mainWindow)
+	{
+		SessionsManager::OpenHints hints(SessionsManager::DefaultOpen);
+
+		if (action)
 		{
-			mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(action ? static_cast<SessionsManager::OpenHints>(action->data().toInt()) : SessionsManager::DefaultOpen)}});
+			hints = static_cast<SessionsManager::OpenHints>(action->data().toInt());
 		}
+
+		mainWindow->triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(hints)}});
 	}
 }
 
@@ -239,9 +247,11 @@ void CacheContentsWidget::handleEntryAdded(const QUrl &url)
 
 	for (int i = 0; i < headers.count(); ++i)
 	{
-		if (headers.at(i).first == QByteArrayLiteral("Content-Type"))
+		const QPair<QByteArray, QByteArray> header(headers.at(i));
+
+		if (header.first == QByteArrayLiteral("Content-Type"))
 		{
-			type = QString::fromLatin1(headers.at(i).second);
+			type = QString::fromLatin1(header.second);
 
 			break;
 		}
@@ -292,31 +302,33 @@ void CacheContentsWidget::handleEntryRemoved(const QUrl &url)
 	{
 		QStandardItem *entryItem(domainItem->child(i, 0));
 
-		if (entryItem && entryItem->data(UrlRole).toUrl() == url)
+		if (!entryItem || entryItem->data(UrlRole).toUrl() != url)
 		{
-			const qint64 size(ItemModel::getItemData(domainItem->child(entryItem->row(), 2), SizeRole).toLongLong());
-
-			m_model->removeRow(entryItem->row(), domainItem->index());
-
-			if (domainItem->rowCount() == 0)
-			{
-				m_model->invisibleRootItem()->removeRow(domainItem->row());
-			}
-			else
-			{
-				QStandardItem *domainSizeItem(m_model->item(domainItem->row(), 2));
-
-				if (domainSizeItem && size > 0)
-				{
-					domainSizeItem->setData((domainSizeItem->data(SizeRole).toLongLong() - size), SizeRole);
-					domainSizeItem->setText(Utils::formatUnit(domainSizeItem->data(SizeRole).toLongLong()));
-				}
-
-				domainItem->setText(QStringLiteral("%1 (%2)").arg(url.host()).arg(domainItem->rowCount()));
-			}
-
-			break;
+			continue;
 		}
+
+		const qint64 size(ItemModel::getItemData(domainItem->child(entryItem->row(), 2), SizeRole).toLongLong());
+
+		m_model->removeRow(entryItem->row(), domainItem->index());
+
+		if (domainItem->rowCount() == 0)
+		{
+			m_model->invisibleRootItem()->removeRow(domainItem->row());
+		}
+		else
+		{
+			QStandardItem *domainSizeItem(m_model->item(domainItem->row(), 2));
+
+			if (domainSizeItem && size > 0)
+			{
+				domainSizeItem->setData((domainSizeItem->data(SizeRole).toLongLong() - size), SizeRole);
+				domainSizeItem->setText(Utils::formatUnit(domainSizeItem->data(SizeRole).toLongLong()));
+			}
+
+			domainItem->setText(QStringLiteral("%1 (%2)").arg(url.host()).arg(domainItem->rowCount()));
+		}
+
+		break;
 	}
 }
 
@@ -342,7 +354,7 @@ void CacheContentsWidget::showContextMenu(const QPoint &position)
 
 			if (url.isValid())
 			{
-				QApplication::clipboard()->setText(url.toDisplayString());
+				QGuiApplication::clipboard()->setText(url.toDisplayString());
 			}
 		});
 		menu.addSeparator();
@@ -379,119 +391,7 @@ void CacheContentsWidget::updateActions()
 	m_ui->previewLabel->setPixmap({});
 	m_ui->deleteButton->setEnabled(!domain.isEmpty());
 
-	if (url.isValid())
-	{
-		NetworkCache *cache(NetworkManagerFactory::getCache());
-		QIODevice *device(cache->data(url));
-		const QNetworkCacheMetaData metaData(cache->metaData(url));
-		QMimeType mimeType;
-
-		if (device)
-		{
-			mimeType = QMimeDatabase().mimeTypeForData(device);
-		}
-
-		if (!mimeType.isValid())
-		{
-			const QList<QPair<QByteArray, QByteArray> > headers(metaData.rawHeaders());
-
-			for (int i = 0; i < headers.count(); ++i)
-			{
-				if (headers.at(i).first == QByteArrayLiteral("Content-Type"))
-				{
-					mimeType = QMimeDatabase().mimeTypeForName(QString::fromLatin1(headers.at(i).second));
-
-					break;
-				}
-			}
-
-			if (!mimeType.isValid())
-			{
-				mimeType = QMimeDatabase().mimeTypeForUrl(url);
-			}
-		}
-
-		QPixmap preview;
-		const int size(m_ui->formWidget->contentsRect().height() - 10);
-
-		if (device && mimeType.name().startsWith(QLatin1String("image")))
-		{
-			QImage image;
-			image.load(device, "");
-
-			if (image.size().width() > size || image.height() > size)
-			{
-				image = image.scaled(size, size, Qt::KeepAspectRatio);
-			}
-
-			preview = QPixmap::fromImage(image);
-		}
-
-		if (preview.isNull() && QIcon::hasThemeIcon(mimeType.iconName()))
-		{
-			preview = QIcon::fromTheme(mimeType.iconName(), ThemesManager::createIcon(QLatin1String("unknown"))).pixmap(64, 64);
-		}
-
-		const QUrl localUrl(cache->getPathForUrl(url));
-
-		m_ui->addressLabelWidget->setText(url.toString(QUrl::FullyDecoded | QUrl::PreferLocalFile));
-		m_ui->addressLabelWidget->setUrl(url);
-		m_ui->locationLabelWidget->setText(localUrl.toString(QUrl::FullyDecoded | QUrl::PreferLocalFile));
-		m_ui->locationLabelWidget->setUrl(localUrl);
-		m_ui->typeLabelWidget->setText(mimeType.name());
-		m_ui->sizeLabelWidget->setText(device ? Utils::formatUnit(device->size(), false, 2) : tr("Unknown"));
-		m_ui->lastModifiedLabelWidget->setText(Utils::formatDateTime(metaData.lastModified()));
-		m_ui->expiresLabelWidget->setText(Utils::formatDateTime(metaData.expirationDate()));
-
-		if (!preview.isNull())
-		{
-			m_ui->previewLabel->show();
-			m_ui->previewLabel->setPixmap(preview);
-		}
-
-		QStandardItem *typeItem(m_model->itemFromIndex(index.sibling(index.row(), 1)));
-
-		if (typeItem && typeItem->text().isEmpty())
-		{
-			typeItem->setText(mimeType.name());
-		}
-
-		QStandardItem *lastModifiedItem(m_model->itemFromIndex(index.sibling(index.row(), 3)));
-
-		if (lastModifiedItem && lastModifiedItem->text().isEmpty())
-		{
-			lastModifiedItem->setText(metaData.lastModified().toString());
-		}
-
-		QStandardItem *expiresItem(m_model->itemFromIndex(index.sibling(index.row(), 4)));
-
-		if (expiresItem && expiresItem->text().isEmpty())
-		{
-			expiresItem->setText(metaData.expirationDate().toString());
-		}
-
-		if (device)
-		{
-			QStandardItem *sizeItem(m_model->itemFromIndex(index.sibling(index.row(), 2)));
-
-			if (sizeItem && sizeItem->text().isEmpty())
-			{
-				sizeItem->setText(Utils::formatUnit(device->size()));
-				sizeItem->setData(device->size(), SizeRole);
-
-				QStandardItem *domainSizeItem(sizeItem->parent() ? m_model->item(sizeItem->parent()->row(), 2) : nullptr);
-
-				if (domainSizeItem)
-				{
-					domainSizeItem->setData((domainSizeItem->data(SizeRole).toLongLong() + device->size()), SizeRole);
-					domainSizeItem->setText(Utils::formatUnit(domainSizeItem->data(SizeRole).toLongLong()));
-				}
-			}
-
-			device->deleteLater();
-		}
-	}
-	else
+	if (!url.isValid())
 	{
 		m_ui->addressLabelWidget->setText({});
 		m_ui->typeLabelWidget->setText({});
@@ -503,6 +403,123 @@ void CacheContentsWidget::updateActions()
 		{
 			m_ui->addressLabelWidget->setText(domain);
 		}
+
+		emit categorizedActionsStateChanged({ActionsManager::ActionDefinition::EditingCategory});
+
+		return;
+	}
+
+	NetworkCache *cache(NetworkManagerFactory::getCache());
+	QIODevice *device(cache->data(url));
+	const QNetworkCacheMetaData metaData(cache->metaData(url));
+	const QMimeDatabase mimeDatabase;
+	QMimeType mimeType;
+
+	if (device)
+	{
+		mimeType = mimeDatabase.mimeTypeForData(device);
+	}
+
+	if (!mimeType.isValid())
+	{
+		const QList<QPair<QByteArray, QByteArray> > headers(metaData.rawHeaders());
+
+		for (int i = 0; i < headers.count(); ++i)
+		{
+			const QPair<QByteArray, QByteArray> header(headers.at(i));
+
+			if (header.first == QByteArrayLiteral("Content-Type"))
+			{
+				mimeType = mimeDatabase.mimeTypeForName(QString::fromLatin1(header.second));
+
+				break;
+			}
+		}
+
+		if (!mimeType.isValid())
+		{
+			mimeType = mimeDatabase.mimeTypeForUrl(url);
+		}
+	}
+
+	QPixmap preview;
+	const int size(m_ui->propertiesWidget->contentsRect().height() - 10);
+
+	if (device && mimeType.name().startsWith(QLatin1String("image")))
+	{
+		QImage image;
+		image.load(device, "");
+
+		if (image.size().width() > size || image.height() > size)
+		{
+			image = image.scaled(size, size, Qt::KeepAspectRatio);
+		}
+
+		preview = QPixmap::fromImage(image);
+	}
+
+	if (preview.isNull() && QIcon::hasThemeIcon(mimeType.iconName()))
+	{
+		preview = QIcon::fromTheme(mimeType.iconName(), ThemesManager::createIcon(QLatin1String("unknown"))).pixmap(64, 64);
+	}
+
+	const QUrl localUrl(cache->getPathForUrl(url));
+
+	m_ui->addressLabelWidget->setText(url.toString(QUrl::FullyDecoded | QUrl::PreferLocalFile));
+	m_ui->addressLabelWidget->setUrl(url);
+	m_ui->locationLabelWidget->setText(localUrl.toString(QUrl::FullyDecoded | QUrl::PreferLocalFile));
+	m_ui->locationLabelWidget->setUrl(localUrl);
+	m_ui->typeLabelWidget->setText(mimeType.name());
+	m_ui->sizeLabelWidget->setText(device ? Utils::formatUnit(device->size(), false, 2) : tr("Unknown"));
+	m_ui->lastModifiedLabelWidget->setText(Utils::formatDateTime(metaData.lastModified()));
+	m_ui->expiresLabelWidget->setText(Utils::formatDateTime(metaData.expirationDate()));
+
+	if (!preview.isNull())
+	{
+		m_ui->previewLabel->show();
+		m_ui->previewLabel->setPixmap(preview);
+	}
+
+	QStandardItem *typeItem(m_model->itemFromIndex(index.sibling(index.row(), 1)));
+
+	if (typeItem && typeItem->text().isEmpty())
+	{
+		typeItem->setText(mimeType.name());
+	}
+
+	QStandardItem *lastModifiedItem(m_model->itemFromIndex(index.sibling(index.row(), 3)));
+
+	if (lastModifiedItem && lastModifiedItem->text().isEmpty())
+	{
+		lastModifiedItem->setText(metaData.lastModified().toString());
+	}
+
+	QStandardItem *expiresItem(m_model->itemFromIndex(index.sibling(index.row(), 4)));
+
+	if (expiresItem && expiresItem->text().isEmpty())
+	{
+		expiresItem->setText(metaData.expirationDate().toString());
+	}
+
+	if (device)
+	{
+		QStandardItem *sizeItem(m_model->itemFromIndex(index.sibling(index.row(), 2)));
+
+		if (sizeItem && sizeItem->text().isEmpty())
+		{
+			sizeItem->setText(Utils::formatUnit(device->size()));
+			sizeItem->setData(device->size(), SizeRole);
+
+			QStandardItem *domainSizeItem(sizeItem->parent() ? m_model->item(sizeItem->parent()->row(), 2) : nullptr);
+
+			if (domainSizeItem)
+			{
+				domainSizeItem->setData((domainSizeItem->data(SizeRole).toLongLong() + device->size()), SizeRole);
+				domainSizeItem->setText(Utils::formatUnit(domainSizeItem->data(SizeRole).toLongLong()));
+			}
+		}
+
+		device->deleteLater();
 	}
 
 	emit categorizedActionsStateChanged({ActionsManager::ActionDefinition::EditingCategory});
@@ -545,7 +562,12 @@ QIcon CacheContentsWidget::getIcon() const
 
 QUrl CacheContentsWidget::getEntry(const QModelIndex &index) const
 {
-	return ((index.isValid() && index.parent().isValid() && index.parent().parent() == m_model->invisibleRootItem()->index()) ? index.sibling(index.row(), 0).data(UrlRole).toUrl() : QUrl());
+	if (index.isValid() && index.parent().isValid() && index.parent().parent() == m_model->invisibleRootItem()->index())
+	{
+		return index.sibling(index.row(), 0).data(UrlRole).toUrl();
+	}
+
+	return {};
 }
 
 ActionsManager::ActionDefinition::State CacheContentsWidget::getActionState(int identifier, const QVariantMap &parameters) const

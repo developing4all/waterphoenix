@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -101,36 +101,38 @@ void Transfer::timerEvent(QTimerEvent *event)
 {
 	if (event->timerId() == m_updateTimer)
 	{
-		const qint64 oldSpeed(m_speed);
+		const qint64 previousSpeed(m_speed);
 
 		m_speed = (m_bytesReceivedDifference * 2);
 		m_bytesReceivedDifference = 0;
 
-		if (m_speed != oldSpeed)
+		if (m_speed == previousSpeed)
 		{
-			m_speeds.enqueue(m_speed);
-
-			if (m_speeds.count() > 10)
-			{
-				m_speeds.dequeue();
-			}
-
-			if (m_bytesTotal > 0)
-			{
-				qint64 speedSum(0);
-
-				for (int i = 0; i < m_speeds.count(); ++i)
-				{
-					speedSum += m_speeds.at(i);
-				}
-
-				speedSum /= m_speeds.count();
-
-				m_remainingTime = qRound(static_cast<qreal>(m_bytesTotal - m_bytesReceived) / static_cast<qreal>(speedSum));
-			}
-
-			emit changed();
+			return;
 		}
+
+		m_speeds.enqueue(m_speed);
+
+		if (m_speeds.count() > 10)
+		{
+			m_speeds.dequeue();
+		}
+
+		if (m_bytesTotal > 0)
+		{
+			qint64 speedSum(0);
+
+			for (int i = 0; i < m_speeds.count(); ++i)
+			{
+				speedSum += m_speeds.at(i);
+			}
+
+			speedSum /= m_speeds.count();
+
+			m_remainingTime = qRound(static_cast<qreal>(m_bytesTotal - m_bytesReceived) / static_cast<qreal>(speedSum));
+		}
+
+		emit changed();
 	}
 }
 
@@ -213,7 +215,7 @@ void Transfer::start(QNetworkReply *reply, const QString &target)
 	{
 		connect(m_reply, &QNetworkReply::downloadProgress, this, &Transfer::handleDownloadProgress);
 		connect(m_reply, &QNetworkReply::finished, this, &Transfer::handleDownloadFinished);
-		connect(m_reply, static_cast<void(QNetworkReply::*)(QNetworkReply::NetworkError)>(&QNetworkReply::error), this, &Transfer::handleDownloadError);
+		connect(m_reply, &QNetworkReply::errorOccurred, this, &Transfer::handleDownloadError);
 	}
 	else
 	{
@@ -460,7 +462,7 @@ void Transfer::handleDownloadFinished()
 
 		if (!url.isValid() || (m_source.scheme() == QLatin1String("https") && url.scheme() == QLatin1String("http")))
 		{
-			handleDownloadError(QNetworkReply::UnknownContentError);
+			handleDownloadError(QNetworkReply::InsecureRedirectError);
 		}
 		else
 		{
@@ -574,7 +576,7 @@ void Transfer::setOpenCommand(const QString &command)
 	}
 }
 
-void Transfer::setHash(const QByteArray &hash, QCryptographicHash::Algorithm algorithm)
+void Transfer::setHash(QCryptographicHash::Algorithm algorithm, const QByteArray &hash)
 {
 	if (!hash.isEmpty())
 	{
@@ -728,7 +730,7 @@ int Transfer::getRemainingTime() const
 
 bool Transfer::verifyHashes() const
 {
-	if (getState() != FinishedState)
+	if (m_state != FinishedState)
 	{
 		return false;
 	}
@@ -810,7 +812,7 @@ bool Transfer::resume()
 	connect(m_reply, &QNetworkReply::downloadProgress, this, &Transfer::handleDownloadProgress);
 	connect(m_reply, &QNetworkReply::readyRead, this, &Transfer::handleDataAvailable);
 	connect(m_reply, &QNetworkReply::finished, this, &Transfer::handleDownloadFinished);
-	connect(m_reply, static_cast<void(QNetworkReply::*)(QNetworkReply::NetworkError)>(&QNetworkReply::error), this, &Transfer::handleDownloadError);
+	connect(m_reply, &QNetworkReply::errorOccurred, this, &Transfer::handleDownloadError);
 
 	if (m_updateTimer == 0 && m_updateInterval > 0)
 	{
@@ -853,7 +855,7 @@ bool Transfer::restart()
 	connect(m_reply, &QNetworkReply::downloadProgress, this, &Transfer::handleDownloadProgress);
 	connect(m_reply, &QNetworkReply::readyRead, this, &Transfer::handleDataAvailable);
 	connect(m_reply, &QNetworkReply::finished, this, &Transfer::handleDownloadFinished);
-	connect(m_reply, static_cast<void(QNetworkReply::*)(QNetworkReply::NetworkError)>(&QNetworkReply::error), this, &Transfer::handleDownloadError);
+	connect(m_reply, &QNetworkReply::errorOccurred, this, &Transfer::handleDownloadError);
 
 	if (m_updateTimer == 0 && m_updateInterval > 0)
 	{
@@ -1032,6 +1034,8 @@ void TransfersManager::addTransfer(Transfer *transfer)
 		return;
 	}
 
+	const Transfer::TransferOptions options(transfer->getOptions());
+
 	m_transfers.append(transfer);
 
 	transfer->setUpdateInterval(500);
@@ -1041,7 +1045,7 @@ void TransfersManager::addTransfer(Transfer *transfer)
 	connect(transfer, &Transfer::changed, m_instance, &TransfersManager::handleTransferChanged);
 	connect(transfer, &Transfer::stopped, m_instance, &TransfersManager::handleTransferStopped);
 
-	if (transfer->getOptions().testFlag(Transfer::CanNotifyOption) && transfer->getState() != Transfer::CancelledState)
+	if (options.testFlag(Transfer::CanNotifyOption) && transfer->getState() != Transfer::CancelledState)
 	{
 		emit m_instance->transferStarted(transfer);
 		emit m_instance->transfersChanged();
@@ -1052,17 +1056,18 @@ void TransfersManager::addTransfer(Transfer *transfer)
 		}
 	}
 
-	if (transfer->getOptions().testFlag(Transfer::IsPrivateOption))
+	if (options.testFlag(Transfer::IsPrivateOption))
 	{
 		m_privateTransfers.append(transfer);
 	}
 	else
 	{
-		const QString scheme(transfer->getSource().scheme());
+		const QUrl source(transfer->getSource());
+		const QString scheme(source.scheme());
 
 		if (scheme == QLatin1String("http") || scheme == QLatin1String("https"))
 		{
-			HistoryManager::addEntry(transfer->getSource());
+			HistoryManager::addEntry(source);
 		}
 	}
 }
@@ -1082,17 +1087,19 @@ void TransfersManager::save()
 
 	for (int i = 0; i < m_transfers.count(); ++i)
 	{
-		if (m_privateTransfers.contains(m_transfers.at(i)) || (m_transfers.at(i)->getState() == Transfer::FinishedState && m_transfers.at(i)->getTimeFinished().isValid() && m_transfers.at(i)->getTimeFinished().daysTo(QDateTime::currentDateTimeUtc()) > limit))
+		Transfer *transfer(m_transfers.at(i));
+
+		if (m_privateTransfers.contains(transfer) || (transfer->getState() == Transfer::FinishedState && transfer->getTimeFinished().isValid() && transfer->getTimeFinished().daysTo(QDateTime::currentDateTimeUtc()) > limit))
 		{
 			continue;
 		}
 
-		history.setValue(QStringLiteral("%1/source").arg(entry), m_transfers.at(i)->getSource().toString());
-		history.setValue(QStringLiteral("%1/target").arg(entry), m_transfers.at(i)->getTarget());
-		history.setValue(QStringLiteral("%1/timeStarted").arg(entry), m_transfers.at(i)->getTimeStarted().toString(Qt::ISODate));
-		history.setValue(QStringLiteral("%1/timeFinished").arg(entry), ((m_transfers.at(i)->getTimeFinished().isValid() && m_transfers.at(i)->getState() != Transfer::RunningState) ? m_transfers.at(i)->getTimeFinished() : QDateTime::currentDateTimeUtc()).toString(Qt::ISODate));
-		history.setValue(QStringLiteral("%1/bytesTotal").arg(entry), m_transfers.at(i)->getBytesTotal());
-		history.setValue(QStringLiteral("%1/bytesReceived").arg(entry), m_transfers.at(i)->getBytesReceived());
+		history.setValue(QStringLiteral("%1/source").arg(entry), transfer->getSource().toString());
+		history.setValue(QStringLiteral("%1/target").arg(entry), transfer->getTarget());
+		history.setValue(QStringLiteral("%1/timeStarted").arg(entry), transfer->getTimeStarted().toString(Qt::ISODate));
+		history.setValue(QStringLiteral("%1/timeFinished").arg(entry), ((transfer->getTimeFinished().isValid() && transfer->getState() != Transfer::RunningState) ? transfer->getTimeFinished() : QDateTime::currentDateTimeUtc()).toString(Qt::ISODate));
+		history.setValue(QStringLiteral("%1/bytesTotal").arg(entry), transfer->getBytesTotal());
+		history.setValue(QStringLiteral("%1/bytesReceived").arg(entry), transfer->getBytesReceived());
 
 		++entry;
 	}
@@ -1104,9 +1111,11 @@ void TransfersManager::clearTransfers(int period)
 {
 	for (int i = (m_transfers.count() - 1); i >= 0; --i)
 	{
-		if (m_transfers.at(i)->getState() == Transfer::FinishedState && (period == 0 || (m_transfers.at(i)->getTimeFinished().isValid() && m_transfers.at(i)->getTimeFinished().secsTo(QDateTime::currentDateTimeUtc()) > (period * 3600))))
+		Transfer *transfer(m_transfers.at(i));
+
+		if (transfer->getState() == Transfer::FinishedState && (period == 0 || (transfer->getTimeFinished().isValid() && transfer->getTimeFinished().secsTo(QDateTime::currentDateTimeUtc()) > (period * 3600))))
 		{
-			TransfersManager::removeTransfer(m_transfers.at(i));
+			TransfersManager::removeTransfer(transfer);
 		}
 	}
 }
@@ -1135,30 +1144,32 @@ void TransfersManager::handleTransferFinished()
 
 	updateRunningTransfersState();
 
-	if (transfer)
+	if (!transfer)
 	{
-		if (transfer->getState() == Transfer::FinishedState)
+		return;
+	}
+
+	if (transfer->getState() == Transfer::FinishedState)
+	{
+		Notification::Message message;
+		message.message = QFileInfo(transfer->getTarget()).fileName();
+		message.icon = transfer->getIcon();
+		message.event = NotificationsManager::TransferCompletedEvent;
+
+		if (message.icon.isNull())
 		{
-			Notification::Message message;
-			message.message = QFileInfo(transfer->getTarget()).fileName();
-			message.icon = transfer->getIcon();
-			message.event = NotificationsManager::TransferCompletedEvent;
-
-			if (message.icon.isNull())
-			{
-				message.icon = ThemesManager::createIcon(QLatin1String("download"));
-			}
-
-			connect(NotificationsManager::createNotification(message, this), &Notification::clicked, transfer, &Transfer::openTarget);
+			message.icon = ThemesManager::createIcon(QLatin1String("download"));
 		}
 
-		emit transferFinished(transfer);
-		emit transfersChanged();
+		connect(NotificationsManager::createNotification(message, this), &Notification::clicked, transfer, &Transfer::openTarget);
+	}
 
-		if (!m_privateTransfers.contains(transfer))
-		{
-			scheduleSave();
-		}
+	emit transferFinished(transfer);
+	emit transfersChanged();
+
+	if (!m_privateTransfers.contains(transfer))
+	{
+		scheduleSave();
 	}
 }
 
@@ -1200,7 +1211,7 @@ Transfer* TransfersManager::startTransfer(const QUrl &source, const QString &tar
 {
 	QNetworkRequest request;
 	request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
-	request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+	request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
 	request.setHeader(QNetworkRequest::UserAgentHeader, NetworkManagerFactory::getUserAgent());
 	request.setUrl(QUrl(source));
 
@@ -1295,23 +1306,40 @@ TransfersManager::ActiveTransfersInformation TransfersManager::getActiveTransfer
 	{
 		const Transfer *transfer(m_transfers.at(i));
 
-		if (transfer->getState() == Transfer::RunningState)
+		if (transfer->getState() != Transfer::RunningState)
 		{
-			if (transfer->getBytesTotal() > 0)
-			{
-				++information.activeTransfersAmount;
+			continue;
+		}
 
-				information.bytesTotal += transfer->getBytesTotal();
-				information.bytesReceived += transfer->getBytesReceived();
-			}
-			else
-			{
-				++information.unknownProgressTransfersAmount;
-			}
+		if (transfer->getBytesTotal() > 0)
+		{
+			++information.activeTransfersAmount;
+
+			information.bytesTotal += transfer->getBytesTotal();
+			information.bytesReceived += transfer->getBytesReceived();
+		}
+		else
+		{
+			++information.unknownProgressTransfersAmount;
 		}
 	}
 
 	return information;
+}
+
+int TransfersManager::getRunningTransfersCount()
+{
+	int runningTransfers(0);
+
+	for (int i = 0; i < m_transfers.count(); ++i)
+	{
+		if (m_transfers.at(i)->getState() == Transfer::RunningState)
+		{
+			++runningTransfers;
+		}
+	}
+
+	return runningTransfers;
 }
 
 bool TransfersManager::removeTransfer(Transfer *transfer, bool keepFile)
@@ -1352,22 +1380,24 @@ bool TransfersManager::isDownloading(const QString &source, const QString &targe
 
 	for (int i = 0; i < m_transfers.count(); ++i)
 	{
-		if (m_transfers.at(i)->getState() != Transfer::RunningState)
+		Transfer *transfer(m_transfers.at(i));
+
+		if (transfer->getState() != Transfer::RunningState)
 		{
 			continue;
 		}
 
-		if (source.isEmpty() && m_transfers.at(i)->getTarget() == target)
+		if (source.isEmpty() && transfer->getTarget() == target)
 		{
 			return true;
 		}
 
-		if (target.isEmpty() && m_transfers.at(i)->getSource() == source)
+		if (target.isEmpty() && transfer->getSource() == source)
 		{
 			return true;
 		}
 
-		if (!source.isEmpty() && !target.isEmpty() && m_transfers.at(i)->getSource() == source && m_transfers.at(i)->getTarget() == target)
+		if (!source.isEmpty() && !target.isEmpty() && transfer->getSource() == source && transfer->getTarget() == target)
 		{
 			return true;
 		}

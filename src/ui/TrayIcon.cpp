@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -38,16 +38,18 @@ TrayIcon::TrayIcon(Application *parent) : QObject(parent),
 
 	for (int i = 0; i < actions.count(); ++i)
 	{
-		if (actions.at(i) < 0)
+		const int identifier(actions.at(i));
+
+		if (identifier < 0)
 		{
 			menu->addSeparator();
 
 			continue;
 		}
 
-		Action *action(new Action(actions.at(i), {}, executor, menu));
+		Action *action(new Action(identifier, {}, executor, menu));
 
-		switch (actions.at(i))
+		switch (identifier)
 		{
 			case ActionsManager::BookmarksAction:
 				action->setTextOverride(QT_TRANSLATE_NOOP("actions", "Bookmarks"));
@@ -72,6 +74,7 @@ TrayIcon::TrayIcon(Application *parent) : QObject(parent),
 	m_trayIcon->setContextMenu(menu);
 	m_trayIcon->setToolTip(tr("Otter Browser"));
 	m_trayIcon->show();
+	m_trayIcon->installEventFilter(this);
 
 	setParent(nullptr);
 
@@ -96,7 +99,9 @@ void TrayIcon::timerEvent(QTimerEvent *event)
 
 		m_autoHideTimer = 0;
 
-		handleMessageIgnored();
+		disconnect(m_trayIcon, &QSystemTrayIcon::messageClicked, this, &TrayIcon::handleMessageClicked);
+
+		m_notification->markAsIgnored();
 	}
 }
 
@@ -126,13 +131,6 @@ void TrayIcon::handleMessageClicked()
 	m_notification->markAsClicked();
 }
 
-void TrayIcon::handleMessageIgnored()
-{
-	disconnect(m_trayIcon, &QSystemTrayIcon::messageClicked, this, &TrayIcon::handleMessageClicked);
-
-	m_notification->markAsIgnored();
-}
-
 void TrayIcon::updateMenu()
 {
 	if (!m_trayIcon->contextMenu()->actions().isEmpty())
@@ -143,11 +141,7 @@ void TrayIcon::updateMenu()
 
 void TrayIcon::showMessage(const Notification::Message &message)
 {
-#if QT_VERSION >= 0x050900
 	m_trayIcon->showMessage(message.getTitle(), message.message, message.getIcon());
-#else
-	m_trayIcon->showMessage(message.getTitle(), message.message);
-#endif
 
 	const int visibilityDuration(SettingsManager::getOption(SettingsManager::Interface_NotificationVisibilityDurationOption).toInt());
 
@@ -178,6 +172,16 @@ void TrayIcon::showNotification(Notification *notification)
 	connect(m_trayIcon, &QSystemTrayIcon::messageClicked, this, &TrayIcon::handleMessageClicked);
 
 	showMessage(notification->getMessage());
+}
+
+bool TrayIcon::eventFilter(QObject *object, QEvent *event)
+{
+	if (object == m_trayIcon && event->type() == QEvent::LanguageChange)
+	{
+		m_trayIcon->setToolTip(tr("Otter Browser"));
+	}
+
+	return QObject::eventFilter(object, event);
 }
 
 }

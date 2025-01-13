@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -195,7 +195,9 @@ void FeedsContentsWidget::addFeed()
 		return;
 	}
 
-	if (BookmarksManager::getModel()->hasFeed(dialog.getFeed()->getUrl()) || FeedsManager::getModel()->hasFeed(dialog.getFeed()->getUrl()))
+	const QUrl url(dialog.getFeed()->getUrl());
+
+	if (BookmarksManager::getModel()->hasFeed(url) || FeedsManager::getModel()->hasFeed(url))
 	{
 		QMessageBox messageBox;
 		messageBox.setWindowTitle(tr("Question"));
@@ -312,16 +314,18 @@ void FeedsContentsWidget::openEntry()
 
 void FeedsContentsWidget::removeEntry()
 {
-	if (m_feed)
+	if (!m_feed)
 	{
-		const QModelIndex index(m_ui->entriesViewWidget->currentIndex().sibling(m_ui->entriesViewWidget->currentIndex().row(), 0));
+		return;
+	}
 
-		if (index.isValid() && !index.data(IdentifierRole).isNull())
-		{
-			m_feed->markEntryAsRemoved(index.data(IdentifierRole).toString());
+	const QModelIndex index(m_ui->entriesViewWidget->currentIndex().sibling(m_ui->entriesViewWidget->currentIndex().row(), 0));
 
-			m_ui->entriesViewWidget->removeRow();
-		}
+	if (index.isValid() && !index.data(IdentifierRole).isNull())
+	{
+		m_feed->markEntryAsRemoved(index.data(IdentifierRole).toString());
+
+		m_ui->entriesViewWidget->removeRow();
 	}
 }
 
@@ -332,17 +336,7 @@ void FeedsContentsWidget::handleFeedModified(const QUrl &url)
 
 	if (!m_updateAnimation && feed && feed->isUpdating() && FeedsManager::getModel()->hasFeed(url))
 	{
-		const QString path(ThemesManager::getAnimationPath(QLatin1String("spinner")));
-
-		if (path.isEmpty())
-		{
-			m_updateAnimation = new SpinnerAnimation(QCoreApplication::instance());
-		}
-		else
-		{
-			m_updateAnimation = new GenericAnimation(path, QCoreApplication::instance());
-		}
-
+		m_updateAnimation = ThemesManager::createAnimation();
 		m_updateAnimation->start();
 	}
 
@@ -384,8 +378,7 @@ void FeedsContentsWidget::showFeedsContextMenu(const QPoint &position)
 		default:
 			{
 				const bool isInTrash(index.data(FeedsModel::IsTrashedRole).toBool());
-
-				ActionExecutor::Object executor(this, this);
+				const ActionExecutor::Object executor(this, this);
 
 				if (!isInTrash)
 				{
@@ -472,7 +465,7 @@ void FeedsContentsWidget::updateEntry()
 		content.prepend(summary);
 	}
 
-	const QString enableImages(SettingsManager::getOption(SettingsManager::Permissions_EnableImagesOption, Utils::extractHost(m_feed->getUrl())).toString());
+	const QString enableImages(m_feed ? SettingsManager::getOption(SettingsManager::Permissions_EnableImagesOption, Utils::extractHost(m_feed->getUrl())).toString() : QString());
 	TextBrowserWidget::ImagesPolicy imagesPolicy(TextBrowserWidget::AllImages);
 
 	if (enableImages == QLatin1String("onlyCached"))
@@ -504,21 +497,25 @@ void FeedsContentsWidget::updateEntry()
 
 	for (int i = 0; i < entryCategories.count(); ++i)
 	{
-		if (!entryCategories.at(i).isEmpty())
+		const QString entryCategory(entryCategories.at(i));
+
+		if (entryCategory.isEmpty())
 		{
-			const QString label(feedCategories.value(entryCategories.at(i)));
-			QToolButton *toolButton(new QToolButton(m_ui->entryWidget));
-			toolButton->setText(label.isEmpty() ? QString(entryCategories.at(i)).replace(QLatin1Char('_'), QLatin1Char(' ')) : label);
-
-			m_ui->categoriesLayout->addWidget(toolButton);
-
-			connect(toolButton, &QToolButton::clicked, toolButton, [=]()
-			{
-				m_categories = QStringList({entryCategories.at(i)});
-
-				updateFeedModel();
-			});
+			continue;
 		}
+
+		const QString label(feedCategories.value(entryCategory));
+		QToolButton *toolButton(new QToolButton(m_ui->entryWidget));
+		toolButton->setText(label.isEmpty() ? QString(entryCategory).replace(QLatin1Char('_'), QLatin1Char(' ')) : label);
+
+		m_ui->categoriesLayout->addWidget(toolButton);
+
+		connect(toolButton, &QToolButton::clicked, toolButton, [=]()
+		{
+			m_categories = QStringList({entryCategory});
+
+			updateFeedModel();
+		});
 	}
 
 	m_ui->categoriesLayout->addStretch();
@@ -569,10 +566,12 @@ void FeedsContentsWidget::updateFeedModel()
 
 			for (int i = 0; i < applications.count(); ++i)
 			{
-				m_ui->applicationComboBox->addItem(applications.at(i).icon, applications.at(i).name);
-				m_ui->applicationComboBox->setItemData((i + 2), applications.at(i).command, Qt::UserRole);
+				const ApplicationInformation application(applications.at(i));
 
-				if (applications.at(i).icon.isNull())
+				m_ui->applicationComboBox->addItem(application.icon, application.name);
+				m_ui->applicationComboBox->setItemData((i + 2), application.command, Qt::UserRole);
+
+				if (application.icon.isNull())
 				{
 					m_ui->applicationComboBox->setItemData((i + 2), ItemModel::createDecoration(), Qt::DecorationRole);
 				}
@@ -598,15 +597,17 @@ void FeedsContentsWidget::updateFeedModel()
 		else if (menu->actions().count() > 0)
 		{
 			QStringList categories;
-			bool hasAllCategories = true;
+			bool hasAllCategories(true);
 
 			m_categories.clear();
 
 			for (int i = 2; i < menu->actions().count(); ++i)
 			{
-				if (menu->actions().at(i)->isChecked())
+				const QAction *menuAction(menu->actions().at(i));
+
+				if (menuAction->isChecked())
 				{
-					categories.append(menu->actions().at(i)->data().toString());
+					categories.append(menuAction->data().toString());
 				}
 				else
 				{
@@ -818,16 +819,15 @@ Animation* FeedsContentsWidget::getUpdateAnimation()
 
 FeedsModel::Entry* FeedsContentsWidget::findFolder(const QModelIndex &index) const
 {
+	FeedsModel *model(FeedsManager::getModel());
 	FeedsModel::Entry *entry(FeedsManager::getModel()->getEntry(index));
 
-	if (!entry || entry == FeedsManager::getModel()->getRootEntry() || entry == FeedsManager::getModel()->getTrashEntry())
+	if (!entry || entry == model->getRootEntry() || entry == model->getTrashEntry())
 	{
-		return FeedsManager::getModel()->getRootEntry();
+		return model->getRootEntry();
 	}
 
-	const FeedsModel::EntryType type(static_cast<FeedsModel::EntryType>(entry->data(FeedsModel::TypeRole).toInt()));
-
-	return ((type == FeedsModel::RootEntry || type == FeedsModel::FolderEntry) ? entry : static_cast<FeedsModel::Entry*>(entry->parent()));
+	return (entry->isFolder() ? entry : static_cast<FeedsModel::Entry*>(entry->parent()));
 }
 
 QString FeedsContentsWidget::getTitle() const
