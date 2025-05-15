@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -340,47 +340,24 @@ bool MouseProfile::Gesture::operator ==(const Gesture &other) const
 	return (steps == other.steps && parameters == other.parameters && action == other.action);
 }
 
-MouseProfile::MouseProfile(const QString &identifier, LoadMode mode) :
-	m_identifier(identifier),
-	m_isModified(false)
+MouseProfile::MouseProfile(const QString &identifier, LoadMode mode) : JsonAddon(),
+	m_identifier(identifier)
 {
 	if (identifier.isEmpty())
 	{
 		return;
 	}
 
-	const JsonSettings settings(SessionsManager::getReadableDataPath(QLatin1String("mouse/") + identifier + QLatin1String(".json")));
-	const QStringList comments(settings.getComment().split(QLatin1Char('\n')));
+	const QString path(SessionsManager::getReadableDataPath(QLatin1String("mouse/") + identifier + QLatin1String(".json")));
 
-	for (int i = 0; i < comments.count(); ++i)
-	{
-		const QString comment(comments.at(i));
-		const QString key(comment.section(QLatin1Char(':'), 0, 0).trimmed());
-		const QString value(comment.section(QLatin1Char(':'), 1).trimmed());
-
-		if (key == QLatin1String("Title"))
-		{
-			m_title = value;
-		}
-		else if (key == QLatin1String("Description"))
-		{
-			m_description = value;
-		}
-		else if (key == QLatin1String("Author"))
-		{
-			m_author = value;
-		}
-		else if (key == QLatin1String("Version"))
-		{
-			m_version = value;
-		}
-	}
+	loadMetaData(path);
 
 	if (mode == MetaDataOnlyMode)
 	{
 		return;
 	}
 
+	const JsonSettings settings(path);
 	const QJsonArray contextsArray(settings.array());
 
 	for (int i = 0; i < contextsArray.count(); ++i)
@@ -432,79 +409,19 @@ MouseProfile::MouseProfile(const QString &identifier, LoadMode mode) :
 	}
 }
 
-void MouseProfile::setTitle(const QString &title)
-{
-	if (title != m_title)
-	{
-		m_title = title;
-		m_isModified = true;
-	}
-}
-
-void MouseProfile::setDescription(const QString &description)
-{
-	if (description != m_description)
-	{
-		m_description = description;
-		m_isModified = true;
-	}
-}
-
-void MouseProfile::setAuthor(const QString &author)
-{
-	if (author != m_author)
-	{
-		m_author = author;
-		m_isModified = true;
-	}
-}
-
-void MouseProfile::setVersion(const QString &version)
-{
-	if (version != m_version)
-	{
-		m_version = version;
-		m_isModified = true;
-	}
-}
-
 void MouseProfile::setDefinitions(const QHash<int, QVector<MouseProfile::Gesture> > &definitions)
 {
 	if (definitions != m_definitions)
 	{
 		m_definitions = definitions;
-		m_isModified = true;
-	}
-}
 
-void MouseProfile::setModified(bool isModified)
-{
-	m_isModified = isModified;
+		setModified(true);
+	}
 }
 
 QString MouseProfile::getName() const
 {
 	return m_identifier;
-}
-
-QString MouseProfile::getTitle() const
-{
-	return (m_title.isEmpty() ? QCoreApplication::translate("Otter::MouseProfile", "(Untitled)") : m_title);
-}
-
-QString MouseProfile::getDescription() const
-{
-	return m_description;
-}
-
-QString MouseProfile::getAuthor() const
-{
-	return m_author;
-}
-
-QString MouseProfile::getVersion() const
-{
-	return m_version;
 }
 
 QHash<int, QVector<MouseProfile::Gesture> > MouseProfile::getDefinitions() const
@@ -517,11 +434,6 @@ Addon::AddonType MouseProfile::getType() const
 	return Addon::UnknownType;
 }
 
-bool MouseProfile::isModified() const
-{
-	return m_isModified;
-}
-
 bool MouseProfile::isValid() const
 {
 	return !m_identifier.isEmpty();
@@ -530,16 +442,7 @@ bool MouseProfile::isValid() const
 bool MouseProfile::save()
 {
 	JsonSettings settings(SessionsManager::getWritableDataPath(QLatin1String("mouse/") + m_identifier + QLatin1String(".json")));
-	QString comment;
-	QTextStream stream(&comment);
-	stream.setCodec("UTF-8");
-	stream << QLatin1String("Title: ") << (m_title.isEmpty() ? QT_TR_NOOP("(Untitled)") : m_title) << QLatin1Char('\n');
-	stream << QLatin1String("Description: ") << m_description << QLatin1Char('\n');
-	stream << QLatin1String("Type: mouse-profile\n");
-	stream << QLatin1String("Author: ") << m_author << QLatin1Char('\n');
-	stream << QLatin1String("Version: ") << m_version;
-
-	settings.setComment(comment);
+	settings.setComment(formatComment(QLatin1String("mouse-profile")));
 
 	QJsonArray contextsArray;
 	QHash<int, QVector<MouseProfile::Gesture> >::const_iterator contextsIterator;
@@ -574,21 +477,22 @@ bool MouseProfile::save()
 
 	settings.setArray(contextsArray);
 
-	const bool result(settings.save());
-
-	if (result)
+	if (settings.save())
 	{
-		m_isModified = false;
+		setModified(false);
+
+		return true;
 	}
 
-	return result;
+	return false;
 }
 
 GesturesManager* GesturesManager::m_instance(nullptr);
 MouseGestures::Recognizer* GesturesManager::m_recognizer(nullptr);
 QPointer<QObject> GesturesManager::m_trackedObject(nullptr);
 QPoint GesturesManager::m_lastClick;
-QPoint GesturesManager::m_lastPosition;
+QPoint GesturesManager::m_lastLocalPosition;
+QPoint GesturesManager::m_lastGlobalPosition;
 QVariantMap GesturesManager::m_parameters;
 QHash<GesturesManager::GesturesContext, QVector<MouseProfile::Gesture> > GesturesManager::m_gestures;
 QHash<GesturesManager::GesturesContext, QVector<QVector<MouseProfile::Gesture::Step> > > GesturesManager::m_nativeGestures;
@@ -1051,7 +955,7 @@ bool GesturesManager::triggerAction(const MouseProfile::Gesture &gesture)
 	{
 		if (gesture.action == ActionsManager::ContextMenuAction)
 		{
-			QContextMenuEvent event(QContextMenuEvent::Other, m_lastPosition);
+			QContextMenuEvent event(QContextMenuEvent::Other, m_lastLocalPosition, m_lastGlobalPosition);
 
 			QCoreApplication::sendEvent(m_trackedObject, &event);
 		}
@@ -1101,7 +1005,8 @@ bool GesturesManager::eventFilter(QObject *object, QEvent *event)
 				break;
 			}
 
-			m_lastPosition = mouseEvent->pos();
+			m_lastLocalPosition = mouseEvent->pos();
+			m_lastGlobalPosition = mouseEvent->globalPos();
 			m_lastClick = mouseEvent->pos();
 
 			recognizeMoveStep(mouseEvent);
@@ -1158,7 +1063,8 @@ bool GesturesManager::eventFilter(QObject *object, QEvent *event)
 				m_recognizer->startGesture(m_lastClick.x(), m_lastClick.y());
 			}
 
-			m_lastPosition = mouseEvent->pos();
+			m_lastLocalPosition = mouseEvent->pos();
+			m_lastGlobalPosition = mouseEvent->globalPos();
 
 			m_recognizer->addPosition(mouseEvent->pos().x(), mouseEvent->pos().y());
 

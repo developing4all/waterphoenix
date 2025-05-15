@@ -97,16 +97,19 @@ void MenuBarWidget::contextMenuEvent(QContextMenuEvent *event)
 void MenuBarWidget::reload()
 {
 	const ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(ToolBarsManager::MenuBar));
-	QStringList actions;
-	actions.reserve(definition.entries.count());
+	int menuBarPosition(-1);
 
 	for (int i = 0; i < definition.entries.count(); ++i)
 	{
-		actions.append(definition.entries.at(i).action);
+		if (definition.entries.at(i).action == QLatin1String("MenuBarWidget"))
+		{
+			menuBarPosition = i;
+
+			break;
+		}
 	}
 
-	const int menuBarPosition(actions.indexOf(QLatin1String("MenuBarWidget")));
-	const bool isMenuBarOnly(actions.count() == 1 && actions.at(0) == QLatin1String("MenuBarWidget"));
+	const bool isMenuBarOnly(menuBarPosition == 0 && definition.entries.count() == 1);
 	const bool needsLeftToolbar(!isMenuBarOnly && menuBarPosition != 0);
 	const bool needsRightToolbar(!isMenuBarOnly && menuBarPosition != (definition.entries.count() - 1));
 
@@ -140,6 +143,9 @@ void MenuBarWidget::reload()
 
 	if (isMenuBarOnly)
 	{
+		setMaximumHeight(QWIDGETSIZE_MAX);
+		setMinimumHeight(0);
+
 		return;
 	}
 
@@ -190,18 +196,19 @@ void MenuBarWidget::reload()
 
 void MenuBarWidget::updateGeometries()
 {
-	if (!m_leftToolBar && !m_rightToolBar)
+	if (!m_rightToolBar)
 	{
 		return;
 	}
 
+	const int actionsCount(actions().count());
 	int size(0);
 
-	if (actions().count() > 0)
+	if (actionsCount > 0)
 	{
-		size = ((style()->pixelMetric(QStyle::PM_MenuBarHMargin, nullptr, this) * 2) + (style()->pixelMetric(QStyle::PM_MenuBarItemSpacing, nullptr, this) * actions().count()));
+		size = ((style()->pixelMetric(QStyle::PM_MenuBarHMargin, nullptr, this) * 2) + (style()->pixelMetric(QStyle::PM_MenuBarItemSpacing, nullptr, this) * actionsCount));
 
-		for (int i = 0; i < actions().count(); ++i)
+		for (int i = 0; i < actionsCount; ++i)
 		{
 			QStyleOptionMenuItem option;
 
@@ -211,12 +218,12 @@ void MenuBarWidget::updateGeometries()
 		}
 	}
 
-	if (m_rightToolBar && width() > (size + (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0) + m_rightToolBar->sizeHint().width()))
+	if (width() > (size + (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0) + m_rightToolBar->sizeHint().width()))
 	{
 		const int offset(size - (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0));
-		ToolBarWidget *toolBar(qobject_cast<ToolBarWidget*>(m_rightToolBar));
-		toolBar->move(offset, 0);
-		toolBar->resize((width() - offset), toolBar->height());
+
+		m_rightToolBar->move(offset, 0);
+		m_rightToolBar->resize((width() - offset), m_rightToolBar->height());
 	}
 }
 

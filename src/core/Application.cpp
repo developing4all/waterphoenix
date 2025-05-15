@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -71,6 +71,9 @@
 #include <QtCore/QRegularExpression>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QStorageInfo>
+#if QT_VERSION < 0x060000
+#include <QtCore/QTextCodec>
+#endif
 #include <QtCore/QTranslator>
 #include <QtGui/QDesktopServices>
 #include <QtNetwork/QLocalSocket>
@@ -110,7 +113,11 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 
 	m_instance = this;
 
-    QString profilePath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1String("/waterphoenix"));
+#if QT_VERSION < 0x060000
+	QTextCodec::setCodecForLocale(QTextCodec::codecForMib(106));
+#endif
+
+	QString profilePath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1String("/otter"));
 	QString cachePath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
 
 #ifdef Q_OS_DARWIN
@@ -1392,7 +1399,7 @@ QString Application::createReport(ReportOptions options)
 	versionReport.entries.append({QLatin1String("Web Backend"), (webBackend ? QStringLiteral("%1 %2").arg(webBackend->getTitle(), webBackend->getEngineVersion()) : QLatin1String("none"))});
 	versionReport.entries.append({QLatin1String("Build Date"), QDateTime::fromString(OTTER_BUILD_DATETIME, Qt::ISODate).toUTC().toString(Qt::ISODate)});
 	versionReport.entries.append({QLatin1String("Git Branch"), ((gitBranch.isEmpty() || gitBranch == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : gitBranch)});
-	versionReport.entries.append({QLatin1String("Git Revision"), ((gitRevision.isEmpty() || gitRevision == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : QStringLiteral("%1 (%2)").arg(gitRevision).arg(QDateTime::fromString(QStringLiteral(OTTER_GIT_DATETIME).trimmed(), Qt::ISODate).toUTC().toString(Qt::ISODate)))});
+	versionReport.entries.append({QLatin1String("Git Revision"), ((gitRevision.isEmpty() || gitRevision == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : QStringLiteral("%1 (%2)").arg(gitRevision, QDateTime::fromString(QStringLiteral(OTTER_GIT_DATETIME).trimmed(), Qt::ISODate).toUTC().toString(Qt::ISODate)))});
 
 	report.sections.append(versionReport);
 

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -434,12 +434,21 @@ QStringList SessionsManager::getSessions()
 	QStringList sessions;
 	sessions.reserve(entries.count());
 
+	bool containsCurrentSession(false);
+
 	for (int i = 0; i < entries.count(); ++i)
 	{
-		sessions.append(entries.at(i).completeBaseName());
+		const QString entry(entries.at(i).completeBaseName());
+
+		sessions.append(entry);
+
+		if (entry == m_sessionPath)
+		{
+			containsCurrentSession = true;
+		}
 	}
 
-	if (!m_sessionPath.isEmpty() && !entries.contains(m_sessionPath))
+	if (!containsCurrentSession && !m_sessionPath.isEmpty())
 	{
 		sessions.append(m_sessionPath);
 	}
@@ -712,7 +721,7 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 
 						if (geometry.isValid())
 						{
-							windowObject.insert(QLatin1String("geometry"), QStringLiteral("%1, %2, %3, %4").arg(geometry.x()).arg(geometry.y()).arg(geometry.width()).arg(geometry.height()));
+							windowObject.insert(QLatin1String("geometry"), QStringLiteral("%1, %2, %3, %4").arg(QString::number(geometry.x()), QString::number(geometry.y()), QString::number(geometry.width()), QString::number(geometry.height())));
 						}
 					}
 
@@ -740,7 +749,7 @@ bool SessionsManager::saveSession(const SessionInformation &session)
 
 				if (!position.isNull())
 				{
-					historyEntryObject.insert(QLatin1String("position"), QStringLiteral("%1, %2").arg(position.x()).arg(position.y()));
+					historyEntryObject.insert(QLatin1String("position"), QStringLiteral("%1, %2").arg(QString::number(position.x()), QString::number(position.y())));
 				}
 
 				windowHistoryArray.append(historyEntryObject);

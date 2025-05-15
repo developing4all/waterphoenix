@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -155,8 +155,6 @@ void SpellCheckManager::saveIgnoredWords()
 	}
 
 	QTextStream stream(&file);
-	stream.setCodec("UTF-8");
-
 	QSet<QString>::iterator iterator;
 
 	for (iterator = m_ignoredWords.begin(); iterator != m_ignoredWords.end(); ++iterator)
@@ -193,12 +191,13 @@ void SpellCheckManager::updateDefaultDictionary()
 		return;
 	}
 
-	const QLocale locale(defaultLanguage);
-	const QList<QLocale> locales(QLocale::matchingLocales(locale.language(), locale.script(), QLocale::AnyCountry));
+	const QLocale defaultLocale(defaultLanguage);
+	const QList<QLocale> locales(QLocale::matchingLocales(defaultLocale.language(), defaultLocale.script(), QLocale::AnyCountry));
 
 	for (int i = 0; i < locales.count(); ++i)
 	{
-		const QString localeName(locales.at(i).name());
+		const QLocale locale(locales.at(i));
+		const QString localeName(locale.name());
 
 		if (dictionaries.contains(localeName))
 		{
@@ -207,7 +206,7 @@ void SpellCheckManager::updateDefaultDictionary()
 			break;
 		}
 
-		const QString localeBcp47Name(locales.at(i).bcp47Name());
+		const QString localeBcp47Name(locale.bcp47Name());
 
 		if (dictionaries.contains(localeBcp47Name))
 		{
@@ -281,7 +280,6 @@ QStringList SpellCheckManager::getIgnoredWords()
 		if (file.open(QIODevice::ReadOnly))
 		{
 			QTextStream stream(&file);
-			stream.setCodec("UTF-8");
 
 			while (!stream.atEnd())
 			{

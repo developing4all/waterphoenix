@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -30,6 +30,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QMimeData>
 #include <QtCore/QSaveFile>
+#include <QtCore/QTimeZone>
 #include <QtWidgets/QMessageBox>
 
 namespace Otter
@@ -184,7 +185,7 @@ QVariant BookmarksModel::Bookmark::data(int role) const
 							const QString text(data(DescriptionRole).toString());
 							const int newLinePosition(text.indexOf(QLatin1Char('\n')));
 
-							if (newLinePosition > 0 && newLinePosition < (text.count() - 1))
+							if (newLinePosition > 0 && newLinePosition < (text.length() - 1))
 							{
 								return text.left(newLinePosition) + QStringLiteral("…");
 							}
@@ -1284,7 +1285,7 @@ QMimeData* BookmarksModel::mimeData(const QModelIndexList &indexes) const
 QDateTime BookmarksModel::readDateTime(QXmlStreamReader *reader, const QString &attribute)
 {
 	QDateTime dateTime(QDateTime::fromString(reader->attributes().value(attribute).toString(), Qt::ISODate));
-	dateTime.setTimeSpec(Qt::UTC);
+	dateTime.setTimeZone(QTimeZone::utc());
 
 	return dateTime;
 }

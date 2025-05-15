@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2022 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2022 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -120,17 +120,15 @@ void DictionariesPage::addAddon()
 void DictionariesPage::openAddons()
 {
 	const QStringList selectedDictionaries(getSelectedDictionaries());
-	QStringList paths;
-	paths.reserve(selectedDictionaries.count() * 2);
 
 	for (int i = 0; i < selectedDictionaries.count(); ++i)
 	{
-		paths.append(SpellCheckManager::getDictionary(selectedDictionaries.at(i)).paths);
-	}
+		const QStringList paths(SpellCheckManager::getDictionary(selectedDictionaries.at(i)).paths);
 
-	for (int i = 0; i < paths.count(); ++i)
-	{
-		Utils::runApplication({}, paths.at(i));
+		for (int j = 0; j < paths.count(); ++j)
+		{
+			Utils::runApplication({}, paths.at(j));
+		}
 	}
 }
 
@@ -143,23 +141,23 @@ void DictionariesPage::removeAddons()
 		return;
 	}
 
-	bool hasAddonsToRemove(false);
+	bool hasDictionariesToRemove(false);
 
 	m_filesToRemove.reserve(m_filesToRemove.count() + (dictionaries.count() * 2));
 
 	for (int i = 0; i < dictionaries.count(); ++i)
 	{
-		const SpellCheckManager::DictionaryInformation information(SpellCheckManager::getDictionary(dictionaries.at(i)));
+		const SpellCheckManager::DictionaryInformation dictionary(SpellCheckManager::getDictionary(dictionaries.at(i)));
 
-		if (information.isLocalDictionary)
+		if (dictionary.isLocalDictionary)
 		{
-			m_filesToRemove.append(information.paths);
+			m_filesToRemove.append(dictionary.paths);
 
-			hasAddonsToRemove = true;
+			hasDictionariesToRemove = true;
 		}
 	}
 
-	if (hasAddonsToRemove)
+	if (hasDictionariesToRemove)
 	{
 		emit settingsModified();
 	}
@@ -179,13 +177,13 @@ void DictionariesPage::updateDetails()
 
 	if (selectedDictionaries.count() == 1)
 	{
-		SpellCheckManager::DictionaryInformation information(SpellCheckManager::getDictionary(selectedDictionaries.first()));
+		SpellCheckManager::DictionaryInformation dictionary(SpellCheckManager::getDictionary(selectedDictionaries.first()));
 
-		if (information.isValid())
+		if (dictionary.isValid())
 		{
-			titleEntry.value = Dictionary(information, this).getTitle();
-			codeEntry.value = information.language;
-			locationEntry.value = QFileInfo(information.paths.at(0)).absolutePath();
+			titleEntry.value = Dictionary(dictionary, this).getTitle();
+			codeEntry.value = dictionary.language;
+			locationEntry.value = QFileInfo(dictionary.paths.at(0)).absolutePath();
 		}
 	}
 
@@ -205,14 +203,13 @@ void DictionariesPage::save()
 
 	for (int i = 0; i < m_dictionariesToAdd.count(); ++i)
 	{
-		const QString language(m_dictionariesToAdd.at(i).language);
-		const QStringList paths(m_dictionariesToAdd.at(i).paths);
+		const SpellCheckManager::DictionaryInformation dictionary(m_dictionariesToAdd.at(i));
 
-		for (int j = 0; j < paths.count(); ++j)
+		for (int j = 0; j < dictionary.paths.count(); ++j)
 		{
-			const QString path(paths.at(j));
+			const QString path(dictionary.paths.at(j));
 
-			QFile::copy(path, dictionariesDirectory.filePath(language + QFileInfo(path).suffix()));
+			QFile::copy(path, dictionariesDirectory.filePath(dictionary.language + QFileInfo(path).suffix()));
 		}
 	}
 

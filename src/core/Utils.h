@@ -119,6 +119,7 @@ namespace Utils
 void removeFiles(const QStringList &paths);
 void runApplication(const QString &command, const QUrl &url = {});
 void startLinkDrag(const QUrl &url, const QString &title, const QPixmap &pixmap, QObject *parent = nullptr);
+void showToolTip(const QPoint &position, const QString &text, QWidget *widget, const QRect &rectangle);
 QString matchUrl(const QUrl &url, const QString &prefix);
 QString createIdentifier(const QString &source, const QStringList &exclude = {}, bool toLowerCase = true);
 QString createErrorPage(const ErrorPageInformation &information);
@@ -142,6 +143,7 @@ QLocale createLocale(const QString &name);
 QPixmap loadPixmapFromDataUri(const QString &data);
 QFont multiplyFontSize(QFont font, qreal multiplier);
 SaveInformation getSavePath(const QString &fileName, const QString &directory = {}, QStringList filters = {}, bool forceAsk = false);
+QStringList getCharacterEncodings();
 QStringList getOpenPaths(const QStringList &fileNames = {}, QStringList filters = {}, bool selectMultiple = false);
 QVector<QUrl> extractUrls(const QMimeData *mimeData);
 QVector<ApplicationInformation> getApplicationsForMimeType(const QMimeType &mimeType);

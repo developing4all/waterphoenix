@@ -32,15 +32,21 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QMimeDatabase>
 #include <QtCore/QRegularExpression>
+#if QT_VERSION >= 0x060000
+#include <QtCore5Compat/QTextCodec>
+#else
+#include <QtCore/QTextCodec>
+#endif
 #include <QtCore/QTextStream>
 #include <QtCore/QTime>
 #include <QtCore/QtMath>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QDrag>
+#include <QtGui/QScreen>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QDesktopWidget>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QToolTip>
 
 namespace Otter
 {
@@ -101,6 +107,11 @@ void startLinkDrag(const QUrl &url, const QString &title, const QPixmap &pixmap,
 	drag->setMimeData(mimeData);
 	drag->setPixmap(pixmap);
 	drag->exec(Qt::CopyAction);
+}
+
+void showToolTip(const QPoint &position, const QString &text, QWidget *widget, const QRect &rectangle)
+{
+	QToolTip::showText(position, QFontMetrics(QToolTip::font()).elidedText(text, Qt::ElideRight, (widget->screen()->geometry().width() / 2)), widget, rectangle);
 }
 
 QString matchUrl(const QUrl &url, const QString &prefix)
@@ -260,8 +271,6 @@ QString createErrorPage(const ErrorPageInformation &information)
 	file.open(QIODevice::ReadOnly | QIODevice::Text);
 
 	QTextStream stream(&file);
-	stream.setCodec("UTF-8");
-
 	QString mainTemplate(stream.readAll());
 	const QRegularExpression advancedActionsExpression(QLatin1String("<!--advancedActions:begin-->(.*)<!--advancedActions:end-->"), (QRegularExpression::DotMatchesEverythingOption | QRegularExpression::MultilineOption));
 	const QRegularExpression basicActionsExpression(QLatin1String("<!--basicActions:begin-->(.*)<!--basicActions:end-->"), (QRegularExpression::DotMatchesEverythingOption | QRegularExpression::MultilineOption));
@@ -386,7 +395,7 @@ QString elideText(const QString &text, const QFontMetrics &fontMetrics, QWidget 
 {
 	if (widget && maximumWidth < 0)
 	{
-		maximumWidth = (QApplication::desktop()->screenGeometry(widget).width() / 4);
+		maximumWidth = (widget->screen()->geometry().width() / 4);
 	}
 
 	return fontMetrics.elidedText(text, Qt::ElideRight, qMax(minimumWidth, maximumWidth));
@@ -597,10 +606,10 @@ QLocale createLocale(const QString &name)
 {
 	if (name == QLatin1String("pt"))
 	{
-		return {QLocale::Portuguese, QLocale::Portugal};
+		return QLocale(QLocale::Portuguese, QLocale::Portugal);
 	}
 
-	return {name};
+	return QLocale(name);
 }
 
 QPixmap loadPixmapFromDataUri(const QString &data)
@@ -620,6 +629,25 @@ QFont multiplyFontSize(QFont font, qreal multiplier)
 	}
 
 	return font;
+}
+
+QStringList getCharacterEncodings()
+{
+	const QVector<int> textCodecs({106, 1015, 1017, 4, 5, 6, 7, 8, 82, 10, 85, 12, 13, 109, 110, 112, 2250, 2251, 2252, 2253, 2254, 2255, 2256, 2257, 2258, 18, 39, 17, 38, 2026});
+	QStringList encodings;
+	encodings.reserve(textCodecs.count());
+
+	for (int i = 0; i < textCodecs.count(); ++i)
+	{
+		const QTextCodec *codec(QTextCodec::codecForMib(textCodecs.at(i)));
+
+		if (codec)
+		{
+			encodings.append(QString::fromLatin1(codec->name()));
+		}
+	}
+
+	return encodings;
 }
 
 QStringList getOpenPaths(const QStringList &fileNames, QStringList filters, bool selectMultiple)
@@ -823,7 +851,7 @@ QString EnumeratorMapper::mapToName(int value, bool lowercaseFirst) const
 		return {};
 	}
 
-	name.chop(m_suffix.count());
+	name.chop(m_suffix.length());
 
 	if (lowercaseFirst)
 	{

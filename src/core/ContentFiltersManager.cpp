@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QTimer>
+#include <QtCore/QTimeZone>
 
 namespace Otter
 {
@@ -153,7 +154,7 @@ void ContentFiltersManager::initialize()
 		}
 
 		profileSummary.lastUpdate = QDateTime::fromString(profileObject.value(QLatin1String("lastUpdate")).toString(), Qt::ISODate);
-		profileSummary.lastUpdate.setTimeSpec(Qt::UTC);
+		profileSummary.lastUpdate.setTimeZone(QTimeZone::utc());
 		profileSummary.category = categoryTitles.value(profileObject.value(QLatin1String("category")).toString());
 		profileSummary.updateInterval = profileObject.value(QLatin1String("updateInterval")).toInt();
 		profileSummary.areWildcardsEnabled = profileObject.value(QLatin1String("areWildcardsEnabled")).toBool();
@@ -570,6 +571,13 @@ bool ContentFiltersManager::isFraud(const QUrl &url)
 
 ContentFiltersProfile::ContentFiltersProfile(QObject *parent) : QObject(parent)
 {
+}
+
+bool ContentFiltersProfile::isFraud(const QUrl &url)
+{
+	Q_UNUSED(url)
+
+	return false;
 }
 
 }

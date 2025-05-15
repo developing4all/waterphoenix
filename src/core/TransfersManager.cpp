@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -33,8 +33,8 @@
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTemporaryFile>
 #include <QtCore/QTimer>
+#include <QtCore/QTimeZone>
 #include <QtNetwork/QAbstractNetworkCache>
-#include <QtWidgets/QFileIconProvider>
 #include <QtWidgets/QMessageBox>
 
 namespace Otter
@@ -85,8 +85,8 @@ Transfer::Transfer(const QSettings &settings, QObject *parent) : QObject(parent 
 	m_isSelectingPath(false),
 	m_isArchived(true)
 {
-	m_timeStarted.setTimeSpec(Qt::UTC);
-	m_timeFinished.setTimeSpec(Qt::UTC);
+	m_timeStarted.setTimeZone(QTimeZone::utc());
+	m_timeFinished.setTimeZone(QTimeZone::utc());
 }
 
 Transfer::~Transfer()
@@ -678,9 +678,7 @@ QString Transfer::getTarget() const
 
 QIcon Transfer::getIcon() const
 {
-	const QString iconName(getMimeType().iconName());
-
-	return QIcon::fromTheme(iconName, QFileIconProvider().icon(iconName));
+	return ThemesManager::getFileTypeIcon(getMimeType());
 }
 
 QDateTime Transfer::getTimeStarted() const
@@ -1211,6 +1209,9 @@ Transfer* TransfersManager::startTransfer(const QUrl &source, const QString &tar
 {
 	QNetworkRequest request;
 	request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+#if QT_VERSION < 0x060000
+	request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+#endif
 	request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
 	request.setHeader(QNetworkRequest::UserAgentHeader, NetworkManagerFactory::getUserAgent());
 	request.setUrl(QUrl(source));

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -77,6 +77,8 @@ LocalListingNetworkReply::LocalListingNetworkReply(const QNetworkRequest &reques
 
 	QMimeDatabase mimeDatabase;
 	QVector<NavigationEntry> navigation;
+	navigation.reserve(request.url().path().count(QLatin1Char('/')) + 1);
+
 #ifdef Q_OS_WIN32
 	const bool isListingDevices(request.url().toLocalFile() == QLatin1String("/"));
 	const QFileInfoList rawEntries(isListingDevices ? QDir::drives() : directory.entryInfoList((QDir::AllEntries | QDir::Hidden), (QDir::Name | QDir::DirsFirst)));
@@ -127,9 +129,21 @@ LocalListingNetworkReply::LocalListingNetworkReply(const QNetworkRequest &reques
 		entry.url = QUrl::fromUserInput(rawEntry.filePath());
 		entry.timeModified = rawEntry.lastModified();
 		entry.mimeType = mimeDatabase.mimeTypeForFile(rawEntry.filePath());
-		entry.type = (rawEntry.isRoot() ? ListingEntry::DriveType : (rawEntry.isDir() ? ListingEntry::DirectoryType : ListingEntry::FileType));
 		entry.size = rawEntry.size();
 		entry.isSymlink = rawEntry.isSymLink();
+
+		if (rawEntry.isRoot())
+		{
+			entry.type = ListingEntry::DriveType;
+		}
+		else if (rawEntry.isDir())
+		{
+			entry.type = ListingEntry::DirectoryType;
+		}
+		else
+		{
+			entry.type = ListingEntry::FileType;
+		}
 
 #ifdef Q_OS_WIN32
 		if (isListingDevices)
@@ -166,13 +180,13 @@ qint64 LocalListingNetworkReply::readData(char *data, qint64 maxSize)
 {
 	if (m_offset < m_content.size())
 	{
-		const qint64 number(qMin(maxSize, (m_content.size() - m_offset)));
+		const qint64 size(qMin(maxSize, (m_content.size() - m_offset)));
 
-		memcpy(data, (m_content.constData() + m_offset), static_cast<size_t>(number));
+		memcpy(data, (m_content.constData() + m_offset), static_cast<size_t>(size));
 
-		m_offset += number;
+		m_offset += size;
 
-		return number;
+		return size;
 	}
 
 	return -1;
