@@ -77,7 +77,7 @@ else ()
 	set(QT_VERSION Qt6)
 	set(QT_MINIMUM_VERSION 6.2)
 	set(QT_NO_FIND_QMLSC ON)
-	find_package(Qt6 REQUIRED COMPONENTS Core5Compat)
+	find_package(Qt6 REQUIRED COMPONENTS Core5Compat NetworkPrivate)
 endif ()
 
 find_package(${QT_VERSION} ${QT_MINIMUM_VERSION} REQUIRED COMPONENTS Core Gui Multimedia Network PrintSupport Qml Svg Widgets Xml)
@@ -229,6 +229,7 @@ set(OTTER_SOURCES
 	src/ui/WebWidget.cpp
 	src/ui/WidgetFactory.cpp
 	src/ui/Window.cpp
+	src/ui/WindowControlsWidget.cpp
 	src/ui/WorkspaceWidget.cpp
 	src/ui/preferences/AcceptLanguageDialog.cpp
 	src/ui/preferences/CookiesExceptionsDialog.cpp
@@ -629,7 +630,7 @@ target_link_libraries(
 )
 
 if (NOT ENABLE_QT5)
-	target_link_libraries(waterphoenix-browser Qt6::Core5Compat)
+	target_link_libraries(waterphoenix-browser Qt6::Core5Compat Qt::NetworkPrivate)
 endif ()
 
 set(XDG_APPS_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/share/applications CACHE FILEPATH "Install path for .desktop files")
