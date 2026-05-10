@@ -39,8 +39,9 @@ public:
 	enum ActionFlag
 	{
 		NoFlags = 0,
-		HasCustomTextFlag = 1,
-		HasCustomIconFlag = 2
+		HasIconOverrideFlag = 1,
+		HasTextOverrideFlag = 2,
+		IsTextOverrideTranslateableFlag = 4
 	};
 
 	Q_DECLARE_FLAGS(ActionFlags, ActionFlag)
@@ -50,13 +51,14 @@ public:
 	explicit Action(int identifier, const QVariantMap &parameters, const ActionExecutor::Object &executor, QObject *parent);
 
 	void setExecutor(ActionExecutor::Object executor);
-	void setTextOverride(const QString &text, bool isTranslateable = true);
 	void setIconOverride(const QString &icon);
 	void setIconOverride(const QIcon &icon);
+	void setTextOverride(const QString &text, bool isTranslateable = true);
 	QString getTextOverride() const;
 	ActionsManager::ActionDefinition getDefinition() const;
 	QVariantMap getParameters() const;
 	int getIdentifier() const;
+	bool hasIconOverride() const;
 	bool hasTextOverride() const;
 	bool isTextOverrideTranslateable() const;
 	bool event(QEvent *event) override;
@@ -65,6 +67,7 @@ protected:
 	void initialize();
 	void updateIcon();
 	virtual void setState(const ActionsManager::ActionDefinition::State &state);
+	QMetaMethod getMethod(const char *method) const;
 
 protected slots:
 	void triggerAction(bool isChecked = false);
@@ -79,7 +82,6 @@ private:
 	QVariantMap m_parameters;
 	ActionFlags m_flags;
 	int m_identifier;
-	bool m_isTextOverrideTranslateable;
 };
 
 }

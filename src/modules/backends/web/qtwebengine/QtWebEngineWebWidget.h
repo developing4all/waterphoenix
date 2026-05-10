@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -31,17 +31,19 @@ namespace Otter
 
 class QtWebEnginePage;
 class QtWebEngineUrlRequestInterceptor;
+class QtWebEngineWebWidget;
 class SourceViewerWebWidget;
 
 class QtWebEngineInspectorWidget final : public QWebEngineView
 {
 public:
-	explicit QtWebEngineInspectorWidget(QWebEnginePage *inspectedPage, QWidget *parent);
+	explicit QtWebEngineInspectorWidget(QWebEnginePage *inspectedPage, QtWebEngineWebWidget *parent);
 
 protected:
 	void showEvent(QShowEvent *event) override;
 
 private:
+	QWebEnginePage *m_page;
 	QWebEnginePage *m_inspectedPage;
 };
 
@@ -109,6 +111,7 @@ protected:
 	void hideEvent(QHideEvent *event) override;
 	void focusInEvent(QFocusEvent *event) override;
 	void ensureInitialized();
+	void viewSource(const QUrl &url);
 	void notifyWatchedDataChanged(ChangeWatcher watcher);
 	void updateOptions(const QUrl &url);
 	void updateWatchedData(ChangeWatcher watcher) override;

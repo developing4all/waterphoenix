@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -39,14 +39,9 @@ LocalListingNetworkReply::LocalListingNetworkReply(const QNetworkRequest &reques
 
 	if (!directory.exists() || !directory.isReadable())
 	{
-		ErrorPageInformation::PageAction reloadAction;
-		reloadAction.name = QLatin1String("reloadPage");
-		reloadAction.title = QCoreApplication::translate("utils", "Try Again");
-		reloadAction.type = ErrorPageInformation::MainAction;
-
 		ErrorPageInformation information;
 		information.url = request.url();
-		information.actions.append(reloadAction);
+		information.actions.append({QLatin1String("reloadPage"), QCoreApplication::translate("utils", "Try Again"), ErrorPageInformation::MainAction});
 
 		if (directory.isReadable())
 		{
@@ -75,7 +70,7 @@ LocalListingNetworkReply::LocalListingNetworkReply(const QNetworkRequest &reques
 		return;
 	}
 
-	QMimeDatabase mimeDatabase;
+	const QMimeDatabase mimeDatabase;
 	QVector<NavigationEntry> navigation;
 	navigation.reserve(request.url().path().count(QLatin1Char('/')) + 1);
 
@@ -115,10 +110,8 @@ LocalListingNetworkReply::LocalListingNetworkReply(const QNetworkRequest &reques
 	navigation.prepend(rootEntry);
 #endif
 
-	for (int i = 0; i < rawEntries.count(); ++i)
+	for (const QFileInfo &rawEntry: rawEntries)
 	{
-		const QFileInfo rawEntry(rawEntries.at(i));
-
 		if (rawEntry.fileName() == QLatin1String(".") || rawEntry.fileName() == QLatin1String(".."))
 		{
 			continue;

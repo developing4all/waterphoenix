@@ -20,7 +20,6 @@
 
 #include "TrayIcon.h"
 #include "Action.h"
-#include "MainWindow.h"
 #include "Menu.h"
 #include "../core/Application.h"
 
@@ -74,14 +73,21 @@ TrayIcon::TrayIcon(Application *parent) : QObject(parent),
 	m_trayIcon->setContextMenu(menu);
 	m_trayIcon->setToolTip(tr("Otter Browser"));
 	m_trayIcon->show();
-	m_trayIcon->installEventFilter(this);
 
 	setParent(nullptr);
 
 	connect(Application::getInstance(), &Application::aboutToQuit, this, &TrayIcon::hide);
 	connect(this, &TrayIcon::destroyed, menu, &Menu::deleteLater);
 	connect(parent, &TrayIcon::destroyed, this, &TrayIcon::deleteLater);
-	connect(menu, &Menu::aboutToShow, this, &TrayIcon::updateMenu);
+	connect(menu, &Menu::aboutToShow, this, [&]()
+	{
+		const QList<QAction*> actions(m_trayIcon->contextMenu()->actions());
+
+		if (!actions.isEmpty())
+		{
+			actions.at(0)->setText(Application::isHidden() ? tr("Show Windows") : tr("Hide Windows"));
+		}
+	});
 	connect(m_trayIcon, &QSystemTrayIcon::activated, this, [&](QSystemTrayIcon::ActivationReason reason)
 	{
 		if (reason == QSystemTrayIcon::Trigger)
@@ -131,16 +137,6 @@ void TrayIcon::handleMessageClicked()
 	m_notification->markAsClicked();
 }
 
-void TrayIcon::updateMenu()
-{
-	const QList<QAction*> actions(m_trayIcon->contextMenu()->actions());
-
-	if (!actions.isEmpty())
-	{
-		actions.at(0)->setText(Application::isHidden() ? tr("Show Windows") : tr("Hide Windows"));
-	}
-}
-
 void TrayIcon::showMessage(const Notification::Message &message)
 {
 	m_trayIcon->showMessage(message.getTitle(), message.message, message.getIcon());
@@ -176,14 +172,14 @@ void TrayIcon::showNotification(Notification *notification)
 	showMessage(notification->getMessage());
 }
 
-bool TrayIcon::eventFilter(QObject *object, QEvent *event)
+bool TrayIcon::event(QEvent *event)
 {
-	if (object == m_trayIcon && event->type() == QEvent::LanguageChange)
+	if (event->type() == QEvent::LanguageChange)
 	{
 		m_trayIcon->setToolTip(tr("Otter Browser"));
 	}
 
-	return QObject::eventFilter(object, event);
+	return QObject::event(event);
 }
 
 }

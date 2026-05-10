@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@ ProgressBarDelegate::ProgressBarDelegate(QObject *parent) : ItemDelegate(parent)
 
 void ProgressBarDelegate::setEditorData(QWidget *editor, const QModelIndex &index) const
 {
-	ProgressBarWidget *progressBar(qobject_cast<ProgressBarWidget*>(editor->findChild<ProgressBarWidget*>()));
+	ProgressBarWidget *progressBar(editor->findChild<ProgressBarWidget*>());
 
 	if (!progressBar)
 	{
@@ -80,7 +80,7 @@ QWidget* ProgressBarDelegate::createEditor(QWidget *parent, const QStyleOptionVi
 	return widget;
 }
 
-TransfersContentsWidget::TransfersContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
+TransfersContentsWidget::TransfersContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("transfers"), parameters, window, parent),
 	m_model(new QStandardItemModel(this)),
 	m_isLoading(false),
 	m_ui(new Ui::TransfersContentsWidget)
@@ -105,9 +105,9 @@ TransfersContentsWidget::TransfersContentsWidget(const QVariantMap &parameters, 
 
 	const QVector<Transfer*> transfers(TransfersManager::getTransfers());
 
-	for (int i = 0; i < transfers.count(); ++i)
+	for (Transfer *transfer: transfers)
 	{
-		handleTransferAdded(transfers.at(i));
+		handleTransferAdded(transfer);
 	}
 
 	if (isSidebarPanel())
@@ -398,9 +398,9 @@ void TransfersContentsWidget::showContextMenu(const QPoint &position)
 	const QVector<Transfer*> transfers(TransfersManager::getTransfers());
 	int finishedTransfers(0);
 
-	for (int i = 0; i < transfers.count(); ++i)
+	for (Transfer *transfer: transfers)
 	{
-		if (transfers.at(i)->getState() == Transfer::FinishedState)
+		if (transfer->getState() == Transfer::FinishedState)
 		{
 			++finishedTransfers;
 		}
@@ -511,26 +511,6 @@ Transfer* TransfersContentsWidget::getTransfer(const QModelIndex &index) const
 	}
 
 	return nullptr;
-}
-
-QString TransfersContentsWidget::getTitle() const
-{
-	return tr("Downloads");
-}
-
-QLatin1String TransfersContentsWidget::getType() const
-{
-	return QLatin1String("transfers");
-}
-
-QUrl TransfersContentsWidget::getUrl() const
-{
-	return QUrl(QLatin1String("about:transfers"));
-}
-
-QIcon TransfersContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("transfers"), false);
 }
 
 ActionsManager::ActionDefinition::State TransfersContentsWidget::getActionState(int identifier, const QVariantMap &parameters) const

@@ -20,7 +20,6 @@
 **************************************************************************/
 
 #include "AdvancedPreferencesPage.h"
-#include "../../../core/ActionsManager.h"
 #include "../../../core/Application.h"
 #include "../../../core/GesturesManager.h"
 #include "../../../core/HandlersManager.h"
@@ -1491,6 +1490,7 @@ void AdvancedPreferencesPage::save()
 	}
 
 	QStringList updateChannels;
+	updateChannels.reserve(m_ui->updateChannelsItemView->getRowCount());
 
 	for (int i = 0; i < m_ui->updateChannelsItemView->getRowCount(); ++i)
 	{

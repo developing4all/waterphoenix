@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -56,9 +56,9 @@ namespace Utils
 
 void removeFiles(const QStringList &paths)
 {
-	for (int i = 0; i < paths.count(); ++i)
+	for (const QString &path: paths)
 	{
-		QFile::remove(paths.at(i));
+		QFile::remove(path);
 	}
 }
 
@@ -300,9 +300,8 @@ QString createErrorPage(const ErrorPageInformation &information)
 			actions.append(action);
 		}
 
-		for (int i = 0; i < actions.count(); ++i)
+		for (const ErrorPageInformation::PageAction &action: actions)
 		{
-			const ErrorPageInformation::PageAction action(actions.at(i));
 			QString actionHtml(actionTemplate);
 			actionHtml.replace(QLatin1String("{action}"), action.name);
 			actionHtml.replace(QLatin1String("{text}"), action.title);
@@ -362,9 +361,9 @@ QString createErrorPage(const ErrorPageInformation &information)
 		const QString hintTemplate(hintExpression.match(mainTemplate).captured(1));
 		QString hintsHtml;
 
-		for (int i = 0; i < hints.count(); ++i)
+		for (const QString &hint: hints)
 		{
-			hintsHtml.append(QString(hintTemplate).replace(QLatin1String("{hint}"), hints.at(i)));
+			hintsHtml.append(QString(hintTemplate).replace(QLatin1String("{hint}"), hint));
 		}
 
 		mainTemplate.replace(hintExpression, hintsHtml);
@@ -481,7 +480,7 @@ QString formatDateTime(const QDateTime &dateTime, QString format, bool allowFanc
 		format = SettingsManager::getOption(SettingsManager::Interface_DateTimeFormatOption).toString();
 	}
 
-	QLocale locale;
+	const QLocale locale;
 
 	return (format.isEmpty() ? locale.toString(localDateTime, QLocale::ShortFormat) : locale.toString(localDateTime, format));
 }
@@ -490,7 +489,7 @@ QString formatUnit(qint64 value, bool isSpeed, int precision, bool appendRaw)
 {
 	if (value < 0)
 	{
-		return QString(QLatin1Char('?'));
+		return {QLatin1Char('?')};
 	}
 
 	if (value > 1024)
@@ -597,16 +596,16 @@ QUrl normalizeUrl(QUrl url)
 
 QColor createColor(const QUrl &url)
 {
-	QByteArray hash(QCryptographicHash::hash(url.host().toUtf8(), QCryptographicHash::Md5));
+	const QByteArray hash(QCryptographicHash::hash(url.host().toUtf8(), QCryptographicHash::Md5));
 
-	return QColor(hash.at(0), hash.at(1), hash.at(2));
+	return {hash.at(0), hash.at(1), hash.at(2)};
 }
 
 QLocale createLocale(const QString &name)
 {
 	if (name == QLatin1String("pt"))
 	{
-		return QLocale(QLocale::Portuguese, QLocale::Portugal);
+		return {QLocale::Portuguese, QLocale::Portugal};
 	}
 
 	return QLocale(name);
@@ -637,9 +636,9 @@ QStringList getCharacterEncodings()
 	QStringList encodings;
 	encodings.reserve(textCodecs.count());
 
-	for (int i = 0; i < textCodecs.count(); ++i)
+	for (int textCodec: textCodecs)
 	{
-		const QTextCodec *codec(QTextCodec::codecForMib(textCodecs.at(i)));
+		const QTextCodec *codec(QTextCodec::codecForMib(textCodec));
 
 		if (codec)
 		{
@@ -678,6 +677,30 @@ QStringList getOpenPaths(const QStringList &fileNames, QStringList filters, bool
 	}
 
 	return paths;
+}
+
+QStringList createSubdomainList(const QString &domain)
+{
+	QStringList parts(domain.split(QLatin1Char('.')));
+
+	if (parts.count() < 2)
+	{
+		return {domain};
+	}
+
+	const int amount(parts.count() - 1);
+	QStringList subdomain(parts.takeLast());
+	QStringList subdomains;
+	subdomains.reserve(amount);
+
+	for (int i = 0; i < amount; ++i)
+	{
+		subdomain.prepend(parts.takeLast());
+
+		subdomains.append(subdomain.join(QLatin1Char('.')));
+	}
+
+	return subdomains;
 }
 
 QVector<QUrl> extractUrls(const QMimeData *mimeData)

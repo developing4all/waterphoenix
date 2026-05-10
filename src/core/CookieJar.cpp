@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -49,10 +49,8 @@ QVector<QNetworkCookie> CookieJar::getCookies(const QString &domain) const
 	const QList<QNetworkCookie> cookies(allCookies());
 	QVector<QNetworkCookie> domainCookies;
 
-	for (int i = 0; i < cookies.count(); ++i)
+	for (const QNetworkCookie &cookie: cookies)
 	{
-		const QNetworkCookie cookie(cookies.at(i));
-
 		if (cookie.domain() == domain || (cookie.domain().startsWith(QLatin1Char('.')) && domain.endsWith(cookie.domain())))
 		{
 			domainCookies.append(cookie);
@@ -71,9 +69,9 @@ bool CookieJar::hasCookie(const QNetworkCookie &cookie) const
 
 	const QList<QNetworkCookie> cookies(getCookiesForUrl(url));
 
-	for (int i = 0; i < cookies.count(); ++i)
+	for (const QNetworkCookie &otherCookie: cookies)
 	{
-		if (cookie.hasSameIdentifier(cookies.at(i)))
+		if (cookie.hasSameIdentifier(otherCookie))
 		{
 			return true;
 		}
@@ -138,9 +136,9 @@ void DiskCookieJar::loadCookies(const QString &path)
 
 		const QList<QNetworkCookie> cookies(QNetworkCookie::parseCookies(value));
 
-		for (int j = 0; j < cookies.count(); ++j)
+		for (const QNetworkCookie &cookie: cookies)
 		{
-			allCookies.append(cookies.at(j));
+			allCookies.append(cookie);
 		}
 
 		if (stream.atEnd())
@@ -160,9 +158,9 @@ void DiskCookieJar::clearCookies(int period)
 
 	setAllCookies({});
 
-	for (int i = 0; i < cookies.count(); ++i)
+	for (const QNetworkCookie &cookie: cookies)
 	{
-		emit cookieRemoved(cookies.at(i));
+		emit cookieRemoved(cookie);
 	}
 
 	scheduleSave();
@@ -245,10 +243,8 @@ void DiskCookieJar::save()
 	QDataStream stream(&file);
 	stream << static_cast<quint32>(cookies.count());
 
-	for (int i = 0; i < cookies.count(); ++i)
+	for (const QNetworkCookie &cookie: cookies)
 	{
-		const QNetworkCookie cookie(cookies.at(i));
-
 		if (!cookie.isSessionCookie())
 		{
 			stream << cookie.toRawForm();

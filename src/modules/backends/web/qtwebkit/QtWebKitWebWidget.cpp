@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -103,7 +103,7 @@ void QtWebKitInspectorWidget::childEvent(QChildEvent *event)
 	}
 }
 
-QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *backend, QtWebKitNetworkManager *networkManager, ContentsWidget *parent) : WebWidget(parameters, backend, parent),
+QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *backend, QtWebKitNetworkManager *networkManager, ContentsWidget *parent) : WebWidget(backend, parent),
 	m_webView(new QWebView(this)),
 	m_page(nullptr),
 	m_inspectorWidget(nullptr),
@@ -165,7 +165,7 @@ QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *
 	connect(m_page, &QtWebKitPage::downloadRequested, this, &QtWebKitWebWidget::handleDownloadRequested);
 	connect(m_page, &QtWebKitPage::unsupportedContent, this, &QtWebKitWebWidget::handleUnsupportedContent);
 	connect(m_page, &QtWebKitPage::linkHovered, this, &QtWebKitWebWidget::setStatusMessageOverride);
-	connect(m_page, &QtWebKitPage::microFocusChanged, [&]()
+	connect(m_page, &QtWebKitPage::microFocusChanged, this, [&]()
 	{
 		emit categorizedActionsStateChanged({ActionsManager::ActionDefinition::EditingCategory});
 	});
@@ -191,7 +191,7 @@ QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *
 	{
 		emit contentStateChanged(getContentState());
 	});
-	connect(new QShortcut(QKeySequence(QKeySequence::SelectAll), this, nullptr, nullptr, Qt::WidgetWithChildrenShortcut), &QShortcut::activated, [&]()
+	connect(new QShortcut(QKeySequence(QKeySequence::SelectAll), this, nullptr, nullptr, Qt::WidgetWithChildrenShortcut), &QShortcut::activated, this, [&]()
 	{
 		triggerAction(ActionsManager::SelectAllAction);
 	});
@@ -1525,10 +1525,7 @@ void QtWebKitWebWidget::handleHistory()
 	{
 		m_page->history()->currentItem().setUserData(QVariantList({(Utils::isUrlEmpty(url) ? 0 : HistoryManager::addEntry(url, getTitle(), m_page->mainFrame()->icon(), m_isTypedIn)), getZoom(), QPoint(0, 0), QDateTime::currentDateTimeUtc()}));
 
-		if (m_isTypedIn)
-		{
-			m_isTypedIn = false;
-		}
+		m_isTypedIn = false;
 
 		SessionsManager::markSessionAsModified();
 		BookmarksManager::updateVisits(url.toString());
@@ -1673,7 +1670,7 @@ void QtWebKitWebWidget::notifyPermissionRequested(QWebFrame *frame, QWebPage::Fe
 	}
 }
 
-void QtWebKitWebWidget::notifySavePasswordRequested(const PasswordsManager::PasswordInformation &password, bool isUpdate)
+void QtWebKitWebWidget::notifySavePasswordRequested(const PasswordsManager::Password &password, bool isUpdate)
 {
 	emit requestedSavePassword(password, isUpdate);
 }
@@ -1757,7 +1754,7 @@ void QtWebKitWebWidget::clearOptions()
 	updateOptions(getUrl());
 }
 
-void QtWebKitWebWidget::fillPassword(const PasswordsManager::PasswordInformation &password)
+void QtWebKitWebWidget::fillPassword(const PasswordsManager::Password &password)
 {
 	QFile file(QLatin1String(":/modules/backends/web/qtwebkit/resources/formFiller.js"));
 
@@ -2133,7 +2130,7 @@ QPixmap QtWebKitWebWidget::createThumbnail(const QSize &size)
 		return m_thumbnail;
 	}
 
-	const QSize thumbnailSize(size.isValid() ? size : QSize(260, 170));
+	const QSize thumbnailSize(size.isValid() ? size : getDefaultThumbnailSize());
 	const QSize oldViewportSize(m_page->viewportSize());
 	const QPoint position(m_page->mainFrame()->scrollPosition());
 	const qreal zoom(m_page->mainFrame()->zoomFactor());
@@ -2415,7 +2412,7 @@ WebWidget::HitTestResult QtWebKitWebWidget::getHitTestResult(const QPoint &posit
 
 	if (nativeResult.element().evaluateJavaScript(QLatin1String("this.spellcheck")).toBool())
 	{
-		result.flags |= HitTestResult::IsSpellCheckEnabled;
+		result.flags |= HitTestResult::IsSpellCheckEnabledTest;
 	}
 
 	if (result.mediaUrl.isValid())

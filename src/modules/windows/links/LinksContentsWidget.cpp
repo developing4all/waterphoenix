@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@
 namespace Otter
 {
 
-LinksContentsWidget::LinksContentsWidget(const QVariantMap &parameters, QWidget *parent) : ActiveWindowObserverContentsWidget(parameters, nullptr, parent),
+LinksContentsWidget::LinksContentsWidget(const QVariantMap &parameters, QWidget *parent) : ActiveWindowObserverContentsWidget(QLatin1String("links"), parameters, nullptr, parent),
 	m_isLocked(false),
 	m_ui(new Ui::LinksContentsWidget)
 {
@@ -84,7 +84,7 @@ LinksContentsWidget::LinksContentsWidget(const QVariantMap &parameters, QWidget 
 
 	connect(m_ui->filterLineEditWidget, &LineEditWidget::textChanged, m_ui->linksViewWidget, &ItemViewWidget::setFilterString);
 	connect(m_ui->linksViewWidget, &ItemViewWidget::customContextMenuRequested, this, &LinksContentsWidget::showContextMenu);
-	connect(m_ui->linksViewWidget, &ItemViewWidget::clicked, [&](const QModelIndex &index)
+	connect(m_ui->linksViewWidget, &ItemViewWidget::clicked, this, [&](const QModelIndex &index)
 	{
 		const QVariant data(index.data(Qt::StatusTipRole));
 
@@ -124,9 +124,9 @@ void LinksContentsWidget::triggerAction(int identifier, const QVariantMap &param
 				QStringList links;
 				links.reserve(indexes.count());
 
-				for (int i = 0; i < indexes.count(); ++i)
+				for (const QModelIndex &index: indexes)
 				{
-					links.append(indexes.at(i).data(Qt::StatusTipRole).toString());
+					links.append(index.data(Qt::StatusTipRole).toString());
 				}
 
 				QGuiApplication::clipboard()->setText(links.join(QLatin1Char('\n')));
@@ -137,10 +137,8 @@ void LinksContentsWidget::triggerAction(int identifier, const QVariantMap &param
 			{
 				const QList<QModelIndex> indexes(m_ui->linksViewWidget->selectionModel()->selectedIndexes());
 
-				for (int i = 0; i < indexes.count(); ++i)
+				for (const QModelIndex &index: indexes)
 				{
-					const QModelIndex index(indexes.at(i));
-
 					BookmarksManager::addBookmark(BookmarksModel::UrlBookmark, {{BookmarksModel::UrlRole, index.data(Qt::StatusTipRole)}, {BookmarksModel::TitleRole, index.data(Qt::DisplayRole)}}, nullptr);
 				}
 			}
@@ -182,9 +180,9 @@ void LinksContentsWidget::openLink()
 		const QList<QModelIndex> indexes(m_ui->linksViewWidget->selectionModel()->selectedIndexes());
 		const QVariant hints(static_cast<SessionsManager::OpenHints>(action->data().toInt()));
 
-		for (int i = 0; i < indexes.count(); ++i)
+		for (const QModelIndex &index: indexes)
 		{
-			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), indexes.at(i).data(Qt::StatusTipRole)}, {QLatin1String("hints"), hints}}, parentWidget());
+			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), index.data(Qt::StatusTipRole)}, {QLatin1String("hints"), hints}}, parentWidget());
 		}
 	}
 }
@@ -221,10 +219,8 @@ void LinksContentsWidget::updateLinks()
 	{
 		m_ui->linksViewWidget->getSourceModel()->appendRow(new ItemModel::Item(ItemModel::SeparatorType));
 
-		for (int i = 0; i < links.count(); ++i)
+		for (const WebWidget::LinkUrl &link: links)
 		{
-			const WebWidget::LinkUrl link(links.at(i));
-
 			addLink(link.title, link.url);
 		}
 	}
@@ -258,32 +254,12 @@ void LinksContentsWidget::showContextMenu(const QPoint &position)
 	lockPanelAction->setCheckable(true);
 	lockPanelAction->setChecked(m_isLocked);
 
-	connect(lockPanelAction, &QAction::toggled, [&](bool isChecked)
+	connect(lockPanelAction, &QAction::toggled, this, [&](bool isChecked)
 	{
 		m_isLocked = isChecked;
 	});
 
 	menu.exec(m_ui->linksViewWidget->mapToGlobal(position));
-}
-
-QString LinksContentsWidget::getTitle() const
-{
-	return tr("Links");
-}
-
-QLatin1String LinksContentsWidget::getType() const
-{
-	return QLatin1String("links");
-}
-
-QUrl LinksContentsWidget::getUrl() const
-{
-	return {};
-}
-
-QIcon LinksContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("links"), false);
 }
 
 ActionsManager::ActionDefinition::State LinksContentsWidget::getActionState(int identifier, const QVariantMap &parameters) const

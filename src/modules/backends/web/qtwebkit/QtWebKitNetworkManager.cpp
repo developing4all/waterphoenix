@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -78,7 +78,7 @@ QtWebKitNetworkManager::QtWebKitNetworkManager(bool isPrivate, QtWebKitCookieJar
 		m_cookieJar = NetworkManagerFactory::getCookieJar();
 		m_cookieJar->setParent(QCoreApplication::instance());
 
-		QNetworkDiskCache *cache(NetworkManagerFactory::getCache());
+		NetworkCache *cache(NetworkManagerFactory::getCache());
 
 		setCache(cache);
 
@@ -173,7 +173,24 @@ void QtWebKitNetworkManager::registerTransfer(QNetworkReply *reply)
 
 		setParent(nullptr);
 
-		connect(reply, &QNetworkReply::finished, this, &QtWebKitNetworkManager::handleTransferFinished);
+		connect(reply, &QNetworkReply::finished, reply, [=]()
+		{
+			m_transfers.removeAll(reply);
+
+			reply->deleteLater();
+
+			if (m_transfers.isEmpty())
+			{
+				if (m_widget)
+				{
+					setParent(m_widget);
+				}
+				else
+				{
+					deleteLater();
+				}
+			}
+		});
 	}
 }
 
@@ -282,32 +299,6 @@ void QtWebKitNetworkManager::handleRequestFinished(QNetworkReply *reply)
 	}
 
 	disconnect(reply, &QNetworkReply::downloadProgress, this, &QtWebKitNetworkManager::handleDownloadProgress);
-}
-
-void QtWebKitNetworkManager::handleTransferFinished()
-{
-	QNetworkReply *reply(qobject_cast<QNetworkReply*>(sender()));
-
-	if (!reply)
-	{
-		return;
-	}
-
-	m_transfers.removeAll(reply);
-
-	reply->deleteLater();
-
-	if (m_transfers.isEmpty())
-	{
-		if (m_widget)
-		{
-			setParent(m_widget);
-		}
-		else
-		{
-			deleteLater();
-		}
-	}
 }
 
 void QtWebKitNetworkManager::handleAuthenticationRequired(QNetworkReply *reply, QAuthenticator *authenticator)
@@ -635,7 +626,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 			else if (action == QLatin1String("save-password"))
 			{
 				const QJsonArray fieldsArray(payloadObject.value(QLatin1String("fields")).toArray());
-				PasswordsManager::PasswordInformation password;
+				PasswordsManager::Password password;
 				password.url = QUrl(payloadObject.value(QLatin1String("url")).toString());
 				password.timeAdded = QDateTime::currentDateTimeUtc();
 				password.fields.reserve(fieldsArray.count());
@@ -644,7 +635,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 				for (int i = 0; i < fieldsArray.count(); ++i)
 				{
 					const QJsonObject fieldObject(fieldsArray.at(i).toObject());
-					PasswordsManager::PasswordInformation::Field field;
+					PasswordsManager::Password::Field field;
 					field.name = fieldObject.value(QLatin1String("name")).toString();
 					field.value = fieldObject.value(QLatin1String("value")).toString();
 					field.type = ((fieldObject.value(QLatin1String("type")).toString() == QLatin1String("password")) ? PasswordsManager::PasswordField : PasswordsManager::TextField);
@@ -730,7 +721,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 
 	mutableRequest.setRawHeader(QByteArrayLiteral("Accept-Language"), (m_acceptLanguage.isEmpty() ? NetworkManagerFactory::getAcceptLanguage().toLatin1() : m_acceptLanguage.toLatin1()));
 	mutableRequest.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
-	mutableRequest.setAttribute(QNetworkRequest::HTTP2AllowedAttribute, false);
+	mutableRequest.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 
 	setPageInformation(WebWidget::LoadingMessageInformation, tr("Sending request to %1…").arg(request.url().host()));
 

@@ -2,7 +2,7 @@
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2010 - 2014 David Rosca <nowrep@gmail.com>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -127,6 +127,8 @@ protected:
 			bool needsDomainCheck = false;
 		};
 
+		~Node();
+
 		QChar value;
 		QVarLengthArray<Node*, 1> children;
 		QVarLengthArray<Rule*, 1> rules;
@@ -150,7 +152,6 @@ protected:
 
 	void loadHeader();
 	void parseRuleLine(const QString &rule);
-	void deleteNode(Node *node) const;
 	QMultiHash<QString, QString> parseStyleSheetRule(const QStringList &line);
 	ContentFiltersManager::CheckResult checkUrlSubstring(const Node *node, const QString &substring, QString currentRule, const Request &request) const;
 	ContentFiltersManager::CheckResult checkRuleMatch(const Node::Rule *rule, const QString &currentRule, const Request &request) const;

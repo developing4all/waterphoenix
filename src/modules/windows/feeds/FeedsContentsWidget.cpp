@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -73,7 +73,7 @@ void FeedDelegate::initStyleOption(QStyleOptionViewItem *option, const QModelInd
 
 Animation* FeedsContentsWidget::m_updateAnimation = nullptr;
 
-FeedsContentsWidget::FeedsContentsWidget(const QVariantMap &parameters, QWidget *parent) : ContentsWidget(parameters, nullptr, parent),
+FeedsContentsWidget::FeedsContentsWidget(const QVariantMap &parameters, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("feeds"), parameters, nullptr, parent),
 	m_feed(nullptr),
 	m_feedModel(nullptr),
 	m_ui(new Ui::FeedsContentsWidget)
@@ -116,13 +116,13 @@ FeedsContentsWidget::FeedsContentsWidget(const QVariantMap &parameters, QWidget 
 	connect(m_ui->feedsViewWidget, &ItemViewWidget::needsActionsUpdate, this, &FeedsContentsWidget::updateActions);
 	connect(m_ui->okButton, &QToolButton::clicked, this, &FeedsContentsWidget::subscribeFeed);
 	connect(m_ui->cancelButton, &QToolButton::clicked, m_ui->subscribeFeedWidget, &QWidget::hide);
-	connect(m_ui->emailButton, &QToolButton::clicked, [&]()
+	connect(m_ui->emailButton, &QToolButton::clicked, this, [&]()
 	{
 		const QModelIndex index(m_ui->entriesViewWidget->currentIndex());
 
 		HandlersManager::handleUrl(QLatin1String("mailto:") + index.sibling(index.row(), 0).data(EmailRole).toString());
 	});
-	connect(m_ui->urlButton, &QToolButton::clicked, [&]()
+	connect(m_ui->urlButton, &QToolButton::clicked, this, [&]()
 	{
 		const QModelIndex index(m_ui->entriesViewWidget->currentIndex());
 
@@ -493,10 +493,8 @@ void FeedsContentsWidget::updateEntry()
 	const QStringList entryCategories(index.data(CategoriesRole).toStringList());
 	const QMap<QString, QString> feedCategories(m_feed ? m_feed->getCategories() : QMap<QString, QString>());
 
-	for (int i = 0; i < entryCategories.count(); ++i)
+	for (const QString &entryCategory: entryCategories)
 	{
-		const QString entryCategory(entryCategories.at(i));
-
 		if (entryCategory.isEmpty())
 		{
 			continue;
@@ -663,9 +661,9 @@ void FeedsContentsWidget::updateFeedModel()
 		{
 			bool hasFound(false);
 
-			for (int j = 0; j < m_categories.count(); ++j)
+			for (const QString &category: std::as_const(m_categories))
 			{
-				if (entry.categories.contains(m_categories.at(j)))
+				if (entry.categories.contains(category))
 				{
 					hasFound = true;
 
@@ -838,11 +836,6 @@ QString FeedsContentsWidget::getTitle() const
 	}
 
 	return tr("Feeds");
-}
-
-QLatin1String FeedsContentsWidget::getType() const
-{
-	return QLatin1String("feeds");
 }
 
 QUrl FeedsContentsWidget::getUrl() const

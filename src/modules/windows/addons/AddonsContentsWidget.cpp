@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,7 +20,6 @@
 #include "AddonsContentsWidget.h"
 #include "DictionariesPage.h"
 #include "UserScriptsPage.h"
-#include "../../../core/ThemesManager.h"
 
 #include "ui_AddonsContentsWidget.h"
 
@@ -29,7 +28,7 @@
 namespace Otter
 {
 
-AddonsContentsWidget::AddonsContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
+AddonsContentsWidget::AddonsContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("addons"), parameters, window, parent),
 	m_currentPage(nullptr),
 	m_tabIndexEnumerator(metaObject()->indexOfEnumerator(QLatin1String("TabIndex").data())),
 	m_ui(new Ui::AddonsContentsWidget)
@@ -104,7 +103,7 @@ void AddonsContentsWidget::addPage(AddonsPage *page)
 {
 	m_ui->categoriesTabWidget->addPage(page);
 
-	connect(page, &AddonsPage::needsActionsUpdate, [&]()
+	connect(page, &AddonsPage::needsActionsUpdate, this, [&]()
 	{
 		emit arbitraryActionsStateChanged({ActionsManager::DeleteAction});
 	});
@@ -128,15 +127,10 @@ QString AddonsContentsWidget::getTitle() const
 
 	if (page)
 	{
-		return QStringLiteral("%1 / %2").arg(tr("Addons")).arg(page->getTitle());
+		return QStringLiteral("%1 / %2").arg(tr("Addons"), page->getTitle());
 	}
 
 	return tr("Addons");
-}
-
-QLatin1String AddonsContentsWidget::getType() const
-{
-	return QLatin1String("addons");
 }
 
 QUrl AddonsContentsWidget::getUrl() const
@@ -149,11 +143,6 @@ QUrl AddonsContentsWidget::getUrl() const
 	}
 
 	return url;
-}
-
-QIcon AddonsContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("preferences-plugin"), false);
 }
 
 ActionsManager::ActionDefinition::State AddonsContentsWidget::getActionState(int identifier, const QVariantMap &parameters) const

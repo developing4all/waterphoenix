@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -640,9 +640,9 @@ void StartPageWidget::dropEvent(QDropEvent *event)
 	}
 	else
 	{
-		for (int i = 0; i < urls.count(); ++i)
+		for (const QUrl &url: urls)
 		{
-			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), urls.at(i)}}, parentWidget());
+			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}}, parentWidget());
 		}
 	}
 }
@@ -946,7 +946,7 @@ void StartPageWidget::handleOptionChanged(int identifier, const QVariant &value)
 				{
 					layout = qobject_cast<QGridLayout*>(m_contentsWidget->layout());
 
-					for (int i = (layout->count() - 1); i >=0; --i)
+					for (int i = (layout->count() - 1); i >= 0; --i)
 					{
 						QLayoutItem *item(layout->takeAt(i));
 
@@ -1186,17 +1186,15 @@ bool StartPageWidget::eventFilter(QObject *object, QEvent *event)
 					{
 						const QUrl url(m_currentIndex.data(BookmarksModel::UrlRole).toUrl());
 
-						if (keyEvent->modifiers() != Qt::NoModifier)
-						{
-							m_urlOpenTime = QTime::currentTime();
+						m_urlOpenTime = QTime::currentTime();
 
-							Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(SessionsManager::calculateOpenHints((m_window->isPrivate() ? SessionsManager::PrivateOpen : SessionsManager::DefaultOpen), Qt::LeftButton, keyEvent->modifiers()))}}, parentWidget());
+						if (keyEvent->modifiers() == Qt::NoModifier)
+						{
+							m_window->setUrl(url);
 						}
 						else
 						{
-							m_urlOpenTime = QTime::currentTime();
-
-							m_window->setUrl(url);
+							Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(SessionsManager::calculateOpenHints((m_window->isPrivate() ? SessionsManager::PrivateOpen : SessionsManager::DefaultOpen), Qt::LeftButton, keyEvent->modifiers()))}}, parentWidget());
 						}
 					}
 
@@ -1225,10 +1223,7 @@ bool StartPageWidget::eventFilter(QObject *object, QEvent *event)
 	{
 		const QMouseEvent *mouseEvent(static_cast<QMouseEvent*>(event));
 
-		if (m_isIgnoringEnter)
-		{
-			m_isIgnoringEnter = false;
-		}
+		m_isIgnoringEnter = false;
 
 		if (m_listView->indexAt(mouseEvent->pos()) == m_currentIndex)
 		{

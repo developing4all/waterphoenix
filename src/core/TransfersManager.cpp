@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -874,7 +874,7 @@ bool Transfer::setTarget(const QString &target, bool canOverwriteExisting)
 
 	if (!canOverwriteExisting && !m_options.testFlag(CanOverwriteOption) && QFile::exists(target))
 	{
-		const int result(QMessageBox::question(Application::getActiveWindow(), tr("Question"), tr("File with the same name already exists.\nDo you want to overwrite it?\n\n%1").arg(target), QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel));
+		const int result(QMessageBox::question(Application::getActiveWindow(), tr("Question"), tr("File with the same name already exists.\nDo you want to overwrite it?\n\n%1").arg(target), (QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel), QMessageBox::No));
 
 		if (result == QMessageBox::No)
 		{
@@ -1038,10 +1038,65 @@ void TransfersManager::addTransfer(Transfer *transfer)
 
 	transfer->setUpdateInterval(500);
 
-	connect(transfer, &Transfer::started, m_instance, &TransfersManager::handleTransferStarted);
-	connect(transfer, &Transfer::finished, m_instance, &TransfersManager::handleTransferFinished);
-	connect(transfer, &Transfer::changed, m_instance, &TransfersManager::handleTransferChanged);
-	connect(transfer, &Transfer::stopped, m_instance, &TransfersManager::handleTransferStopped);
+	connect(transfer, &Transfer::started, m_instance, [=]()
+	{
+		if (transfer->getState() != Transfer::CancelledState)
+		{
+			if (transfer->getState() == Transfer::RunningState)
+			{
+				m_hasRunningTransfers = true;
+			}
+
+			emit m_instance->transferStarted(transfer);
+			emit m_instance->transfersChanged();
+
+			m_instance->scheduleSave();
+		}
+	});
+	connect(transfer, &Transfer::finished, m_instance, [=]()
+	{
+		m_instance->updateRunningTransfersState();
+
+		if (transfer->getState() == Transfer::FinishedState)
+		{
+			Notification::Message message;
+			message.message = QFileInfo(transfer->getTarget()).fileName();
+			message.icon = transfer->getIcon();
+			message.event = NotificationsManager::TransferCompletedEvent;
+
+			if (message.icon.isNull())
+			{
+				message.icon = ThemesManager::createIcon(QLatin1String("download"));
+			}
+
+			connect(NotificationsManager::createNotification(message, m_instance), &Notification::clicked, transfer, &Transfer::openTarget);
+		}
+
+		emit m_instance->transferFinished(transfer);
+		emit m_instance->transfersChanged();
+
+		if (!m_privateTransfers.contains(transfer))
+		{
+			m_instance->scheduleSave();
+		}
+	});
+	connect(transfer, &Transfer::changed, m_instance, [=]()
+	{
+		m_instance->scheduleSave();
+		m_instance->updateRunningTransfersState();
+
+		emit m_instance->transferChanged(transfer);
+		emit m_instance->transfersChanged();
+	});
+	connect(transfer, &Transfer::stopped, m_instance, [=]()
+	{
+		m_instance->updateRunningTransfersState();
+
+		emit m_instance->transferStopped(transfer);
+		emit m_instance->transfersChanged();
+
+		m_instance->scheduleSave();
+	});
 
 	if (options.testFlag(Transfer::CanNotifyOption) && transfer->getState() != Transfer::CancelledState)
 	{
@@ -1115,88 +1170,6 @@ void TransfersManager::clearTransfers(int period)
 		{
 			TransfersManager::removeTransfer(transfer);
 		}
-	}
-}
-
-void TransfersManager::handleTransferStarted()
-{
-	Transfer *transfer(qobject_cast<Transfer*>(sender()));
-
-	if (transfer && transfer->getState() != Transfer::CancelledState)
-	{
-		if (transfer->getState() == Transfer::RunningState)
-		{
-			m_hasRunningTransfers = true;
-		}
-
-		emit transferStarted(transfer);
-		emit transfersChanged();
-
-		scheduleSave();
-	}
-}
-
-void TransfersManager::handleTransferFinished()
-{
-	Transfer *transfer(qobject_cast<Transfer*>(sender()));
-
-	updateRunningTransfersState();
-
-	if (!transfer)
-	{
-		return;
-	}
-
-	if (transfer->getState() == Transfer::FinishedState)
-	{
-		Notification::Message message;
-		message.message = QFileInfo(transfer->getTarget()).fileName();
-		message.icon = transfer->getIcon();
-		message.event = NotificationsManager::TransferCompletedEvent;
-
-		if (message.icon.isNull())
-		{
-			message.icon = ThemesManager::createIcon(QLatin1String("download"));
-		}
-
-		connect(NotificationsManager::createNotification(message, this), &Notification::clicked, transfer, &Transfer::openTarget);
-	}
-
-	emit transferFinished(transfer);
-	emit transfersChanged();
-
-	if (!m_privateTransfers.contains(transfer))
-	{
-		scheduleSave();
-	}
-}
-
-void TransfersManager::handleTransferChanged()
-{
-	Transfer *transfer(qobject_cast<Transfer*>(sender()));
-
-	if (transfer)
-	{
-		scheduleSave();
-		updateRunningTransfersState();
-
-		emit transferChanged(transfer);
-		emit transfersChanged();
-	}
-}
-
-void TransfersManager::handleTransferStopped()
-{
-	Transfer *transfer(qobject_cast<Transfer*>(sender()));
-
-	updateRunningTransfersState();
-
-	if (transfer)
-	{
-		emit transferStopped(transfer);
-		emit transfersChanged();
-
-		scheduleSave();
 	}
 }
 

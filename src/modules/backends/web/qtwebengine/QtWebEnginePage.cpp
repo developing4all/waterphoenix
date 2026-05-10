@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -43,7 +43,7 @@
 namespace Otter
 {
 
-QtWebEnginePage::QtWebEnginePage(bool isPrivate, QtWebEngineWebWidget *parent) : QWebEnginePage((isPrivate ? new QWebEngineProfile(parent) : QWebEngineProfile::defaultProfile()), parent),
+QtWebEnginePage::QtWebEnginePage(bool isPrivate, QtWebEngineWebWidget *parent) : QWebEnginePage((isPrivate ? new QWebEngineProfile(parent) : qobject_cast<QtWebEngineWebBackend*>(parent->getBackend())->getDefaultProfile()), parent),
 	m_widget(parent),
 	m_previousNavigationType(QtWebEnginePage::NavigationTypeOther),
 	m_isIgnoringJavaScriptPopups(false),
@@ -56,51 +56,6 @@ QtWebEnginePage::QtWebEnginePage(bool isPrivate, QtWebEngineWebWidget *parent) :
 	}
 
 	connect(this, &QtWebEnginePage::loadFinished, this, &QtWebEnginePage::handleLoadFinished);
-}
-
-void QtWebEnginePage::validatePopup(const QUrl &url)
-{
-	QtWebEnginePage *page(qobject_cast<QtWebEnginePage*>(sender()));
-
-	if (page)
-	{
-		m_popups.removeAll(page);
-
-		page->deleteLater();
-	}
-
-	const QVector<int> profiles(ContentFiltersManager::getProfileIdentifiers(m_widget->getOption(SettingsManager::ContentBlocking_ProfilesOption, m_widget->getUrl()).toStringList()));
-
-	if (!profiles.isEmpty())
-	{
-		const ContentFiltersManager::CheckResult result(ContentFiltersManager::checkUrl(profiles, m_widget->getUrl(), url, NetworkManager::PopupType));
-
-		if (result.isBlocked)
-		{
-			Console::addMessage(QCoreApplication::translate("main", "Request blocked by rule from profile %1:\n%2").arg(ContentFiltersManager::getProfile(result.profile)->getTitle(), result.rule), Console::NetworkCategory, Console::LogLevel, url.url(), -1, m_widget->getWindowIdentifier());
-
-			return;
-		}
-	}
-
-	const QString popupsPolicy(SettingsManager::getOption(SettingsManager::Permissions_ScriptsCanOpenWindowsOption, Utils::extractHost(m_widget->getRequestedUrl())).toString());
-
-	if (popupsPolicy == QLatin1String("ask"))
-	{
-		emit requestedPopupWindow(m_widget->getUrl(), url);
-	}
-	else
-	{
-		SessionsManager::OpenHints hints(SessionsManager::NewTabOpen);
-
-		if (popupsPolicy == QLatin1String("openAllInBackground"))
-		{
-			hints |= SessionsManager::BackgroundOpen;
-		}
-
-		QtWebEngineWebWidget *widget(createWidget(hints));
-		widget->setUrl(url);
-	}
 }
 
 void QtWebEnginePage::markAsPopup()
@@ -264,7 +219,7 @@ void QtWebEnginePage::setHistory(const Session::Window::History &history)
 	{
 		const Session::Window::History::Entry entry(history.entries.at(i));
 
-		stream << QUrl(entry.url) << entry.title << QByteArray() << static_cast<qint32>(0) << false << QUrl() << static_cast<qint32>(0) << QUrl(entry.url) << false << QDateTime::currentDateTimeUtc().toSecsSinceEpoch() << static_cast<int>(200);
+		stream << QUrl(entry.url) << entry.title << QByteArray() << static_cast<qint32>(0) << false << QUrl() << static_cast<qint32>(0) << QUrl(entry.url) << false << QDateTime::currentSecsSinceEpoch() << static_cast<int>(200);
 
 		HistoryEntryInformation entryInformation;
 		entryInformation.timeVisited = entry.time;
@@ -314,7 +269,45 @@ QWebEnginePage* QtWebEnginePage::createWindow(WebWindowType type)
 			QtWebEnginePage *page(new QtWebEnginePage(false, nullptr));
 			page->markAsPopup();
 
-			connect(page, &QtWebEnginePage::aboutToNavigate, this, &QtWebEnginePage::validatePopup);
+			connect(page, &QtWebEnginePage::aboutToNavigate, this, [=](const QUrl &url)
+			{
+				m_popups.removeAll(page);
+
+				page->deleteLater();
+
+				const QVector<int> profiles(ContentFiltersManager::getProfileIdentifiers(m_widget->getOption(SettingsManager::ContentBlocking_ProfilesOption, m_widget->getUrl()).toStringList()));
+
+				if (!profiles.isEmpty())
+				{
+					const ContentFiltersManager::CheckResult result(ContentFiltersManager::checkUrl(profiles, m_widget->getUrl(), url, NetworkManager::PopupType));
+
+					if (result.isBlocked)
+					{
+						Console::addMessage(QCoreApplication::translate("main", "Request blocked by rule from profile %1:\n%2").arg(ContentFiltersManager::getProfile(result.profile)->getTitle(), result.rule), Console::NetworkCategory, Console::LogLevel, url.url(), -1, m_widget->getWindowIdentifier());
+
+						return;
+					}
+				}
+
+				const QString popupsPolicy(SettingsManager::getOption(SettingsManager::Permissions_ScriptsCanOpenWindowsOption, Utils::extractHost(m_widget->getRequestedUrl())).toString());
+
+				if (popupsPolicy == QLatin1String("ask"))
+				{
+					emit requestedPopupWindow(m_widget->getUrl(), url);
+				}
+				else
+				{
+					SessionsManager::OpenHints hints(SessionsManager::NewTabOpen);
+
+					if (popupsPolicy == QLatin1String("openAllInBackground"))
+					{
+						hints |= SessionsManager::BackgroundOpen;
+					}
+
+					QtWebEngineWebWidget *widget(createWidget(hints));
+					widget->setUrl(url);
+				}
+			});
 
 			return page;
 		}
@@ -622,7 +615,7 @@ bool QtWebEnginePage::certificateError(const QWebEngineCertificateError &error)
 	const QString firstPartyUrl(m_widget->getUrl().toString());
 	const QString thirdPartyUrl(error.url().toString());
 
-	if (m_widget->getOption(SettingsManager::Security_IgnoreSslErrorsOption, m_widget->getUrl()).toStringList().contains(QString::fromLatin1(error.certificateChain().first().digest().toBase64())))
+	if (m_widget->getOption(SettingsManager::Security_IgnoreSslErrorsOption, m_widget->getUrl()).toStringList().contains(QString::fromLatin1(error.certificateChain().constFirst().digest().toBase64())))
 	{
 		Console::addMessage(QStringLiteral("[accepted] The page at %1 was allowed to display insecure content from %2").arg(firstPartyUrl, thirdPartyUrl), Console::SecurityCategory, Console::WarningLevel, thirdPartyUrl, -1, m_widget->getWindowIdentifier());
 

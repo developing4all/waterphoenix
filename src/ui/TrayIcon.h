@@ -38,7 +38,7 @@ public:
 	explicit TrayIcon(Application *parent);
 
 	void showNotification(Notification *notification);
-	bool eventFilter(QObject *object, QEvent *event) override;
+	bool event(QEvent *event) override;
 
 public slots:
 	void hide();
@@ -50,7 +50,6 @@ protected:
 protected slots:
 	void toggleWindowsVisibility();
 	void handleMessageClicked();
-	void updateMenu();
 
 private:
 	QSystemTrayIcon *m_trayIcon;
