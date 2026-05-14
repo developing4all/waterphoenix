@@ -150,6 +150,8 @@ public:
 
 	bool shouldBeVisible(ToolBarsManager::ToolBarsMode mode) const override;
 	bool event(QEvent *event) override;
+	QSize sizeHint() const override;
+	QSize minimumSizeHint() const override;
 
 protected:
 	void paintEvent(QPaintEvent *event) override;
