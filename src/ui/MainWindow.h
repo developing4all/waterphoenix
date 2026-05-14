@@ -137,16 +137,12 @@ protected:
 	bool isTabBarToolBarInWindowMoveArea() const;
 	bool isInTabBarToolBarDockHandleArea(const QPoint &globalPosition) const;
 	bool isInToolbarDragHandleArea(const QPoint &globalPosition) const;
-	void updateCustomDecorationToolbarState();
-	void resetCustomDecorationToolbarSizeOverrides();
 	void hideWindowControls();
 	void ensureWindowControlsInTopToolbar(ToolBarWidget *tabBarToolBar);
 	void ensureWindowControlsInToolBar(ToolBarWidget *targetToolBar);
 	void removeWindowControlsFromToolbar(ToolBarWidget *tabBarToolBar);
 	void scheduleToolbarStateUpdateRetry();
-	void scheduleTabBarToolBarNormalization();
-	void normalizeTabBarToolBarGeometry();
-	void setupTabBarToolBarNormalization();
+	void updateTabBarToolBarArea();
 	void updateWindowControlsPlacement();
 	bool handleCustomDecorationMousePress(QWidget *sourceWidget, QMouseEvent *event);
 

@@ -1397,4 +1397,76 @@ bool TabBarToolBarWidget::event(QEvent *event)
 	return ToolBarWidget::event(event);
 }
 
+QSize TabBarToolBarWidget::sizeHint() const
+{
+	QSize hint = ToolBarWidget::sizeHint();
+
+	if (orientation() == Qt::Horizontal)
+	{
+		int height = 0;
+
+		if (m_tabBar)
+		{
+			height = qMax(height, m_tabBar->sizeHint().height());
+			height = qMax(height, m_tabBar->minimumSizeHint().height());
+		}
+
+		height = qMax(height, ToolBarWidget::minimumSizeHint().height());
+
+		if (height <= 0)
+		{
+			height = 34;
+		}
+
+		hint.setHeight(qBound(28, height, 40));
+		return hint;
+	}
+
+	int width = 0;
+
+	if (m_tabBar)
+	{
+		width = qMax(width, m_tabBar->sizeHint().width());
+		width = qMax(width, m_tabBar->minimumSizeHint().width());
+	}
+
+	width = qMax(width, ToolBarWidget::minimumSizeHint().width());
+
+	if (width <= 0)
+	{
+		width = 250;
+	}
+
+	hint.setWidth(qBound(160, width, 320));
+	return hint;
+}
+
+QSize TabBarToolBarWidget::minimumSizeHint() const
+{
+	QSize hint = ToolBarWidget::minimumSizeHint();
+
+	if (orientation() == Qt::Horizontal)
+	{
+		int height = 28;
+
+		if (m_tabBar)
+		{
+			height = qMax(height, m_tabBar->minimumSizeHint().height());
+		}
+
+		hint.setHeight(qBound(28, height, 40));
+		return hint;
+	}
+
+	int width = 160;
+
+	if (m_tabBar)
+	{
+		width = qMax(width, m_tabBar->minimumSizeHint().width());
+	}
+
+	hint.setWidth(qBound(160, width, 320));
+	return hint;
+}
+
 }
