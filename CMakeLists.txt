@@ -77,7 +77,7 @@ else ()
 	set(QT_VERSION Qt6)
 	set(QT_MINIMUM_VERSION 6.2)
 	set(QT_NO_FIND_QMLSC ON)
-	find_package(Qt6 REQUIRED COMPONENTS Core5Compat NetworkPrivate)
+	find_package(Qt6 REQUIRED COMPONENTS Core5Compat)
 endif ()
 
 find_package(${QT_VERSION} ${QT_MINIMUM_VERSION} REQUIRED COMPONENTS Core Gui Multimedia Network PrintSupport Qml Svg Widgets Xml)
@@ -442,20 +442,37 @@ if (TARGET Hunspell::Hunspell AND ENABLE_SPELLCHECK)
 	add_definitions(-DOTTER_ENABLE_SPELLCHECK)
 	include_directories(Hunspell::Hunspell)
 
-	set(OTTER_SOURCES
-		${OTTER_SOURCES}
-		3rdparty/sonnet/src/core/client.cpp
-		3rdparty/sonnet/src/core/loader.cpp
-		3rdparty/sonnet/src/core/speller.cpp
-		3rdparty/sonnet/src/core/spellerplugin.cpp
-		3rdparty/sonnet/src/core/settings.cpp
-		3rdparty/sonnet/src/core/textbreaks.cpp
-		3rdparty/sonnet/src/core/tokenizer.cpp
-		3rdparty/sonnet/src/ui/highlighter.cpp
-		3rdparty/sonnet/src/plugins/hunspell/hunspellclient.cpp
-		3rdparty/sonnet/src/plugins/hunspell/hunspelldebug.cpp
-		3rdparty/sonnet/src/plugins/hunspell/hunspelldict.cpp
-	)
+	# Try to find system Sonnet library
+	if (ENABLE_QT5)
+		find_package(KF5Sonnet QUIET)
+	else()
+		find_package(KF6Sonnet QUIET)
+	endif()
+
+	if (TARGET KF5Sonnet::SonnetCore OR TARGET KF6Sonnet::SonnetCore)
+		add_definitions(-DOTTER_USE_SYSTEM_SONNET)
+		if (TARGET KF5Sonnet::SonnetCore)
+			target_link_libraries(otter-browser KF5Sonnet::SonnetCore)
+		elseif (TARGET KF6Sonnet::SonnetCore)
+			target_link_libraries(otter-browser KF6Sonnet::SonnetCore)
+		endif()
+	else()
+		# Use vendored Sonnet as fallback
+		set(OTTER_SOURCES
+			${OTTER_SOURCES}
+			3rdparty/sonnet/src/core/client.cpp
+			3rdparty/sonnet/src/core/loader.cpp
+			3rdparty/sonnet/src/core/speller.cpp
+			3rdparty/sonnet/src/core/spellerplugin.cpp
+			3rdparty/sonnet/src/core/settings.cpp
+			3rdparty/sonnet/src/core/textbreaks.cpp
+			3rdparty/sonnet/src/core/tokenizer.cpp
+			3rdparty/sonnet/src/ui/highlighter.cpp
+			3rdparty/sonnet/src/plugins/hunspell/hunspellclient.cpp
+			3rdparty/sonnet/src/plugins/hunspell/hunspelldebug.cpp
+			3rdparty/sonnet/src/plugins/hunspell/hunspelldict.cpp
+		)
+	endif()
 endif ()
 
 if (WIN32)
@@ -626,7 +643,7 @@ target_link_libraries(
 )
 
 if (NOT ENABLE_QT5)
-	target_link_libraries(otter-browser Qt6::Core5Compat Qt::NetworkPrivate)
+	target_link_libraries(otter-browser Qt6::Core5Compat)
 endif ()
 
 set(XDG_APPS_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/share/applications CACHE FILEPATH "Install path for .desktop files")

@@ -92,9 +92,7 @@ SpellerPlugin *Loader::createSpeller(const QString &language,
         return 0;
     }
 
-    QVectorIterator<Client *> itr(lClients);
-    while (itr.hasNext()) {
-        Client *item = itr.next();
+    for (Client *item : lClients) {
         if (!pclient.isEmpty()) {
             if (pclient == item->name()) {
                 SpellerPlugin *dict = item->createSpeller(plang);
@@ -209,7 +207,11 @@ QString Loader::languageNameForCode(const QString &langCode)
     }
 
     QLocale locale(isoCode);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    localizedCountry = locale.nativeTerritoryName();
+#else
     localizedCountry = locale.nativeCountryName();
+#endif
     localizedLang = locale.nativeLanguageName();
 
     if (localizedLang.isEmpty() && localizedCountry.isEmpty()) {

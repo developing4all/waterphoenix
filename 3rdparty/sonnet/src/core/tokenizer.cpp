@@ -22,6 +22,11 @@
 
 #include <QtCore/QList>
 #include <QtCore/QString>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtCore5Compat/QStringRef>
+#else
+#include <QtCore/QStringRef>
+#endif
 
 #include "tokenizer_p.h"
 #include "textbreaks_p.h"

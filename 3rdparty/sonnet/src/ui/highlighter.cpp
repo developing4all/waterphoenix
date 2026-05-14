@@ -28,6 +28,10 @@
 #include "../core/tokenizer_p.h"
 #include "../core/settings_p.h"
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtCore5Compat/QStringRef>
+#endif
+
 #include <QTextEdit>
 #include <QTextCharFormat>
 #include <QTimer>
@@ -48,12 +52,13 @@ class LanguageCache : public QTextBlockUserData {
 public:
     QMap<QPair<int,int>, QString> languages;
     void invalidate(int pos) {
-        QMutableMapIterator<QPair<int,int>, QString> it(languages);
-        it.toBack();
-        while (it.hasPrevious()) {
-            it.previous();
-            if (it.key().first+it.key().second >=pos) it.remove();
-            else break;
+        auto it = languages.end();
+        while (it != languages.begin()) {
+            --it;
+            if (it.key().first+it.key().second >= pos)
+                it = languages.erase(it);
+            else
+                break;
         }
     }
 };

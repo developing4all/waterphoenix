@@ -43,9 +43,6 @@
 #include <QtGui/QDesktopServices>
 #include <QtGui/QDrag>
 #include <QtGui/QScreen>
-#if QT_VERSION >= 0x060000
-#include <QtNetwork/private/qtldurl_p.h>
-#endif
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
