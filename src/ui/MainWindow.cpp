@@ -217,7 +217,7 @@ MainWindow::MainWindow(const QVariantMap &parameters, const Session::MainWindow 
 		}
 		else
 		{
-			showMaximized();
+			setWindowState(windowState() | Qt::WindowMaximized);
 		}
 	}
 	else
@@ -231,11 +231,8 @@ MainWindow::MainWindow(const QVariantMap &parameters, const Session::MainWindow 
 	}
 	else
 	{
-		QTimer::singleShot(0, this, [=]()
-		{
-			restoreSession(session);
-			updateWindowTitle();
-		});
+		restoreSession(session);
+		updateWindowTitle();
 	}
 
 	QTimer::singleShot(100, this, [=]()

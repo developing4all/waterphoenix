@@ -24,8 +24,13 @@
 #include "../../../../core/SessionsManager.h"
 #include "../../../../ui/WebWidget.h"
 
-#include <QtWebEngineCore/QWebEngineCertificateError>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWebEngineCore/QWebEnginePage>
+#include <QtWebEngineCore/QWebEngineCertificateError>
+#else
+#include <QtWebEngineWidgets/QWebEnginePage>
+#include <QtWebEngineWidgets/QWebEngineCertificateError>
+#endif
 
 namespace Otter
 {

@@ -55,7 +55,7 @@
 #include <QtPrintSupport/QPrintPreviewDialog>
 #include <QtWebEngineCore/QWebEngineCookieStore>
 #include <QtWebEngineCore/QWebEngineFindTextResult>
-#if QT_VERSION >= 0x060000
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtWebEngineCore/QWebEngineHistory>
 #include <QtWebEngineCore/QWebEngineHttpRequest>
 #include <QtWebEngineCore/QWebEngineProfile>
@@ -111,6 +111,7 @@ QtWebEngineWebWidget::QtWebEngineWebWidget(const QVariantMap &parameters, WebBac
 	m_isClosing(false),
 	m_isEditing(false),
 	m_isFullScreen(false),
+	m_isPrivate(SessionsManager::calculateOpenHints(parameters).testFlag(SessionsManager::PrivateOpen)),
 	m_isTypedIn(false)
 {
 	setFocusPolicy(Qt::StrongFocus);
@@ -249,7 +250,11 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 
 				if (information.canSave)
 				{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 					m_page->save(information.path, QWebEngineDownloadRequest::SingleHtmlSaveFormat);
+#else
+					m_page->save(information.path);
+#endif
 				}
 			}
 			else
@@ -262,11 +267,19 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 					switch (format)
 					{
 						case CompletePageSaveFormat:
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 							m_page->save(path, QWebEngineDownloadRequest::CompleteHtmlSaveFormat);
+#else
+							m_page->save(path);
+#endif
 
 							break;
 						case MhtmlSaveFormat:
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 							m_page->save(path, QWebEngineDownloadRequest::MimeHtmlSaveFormat);
+#else
+							m_page->save(path, QWebEngineDownloadItem::CompleteHtmlSaveFormat);
+#endif
 
 							break;
 						case PdfSaveFormat:
@@ -274,7 +287,11 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 
 							break;
 						default:
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 							m_page->save(path, QWebEngineDownloadRequest::SingleHtmlSaveFormat);
+#else
+							m_page->save(path);
+#endif
 
 							break;
 					}
@@ -1891,7 +1908,7 @@ bool QtWebEngineWebWidget::isPopup() const
 
 bool QtWebEngineWebWidget::isPrivate() const
 {
-	return m_page->profile()->isOffTheRecord();
+	return m_isPrivate;
 }
 
 bool QtWebEngineWebWidget::isScrollBar(const QPoint &position) const

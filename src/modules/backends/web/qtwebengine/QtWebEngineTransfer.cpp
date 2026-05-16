@@ -26,6 +26,7 @@
 namespace Otter
 {
 
+#if QT_VERSION >= 0x060000
 QtWebEngineTransfer::QtWebEngineTransfer(QWebEngineDownloadRequest *item, TransferOptions options, QObject *parent) : Transfer(options, parent),
 	m_item(item)
 {
@@ -55,6 +56,35 @@ QtWebEngineTransfer::QtWebEngineTransfer(QWebEngineDownloadRequest *item, Transf
 		emit changed();
 	});
 }
+#else
+QtWebEngineTransfer::QtWebEngineTransfer(QWebEngineDownloadItem *item, TransferOptions options, QObject *parent) : Transfer(options, parent),
+	m_item(item)
+{
+	m_item->accept();
+	m_item->setParent(this);
+
+	markAsStarted();
+
+	connect(m_item, &QWebEngineDownloadItem::isFinished, this, &QtWebEngineTransfer::markAsFinished);
+	connect(m_item, &QWebEngineDownloadItem::downloadProgress, this, &QtWebEngineTransfer::handleDownloadProgress);
+	connect(m_item, &QWebEngineDownloadItem::stateChanged, this, [&](QWebEngineDownloadItem::DownloadState state)
+	{
+		switch (state)
+		{
+			case QWebEngineDownloadItem::DownloadCancelled:
+			case QWebEngineDownloadItem::DownloadCompleted:
+			case QWebEngineDownloadItem::DownloadInterrupted:
+				emit stopped();
+
+				break;
+			default:
+				break;
+		}
+
+		emit changed();
+	});
+}
+#endif
 
 void QtWebEngineTransfer::cancel()
 {
@@ -86,7 +116,11 @@ QString QtWebEngineTransfer::getSuggestedFileName()
 		return {};
 	}
 
+#if QT_VERSION >= 0x060000
 	return m_item->suggestedFileName();
+#else
+	return m_item->path();
+#endif
 }
 
 QString QtWebEngineTransfer::getTarget() const
@@ -96,7 +130,11 @@ QString QtWebEngineTransfer::getTarget() const
 		return Transfer::getTarget();
 	}
 
+#if QT_VERSION >= 0x060000
 	return QDir(m_item->downloadDirectory()).absoluteFilePath(m_item->downloadFileName());
+#else
+	return m_item->path();
+#endif
 }
 
 QMimeType QtWebEngineTransfer::getMimeType() const
@@ -136,6 +174,7 @@ Transfer::TransferState QtWebEngineTransfer::getState() const
 		return Transfer::getState();
 	}
 
+#if QT_VERSION >= 0x060000
 	switch (m_item->state())
 	{
 		case QWebEngineDownloadRequest::DownloadRequested:
@@ -148,6 +187,20 @@ Transfer::TransferState QtWebEngineTransfer::getState() const
 		case QWebEngineDownloadRequest::DownloadInterrupted:
 			return ErrorState;
 	}
+#else
+	switch (m_item->state())
+	{
+		case QWebEngineDownloadItem::DownloadRequested:
+		case QWebEngineDownloadItem::DownloadInProgress:
+			return RunningState;
+		case QWebEngineDownloadItem::DownloadCompleted:
+			return FinishedState;
+		case QWebEngineDownloadItem::DownloadCancelled:
+			return CancelledState;
+		case QWebEngineDownloadItem::DownloadInterrupted:
+			return ErrorState;
+	}
+#endif
 
 	return UnknownState;
 }
@@ -159,10 +212,14 @@ bool QtWebEngineTransfer::setTarget(const QString &target, bool canOverwriteExis
 		return Transfer::setTarget(target, canOverwriteExisting);
 	}
 
+#if QT_VERSION >= 0x060000
 	const QFileInfo fileInformation(target);
 
 	m_item->setDownloadDirectory(fileInformation.path());
 	m_item->setDownloadFileName(fileInformation.fileName());
+#else
+	m_item->setPath(target);
+#endif
 
 	return true;
 }

@@ -127,7 +127,7 @@ void QtWebEnginePage::handleLoadFinished()
 	{
 		entry.icon = icon();
 
-		if (entry.identifier > 0 && !profile()->isOffTheRecord())
+		if (entry.identifier > 0 && (!m_widget || !m_widget->isPrivate()))
 		{
 			HistoryManager::updateEntry(entry.identifier, url(), (m_widget ? m_widget->getTitle() : title()), icon());
 		}

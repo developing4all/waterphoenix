@@ -36,7 +36,11 @@ class QtWebEngineTransfer final : public Transfer
 	Q_OBJECT
 
 public:
+#if QT_VERSION >= 0x060000
 	explicit QtWebEngineTransfer(QWebEngineDownloadRequest *item, TransferOptions options = CanAskForPathOption, QObject *parent = nullptr);
+#else
+	explicit QtWebEngineTransfer(QWebEngineDownloadItem *item, TransferOptions options = CanAskForPathOption, QObject *parent = nullptr);
+#endif
 
 	QUrl getSource() const override;
 	QString getSuggestedFileName() override;

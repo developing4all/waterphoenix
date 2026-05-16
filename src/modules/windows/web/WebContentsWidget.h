@@ -109,6 +109,7 @@ protected:
 	void scrollContents(const QPoint &delta);
 	void setScrollMode(ScrollMode mode);
 	void setWidget(WebWidget *widget, const QVariantMap &parameters, const QHash<int, QVariant> &options);
+	void updateStartPageGeometry();
 
 protected slots:
 	void findInPage(WebWidget::FindFlags flags);
