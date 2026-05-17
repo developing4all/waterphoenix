@@ -23,6 +23,7 @@
 #define OTTER_ACTIONSMANAGER_H
 
 #include "AddonsManager.h"
+#include "Branding.h"
 #include "Utils.h"
 
 #include <QtCore/QVariantMap>
@@ -348,7 +349,15 @@ public:
 
 		QString getText(bool preferDescription = false) const
 		{
-			return QCoreApplication::translate("actions", ((preferDescription && !description.isEmpty()) ? description : defaultState.text).toUtf8().constData());
+			QString text = ((preferDescription && !description.isEmpty()) ? description : defaultState.text);
+			
+			// Handle AboutApplicationAction with brand-aware formatting
+			if (identifier == AboutApplicationAction && text.contains(QLatin1String("%1")))
+			{
+				return QCoreApplication::translate("actions", text.toUtf8().constData()).arg(Branding::displayFullName());
+			}
+			
+			return QCoreApplication::translate("actions", text.toUtf8().constData());
 		}
 
 		State getDefaultState() const

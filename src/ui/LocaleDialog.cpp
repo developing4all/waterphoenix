@@ -20,6 +20,7 @@
 
 #include "LocaleDialog.h"
 #include "../core/Application.h"
+#include "../core/Branding.h"
 #include "../core/SettingsManager.h"
 
 #include "ui_LocaleDialog.h"
@@ -34,13 +35,14 @@ LocaleDialog::LocaleDialog(QWidget *parent) : Dialog(parent),
 {
 	m_ui->setupUi(this);
 
-	const QList<QFileInfo> locales(QDir(Application::getLocalePath()).entryInfoList({QLatin1String("otter-browser_*.qm")}, QDir::Files, QDir::Name));
+	const QString translationBaseName(Branding::translationBaseName());
+	const QList<QFileInfo> locales(QDir(Application::getLocalePath()).entryInfoList({translationBaseName + QLatin1String("_*.qm")}, QDir::Files, QDir::Name));
 	QVector<Locale> entries;
 	entries.reserve(locales.count());
 
 	for (int i = 0; i < locales.count(); ++i)
 	{
-		const QString name(locales.at(i).baseName().remove(QLatin1String("otter-browser_")));
+		const QString name(locales.at(i).baseName().remove(translationBaseName + QLatin1Char('_')));
 		const QLocale locale(Utils::createLocale(name));
 
 		if (locale.nativeCountryName().isEmpty() || locale.nativeLanguageName().isEmpty())

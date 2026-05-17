@@ -18,6 +18,7 @@
 **************************************************************************/
 
 #include "QuickResponseCodeWidget.h"
+#include "../core/Branding.h"
 
 #include <QtCore/QUrl>
 #include <QtGui/QPainter>
@@ -31,7 +32,7 @@ namespace Otter
 {
 
 QuickResponseCodeWidget::QuickResponseCodeWidget(QWidget *parent) : QWidget(parent),
-	m_code(QrCode::encodeText(QByteArrayLiteral("https://otter-browser.org"), QrCode::Ecc::MEDIUM))
+	m_code(QrCode::encodeText(Branding::websiteUrl().toUtf8(), QrCode::Ecc::MEDIUM))
 {
 	setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 }

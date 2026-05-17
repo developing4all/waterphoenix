@@ -23,6 +23,7 @@
 #include "AddressCompletionModel.h"
 #include "../../../core/ActionsManager.h"
 #include "../../../core/Application.h"
+#include "../../../core/Branding.h"
 #include "../../../core/BookmarksManager.h"
 #include "../../../core/FeedsManager.h"
 #include "../../../core/InputInterpreter.h"
@@ -1041,7 +1042,7 @@ void AddressWidget::updateEntries(const QVector<EntryIdentifier> &identifiers)
 					}
 					else if (state.testFlag(WebWidget::ApplicationContentState))
 					{
-						definition.iconName = QLatin1String("otter-browser");
+						definition.iconName = Branding::desktopIconName();
 					}
 					else
 					{

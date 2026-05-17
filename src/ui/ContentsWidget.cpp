@@ -20,9 +20,10 @@
 #include "ContentsWidget.h"
 #include "BookmarkPropertiesDialog.h"
 #include "ContentsDialog.h"
+#include "../core/Application.h"
+#include "../core/Branding.h"
 #include "MainWindow.h"
 #include "Window.h"
-#include "../core/Application.h"
 
 #include <QtPrintSupport/QPrintDialog>
 #include <QtPrintSupport/QPrintPreviewDialog>
@@ -227,7 +228,7 @@ void ContentsWidget::print(QPrinter *printer)
 
 void ContentsWidget::setupPrinter(QPrinter *printer)
 {
-	printer->setCreator(QStringLiteral("Otter Browser %1").arg(Application::getFullVersion()));
+	printer->setCreator(QStringLiteral("%1 %2").arg(Branding::displayFullName(), Application::getFullVersion()));
 	printer->setDocName(getTitle());
 }
 

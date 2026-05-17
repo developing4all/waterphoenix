@@ -20,6 +20,7 @@
 #include "WebsiteInformationDialog.h"
 #include "CertificateDialog.h"
 #include "../core/Application.h"
+#include "../core/Branding.h"
 #include "../core/ThemesManager.h"
 #include "../core/Utils.h"
 
@@ -72,7 +73,7 @@ WebsiteInformationDialog::WebsiteInformationDialog(WebWidget *widget, QWidget *p
 	}
 	else if (state.testFlag(WebWidget::ApplicationContentState))
 	{
-		m_ui->stateLabel->setText(tr("You are viewing safe page from Otter Browser."));
+		m_ui->stateLabel->setText(tr("You are viewing safe page from %1.").arg(Branding::displayFullName()));
 		m_ui->stateIconLabel->setPixmap(Application::windowIcon().pixmap(16, 16));
 	}
 	else

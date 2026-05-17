@@ -21,6 +21,7 @@
 #include "WindowsPlatformIntegration.h"
 #include "WindowsPlatformStyle.h"
 #include "../../../core/Application.h"
+#include "../../../core/Branding.h"
 #include "../../../core/Console.h"
 #include "../../../core/NotificationsManager.h"
 #include "../../../core/ThemesManager.h"
@@ -504,8 +505,8 @@ bool WindowsPlatformIntegration::registerToSystem()
 	m_applicationRegistration.setValue(QLatin1String(REGISTRATION_IDENTIFIER), QLatin1String("Software\\Clients\\StartMenuInternet\\OtterBrowser\\Capabilities"));
 	m_applicationRegistration.sync();
 
-	m_propertiesRegistration.setValue(QLatin1String("/."), QLatin1String("Otter Browser Document"));
-	m_propertiesRegistration.setValue(QLatin1String("FriendlyTypeName"), QLatin1String("Otter Browser Document"));
+	m_propertiesRegistration.setValue(QLatin1String("/."), QStringLiteral("%1 Document").arg(Branding::displayFullName()));
+	m_propertiesRegistration.setValue(QLatin1String("FriendlyTypeName"), QStringLiteral("%1 Document").arg(Branding::displayFullName()));
 	m_propertiesRegistration.setValue(QLatin1String("DefaultIcon/."), m_applicationFilePath + QLatin1String(",1"));
 	m_propertiesRegistration.setValue(QLatin1String("EditFlags"), 2);
 	m_propertiesRegistration.setValue(QLatin1String("shell/open/ddeexec/."), {});
@@ -513,10 +514,10 @@ bool WindowsPlatformIntegration::registerToSystem()
 	m_propertiesRegistration.sync();
 
 	QSettings capabilities(QLatin1String("HKEY_CURRENT_USER\\Software\\Clients\\StartMenuInternet\\") + QLatin1String(REGISTRATION_IDENTIFIER), QSettings::NativeFormat);
-	capabilities.setValue(QLatin1String("./"), QLatin1String("Otter Browser"));
+	capabilities.setValue(QLatin1String("./"), Branding::displayFullName());
 	capabilities.setValue(QLatin1String("Capabilities/ApplicationDescription"), QLatin1String("Web browser controlled by the user, not vice-versa"));
 	capabilities.setValue(QLatin1String("Capabilities/ApplicationIcon"), m_applicationFilePath + QLatin1String(",0"));
-	capabilities.setValue(QLatin1String("Capabilities/ApplicationName"), QLatin1String("Otter Browser"));
+	capabilities.setValue(QLatin1String("Capabilities/ApplicationName"), Branding::displayFullName());
 
 	for (int i = 0; i < m_registrationPairs.count(); ++i)
 	{

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import argparse, glob, os, platform, shutil, subprocess, stat, sys, urllib.request
+import argparse, glob, json, os, platform, shutil, subprocess, stat, sys, urllib.request
 
 def run_command(command):
 	if platform.system() != 'Windows' and os.sep in command[0] and not os.path.isfile(command[0]):
@@ -33,6 +33,24 @@ def make_path(root, directories):
 
 		if not os.path.exists(root):
 			os.mkdir(root)
+
+def load_brand_metadata(arguments):
+	if arguments.brand_metadata and os.path.isfile(arguments.brand_metadata):
+		with open(arguments.brand_metadata, 'r') as f:
+			return json.load(f)
+	
+	# Fallback to default values
+	return {
+		"executable_name": "otter-browser",
+		"package_name": "otter-browser",
+		"desktop_file_name": "otter-browser.desktop",
+		"desktop_file_basename": "otter-browser",
+		"desktop_icon_name": "otter-browser",
+		"install_data_dir": "otter-browser",
+		"appstream_file_name": "otter-browser.appdata.xml",
+		"manpage_file_name": "otter-browser.1",
+		"display_full_name": "Otter Browser"
+	}
 
 def get_executable(name, url=None, tools_path=None, is_optional=False):
 	exectable_path = None
@@ -69,51 +87,44 @@ def deploy_locale(source_path, target_path):
 		shutil.copy(file, target_locale_path)
 
 def deploy_linux(arguments):
+	brand = load_brand_metadata(arguments)
 	tools_path = None
 
 	if not arguments.disable_tools_download:
 		tools_path = os.path.join(os.path.abspath(os.path.dirname(sys.argv[0])), 'appimage-tools')
 
-		if not os.path.isdir(tools_path):
-			os.mkdir(tools_path)
-
-	release_name = 'otter-browser' + ('' if (arguments.release_name == '') else '-' + arguments.release_name)
-	package_formats = ['appimage']
-
-	if arguments.package_formats != 'default':
-		package_formats = arguments.package_formats.split(',')
 
 	appdir_deploy_command = get_executable('linuxdeploy-x86_64.AppImage', 'https://bintray.com/qtproject/linuxdeploy-mirror/download_file?file_path=2020-06-03%2Flinuxdeploy-x86_64.AppImage', tools_path)
 
 	get_executable('linuxdeploy-plugin-qt-x86_64.AppImage', 'https://bintray.com/qtproject/linuxdeploy-mirror/download_file?file_path=2020-06-03%2Flinuxdeploy-plugin-qt-x86_64.AppImage', tools_path)
 
-	appimage_path = os.path.join(arguments.target_path, 'otter-browser')
+	appimage_path = os.path.join(arguments.target_path, brand['package_name'])
 
 	make_path(appimage_path, ['usr', 'share', 'applications'])
 	make_path(appimage_path, ['usr', 'share', 'icons', 'hicolor'])
-	make_path(appimage_path, ['usr', 'share', 'otter-browser'])
-	shutil.copy(os.path.join(arguments.source_path, 'otter-browser.desktop'), os.path.join(appimage_path, 'usr/share/applications/otter-browser.desktop'))
+	make_path(appimage_path, ['usr', 'share', brand['install_data_dir']])
+	shutil.copy(os.path.join(arguments.source_path, 'build/generated', brand['desktop_file_name']), os.path.join(appimage_path, 'usr/share/applications', brand['desktop_file_name']))
 
 	icons_path = os.path.join(appimage_path, 'usr/share/icons/hicolor')
 	icons = [16, 32, 48, 64, 128, 256, 'scalable']
 
 	for size in icons:
 		icon_directory = 'scalable'
-		source_name = 'otter-browser.svg'
-		target_name = 'otter-browser.svg'
+		source_name = '{}.svg'.format(brand['desktop_icon_name'])
+		target_name = '{}.svg'.format(brand['desktop_icon_name'])
 
 		if isinstance(size, int):
 			icon_directory = '{}x{}'.format(size, size)
-			source_name = 'otter-browser-{}.png'.format(size)
-			target_name = 'otter-browser.png'
+			source_name = '{}-{}.png'.format(brand['desktop_icon_name'], size)
+			target_name = '{}.png'.format(brand['desktop_icon_name'])
 
 		make_path(icons_path, [icon_directory, 'apps'])
 		shutil.copy(os.path.join(arguments.source_path, 'resources/icons', source_name), os.path.join(icons_path, icon_directory, 'apps', target_name))
 
-	deploy_locale(arguments.source_path, os.path.join(appimage_path, 'usr/share/otter-browser'))
+	deploy_locale(arguments.source_path, os.path.join(appimage_path, 'usr/share', brand['install_data_dir']))
 	os.putenv('LD_LIBRARY_PATH', '{}:{}'.format(os.path.join(arguments.qt_path, 'lib'), os.getenv('LD_LIBRARY_PATH')))
 	os.putenv('QMAKE', os.path.join(arguments.qt_path, 'bin/qmake'))
-	run_command([appdir_deploy_command, '--plugin=qt', '--executable={}'.format(os.path.join(arguments.build_path, 'otter-browser')), '--appdir={}'.format(appimage_path)])
+	run_command([appdir_deploy_command, '--plugin=qt', '--executable={}'.format(os.path.join(arguments.build_path, brand['executable_name'])), '--appdir={}'.format(appimage_path)])
 	shutil.rmtree(os.path.join(appimage_path, 'usr/share/doc/'), ignore_errors=True)
 
 	libs_path = os.path.join(appimage_path, 'usr/lib')
@@ -259,6 +270,7 @@ if __name__ == '__main__':
 	parser.add_argument('--enable-portable', help='Force portable mode', action='store_true')
 	parser.add_argument('--disable-tools-download', help='Disable download of missing deployment tools', action='store_true')
 	parser.add_argument('--preserve-deployment-directory', help='Preserve deployment directory after creating packages', action='store_true')
+	parser.add_argument('--brand-metadata', help='Path to brand metadata JSON file', default='')
 
 	arguments = parser.parse_args()
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(waterphoenix-browser)
+project(otter-browser)
 
 set(MAJOR_VERSION "1")
 set(MINOR_VERSION "0")
@@ -15,6 +15,11 @@ else ()
 	add_definitions(-DOTTER_VERSION_CONTEXT=" weekly ${WEEKLY_VERSION}" -DOTTER_VERSION_WEEKLY="${WEEKLY_VERSION}")
 endif ()
 
+include(GNUInstallDirs)
+
+# Apply branding system
+include(cmake/ApplyBranding.cmake)
+
 if (EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
 	include(InstallRequiredSystemLibraries)
 
@@ -22,12 +27,12 @@ if (EXISTS "${CMAKE_ROOT}/Modules/CPack.cmake")
 	set(CPACK_PACKAGING_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 	set(CPACK_GENERATOR "DEB;RPM")
 	set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Web browser controlled by the user, not vice-versa")
-	set(CPACK_PACKAGE_VENDOR "Vendor")
+	set(CPACK_PACKAGE_VENDOR "${BRAND_ORGANIZATION_NAME}")
 	set(CPACK_PACKAGE_CONTACT "Michal Dutkiewicz <michal@emdek.pl>")
 	set(CPACK_PACKAGE_VERSION_MAJOR "${MAJOR_VERSION}")
 	set(CPACK_PACKAGE_VERSION_MINOR "${MINOR_VERSION}")
 	set(CPACK_PACKAGE_VERSION_PATCH "${PATCH_VERSION}")
-        set(CPACK_PACKAGE_NAME "waterphoenix-browser")
+    set(CPACK_PACKAGE_NAME "${BRAND_PACKAGE_NAME}")
 	set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}_${MAJOR_VERSION}.${MINOR_VERSION}.${CPACK_PACKAGE_VERSION_PATCH}")
 	set(CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}_${MAJOR_VERSION}.${MINOR_VERSION}.${CPACK_PACKAGE_VERSION_PATCH}")
 	set(CPACK_DEBIAN_PACKAGE_DEPENDS "libhunspell-1.5-0 (>= 1.5.1), libqt5multimedia5 (>=5.15.0), libqt5qml5 (>=5.15.0), libqt5svg5 (>=5.15.0), libqt5webkit5 (>=5.212.0~alpha2)")
@@ -66,7 +71,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FeatureSummary)
-include(GNUInstallDirs)
 
 option(ENABLE_QT5 "Build using Qt 5" OFF)
 
@@ -306,6 +310,7 @@ set(OTTER_SOURCES
 
 qt_add_resources(OTTER_RESOURCES
 	resources/resources.qrc
+	${BRAND_RESOURCES_FILE}
 )
 
 qt_wrap_ui(OTTER_UI
@@ -443,6 +448,9 @@ if (TARGET Hunspell::Hunspell AND ENABLE_SPELLCHECK)
 	add_definitions(-DOTTER_ENABLE_SPELLCHECK)
 	include_directories(Hunspell::Hunspell)
 
+	# Extra libraries to link after add_executable()
+	set(OTTER_EXTRA_LIBRARIES)
+
 	# Try to find system Sonnet library
 	if (ENABLE_QT5)
 		find_package(KF5Sonnet QUIET)
@@ -453,9 +461,9 @@ if (TARGET Hunspell::Hunspell AND ENABLE_SPELLCHECK)
 	if (TARGET KF5Sonnet::SonnetCore OR TARGET KF6Sonnet::SonnetCore)
 		add_definitions(-DOTTER_USE_SYSTEM_SONNET)
 		if (TARGET KF5Sonnet::SonnetCore)
-			target_link_libraries(otter-browser KF5Sonnet::SonnetCore)
+			list(APPEND OTTER_EXTRA_LIBRARIES KF5Sonnet::SonnetCore)
 		elseif (TARGET KF6Sonnet::SonnetCore)
-			target_link_libraries(otter-browser KF6Sonnet::SonnetCore)
+			list(APPEND OTTER_EXTRA_LIBRARIES KF6Sonnet::SonnetCore)
 		endif()
 	else()
 		# Use vendored Sonnet as fallback
@@ -498,7 +506,7 @@ if (WIN32)
 
 	set(OTTER_SOURCES
 		${OTTER_SOURCES}
-		waterphoenix-browser.rc
+		${BRAND_WINDOWS_RC_FILE}
 		src/modules/platforms/windows/WindowsPlatformIntegration.cpp
 		src/modules/platforms/windows/WindowsPlatformStyle.cpp
 	)
@@ -508,22 +516,22 @@ elseif (APPLE)
 	endif ()
 
 	set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13)
-        set(MACOSX_BUNDLE_BUNDLE_NAME "Water Phoenix Browser")
+        set(MACOSX_BUNDLE_BUNDLE_NAME "${BRAND_ABOUT_NAME} Browser")
 	set(MACOSX_BUNDLE_BUNDLE_VERSION ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION})
 	set(MACOSX_BUNDLE_LONG_VERSION_STRING ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION})
 	set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${MAJOR_VERSION}.${MINOR_VERSION})
 
-	set(MACOSX_BUNDLE_ICON_FILE waterphoenix-browser.icns)
-	set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.developing4all.waterphoenix")
-	set(MACOSX_BUNDLE_COPYRIGHT "Copyright (C) 2013-2025 Waterphoenix Browser Team. All rights reserved.")
+	set(MACOSX_BUNDLE_ICON_FILE "${BRAND_ICON_NAME}-browser.icns")
+	set(MACOSX_BUNDLE_GUI_IDENTIFIER "${BRAND_APPLICATION_ID}")
+	set(MACOSX_BUNDLE_COPYRIGHT "Copyright (C) 2013-2025 ${BRAND_ORGANIZATION_NAME}. All rights reserved.")
 	set(OTTER_SOURCES
 		${OTTER_SOURCES}
 		src/modules/platforms/mac/MacPlatformIntegration.mm
 		src/modules/platforms/mac/MacPlatformStyle.cpp
-                resources/icons/waterphoenix-browser.icns
+                resources/icons/${BRAND_ICON_NAME}-browser.icns
 	)
 
-        set_source_files_properties(resources/icons/waterphoenix-browser.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+        set_source_files_properties(resources/icons/${BRAND_ICON_NAME}-browser.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 elseif (UNIX)
 	if (TARGET ${QT_VERSION}::DBus AND ENABLE_DBUS)
 		add_definitions(-DOTTER_ENABLE_DBUS)
@@ -591,50 +599,59 @@ endif ()
 add_definitions(-DOTTER_BUILD_DATETIME="${BUILD_DATETIME}" -DOTTER_GIT_BRANCH="${GIT_BRANCH}" -DOTTER_GIT_DATETIME="${GIT_DATETIME}" -DOTTER_GIT_REVISION="${GIT_REVISION}")
 
 
-add_executable(waterphoenix-browser WIN32 MACOSX_BUNDLE
+# Keep the internal target name close to upstream to reduce merge conflicts.
+# Branding controls the installed executable name through OUTPUT_NAME.
+set(APP_TARGET_NAME otter-browser)
+
+add_executable(${APP_TARGET_NAME} WIN32 MACOSX_BUNDLE
 	${OTTER_UI}
 	${OTTER_RESOURCES}
 	${OTTER_SOURCES}
 )
 
+# Apply branding to the main executable
+apply_branding(${APP_TARGET_NAME})
+
 foreach (_library ${OTTER_LINK_LIBRARIES})
-	target_link_libraries(waterphoenix-browser ${_library})
+	target_link_libraries(${APP_TARGET_NAME} ${_library})
+endforeach ()
+
+foreach (_library ${OTTER_EXTRA_LIBRARIES})
+	target_link_libraries(${APP_TARGET_NAME} ${_library})
 endforeach ()
 
 if (Hunspell_FOUND AND ENABLE_SPELLCHECK)
-	target_link_libraries(waterphoenix-browser Hunspell::Hunspell)
+	target_link_libraries(${APP_TARGET_NAME} Hunspell::Hunspell)
 endif ()
 
 if (WIN32)
-target_link_libraries(waterphoenix-browser ole32 shell32 advapi32 user32)
+target_link_libraries(${APP_TARGET_NAME} ole32 shell32 advapi32 user32)
 
 	if (ENABLE_QT5)
-		target_link_libraries(waterphoenix-browser Qt5::WinExtras)
+		target_link_libraries(${APP_TARGET_NAME} Qt5::WinExtras)
 	endif ()
 elseif (APPLE)
 	find_library(FRAMEWORK_Cocoa Cocoa)
 	find_library(FRAMEWORK_Foundation Foundation)
 
-        set_target_properties(waterphoenix-browser PROPERTIES OUTPUT_NAME "Water Phoenix Browser")
-
-target_link_libraries(waterphoenix-browser ${FRAMEWORK_Cocoa} ${FRAMEWORK_Foundation})
+target_link_libraries(${APP_TARGET_NAME} ${FRAMEWORK_Cocoa} ${FRAMEWORK_Foundation})
 
 	if (ENABLE_QT5)
-		target_link_libraries(waterphoenix-browser Qt5::MacExtras)
+		target_link_libraries(${APP_TARGET_NAME} Qt5::MacExtras)
 	endif ()
 elseif (UNIX)
 	if (TARGET ${QT_VERSION}::DBus AND ENABLE_DBUS)
-		target_link_libraries(waterphoenix-browser ${QT_VERSION}::DBus)
+		target_link_libraries(${APP_TARGET_NAME} ${QT_VERSION}::DBus)
 	endif ()
 
 
 	if (ENABLE_CRASH_REPORTS)
-		target_link_libraries(waterphoenix-browser -lpthread)
+		target_link_libraries(${APP_TARGET_NAME} -lpthread)
 	endif ()
 endif ()
 
 target_link_libraries(
-	waterphoenix-browser
+	${APP_TARGET_NAME}
 	${QT_VERSION}::Core
 	${QT_VERSION}::Gui
 	${QT_VERSION}::Multimedia
@@ -642,12 +659,14 @@ target_link_libraries(
 	${QT_VERSION}::PrintSupport
 	${QT_VERSION}::Qml
 	${QT_VERSION}::Svg
+	${QT_VERSION}::WebEngineCore
+	${QT_VERSION}::WebEngineWidgets
 	${QT_VERSION}::Widgets
 	${QT_VERSION}::Xml
 )
 
 if (NOT ENABLE_QT5)
-	target_link_libraries(waterphoenix-browser Qt6::Core5Compat)
+	target_link_libraries(${APP_TARGET_NAME} Qt6::Core5Compat)
 endif ()
 
 set(XDG_APPS_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/share/applications CACHE FILEPATH "Install path for .desktop files")
@@ -655,24 +674,30 @@ set(XDG_APPS_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/share/applications CACHE FILEPA
 file(GLOB OTTER_TRANSLATIONS resources/translations/*.qm)
 
 foreach (_translation ${OTTER_TRANSLATIONS})
-	install(FILES ${_translation} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/waterphoenix-browser/locale/)
+	install(FILES ${_translation} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${BRAND_EXECUTABLE_NAME}/locale/)
 
 	if (APPLE)
 		file(COPY ${_translation} DESTINATION "Otter Browser.app/Contents/Resources/locale/")
 	endif ()
 endforeach ()
 
-install(FILES resources/icons/waterphoenix-browser-16.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/16x16/apps/ RENAME waterphoenix-browser.png)
-install(FILES resources/icons/waterphoenix-browser-32.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/32x32/apps/ RENAME waterphoenix-browser.png)
-install(FILES resources/icons/waterphoenix-browser-48.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/48x48/apps/ RENAME waterphoenix-browser.png)
-install(FILES resources/icons/waterphoenix-browser-64.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/64x64/apps/ RENAME waterphoenix-browser.png)
-install(FILES resources/icons/waterphoenix-browser-128.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/128x128/apps/ RENAME waterphoenix-browser.png)
-install(FILES resources/icons/waterphoenix-browser-256.png DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/256x256/apps/ RENAME waterphoenix-browser.png)
-install(FILES resources/icons/waterphoenix-browser.svg DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/scalable/apps/)
-install(FILES waterphoenix-browser.desktop DESTINATION ${XDG_APPS_INSTALL_DIR})
-install(FILES packaging/waterphoenix-browser.appdata.xml DESTINATION ${CMAKE_INSTALL_PREFIX}/share/metainfo)
-install(FILES man/waterphoenix-browser.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1/)
-install(TARGETS waterphoenix-browser DESTINATION bin/)
+# Install branded icons with fallback to upstream otter-browser icons
+install_branded_icon("16" "otter-browser")
+install_branded_icon("32" "otter-browser")
+install_branded_icon("48" "otter-browser")
+install_branded_icon("64" "otter-browser")
+install_branded_icon("128" "otter-browser")
+install_branded_icon("256" "otter-browser")
+install_branded_svg("otter-browser")
+install_branded_appdata()
+install_branded_man_page()
+
+# Set branded binary output name
+set_target_properties(${APP_TARGET_NAME} PROPERTIES
+    OUTPUT_NAME "${BRAND_EXECUTABLE_NAME}"
+)
+
+install(TARGETS ${APP_TARGET_NAME} DESTINATION "${CMAKE_INSTALL_BINDIR}")
 
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)
 

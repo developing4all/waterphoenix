@@ -20,6 +20,7 @@
 **************************************************************************/
 
 #include "SettingsManager.h"
+#include "Branding.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
@@ -244,7 +245,7 @@ void SettingsManager::createInstance(const QString &path)
 	registerOption(Updates_AutomaticInstallOption, BooleanType, false);
 	registerOption(Updates_CheckIntervalOption, IntegerType, 7);
 	registerOption(Updates_LastCheckOption, StringType, QString());
-	registerOption(Updates_ServerUrlOption, StringType, QLatin1String("https://www.otter-browser.org/updates/update.json"));
+	registerOption(Updates_ServerUrlOption, StringType, Branding::updateUrl());
 
 	const QStringList hosts(getOverrideHosts());
 

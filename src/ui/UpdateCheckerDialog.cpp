@@ -20,6 +20,7 @@
 
 #include "UpdateCheckerDialog.h"
 #include "../core/Application.h"
+#include "../core/Branding.h"
 #include "../core/Updater.h"
 
 #include "ui_UpdateCheckerDialog.h"
@@ -168,7 +169,7 @@ void UpdateCheckerDialog::handleReadyToInstall()
 	m_ui->label->setText(tr("Download finished."));
 	m_ui->buttonBox->addButton(tr("Install"), QDialogButtonBox::AcceptRole);
 
-	QLabel *informationLabel(new QLabel(tr("New version of Otter Browser is ready to install.\nClick Install button to restart browser and install the update or close this dialog to install the update during next browser restart."), this));
+	QLabel *informationLabel(new QLabel(tr("New version of %1 is ready to install.\nClick Install button to restart browser and install the update or close this dialog to install the update during next browser restart.").arg(Branding::displayFullName()), this));
 	informationLabel->setWordWrap(true);
 
 	m_ui->gridLayout->addWidget(informationLabel);

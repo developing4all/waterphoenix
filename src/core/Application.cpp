@@ -21,6 +21,7 @@
 #include "Application.h"
 #include "AddonsManager.h"
 #include "BookmarksManager.h"
+#include "Branding.h"
 #include "Console.h"
 #include "FeedsManager.h"
 #include "GesturesManager.h"
@@ -106,10 +107,18 @@ bool Application::m_isUpdating(false);
 Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 	m_updateCheckTimer(nullptr)
 {
-    setApplicationName(QLatin1String("Water phoenix"));
-    setApplicationDisplayName(QLatin1String("Water Phoenix Browser"));
+    setApplicationName(Branding::startupWmClass());
+    setApplicationDisplayName(Branding::displayFullName());
 	setApplicationVersion(OTTER_VERSION_MAIN);
-    setWindowIcon(QIcon::fromTheme(QLatin1String("waterphoenix-browser"), QIcon(QLatin1String(":/icons/waterphoenix-browser.png"))));
+    
+#if QT_VERSION >= QT_VERSION_CHECK(5, 7, 0)
+    setDesktopFileName(Branding::desktopFileBaseName());
+#endif
+    
+    setWindowIcon(QIcon::fromTheme(
+        Branding::desktopIconName(),
+        QIcon(QLatin1String(":/branding/app-icon.png"))
+    ));
 
 	m_instance = this;
 
@@ -123,7 +132,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 #ifdef Q_OS_DARWIN
 	m_localePath = QFileInfo(applicationDirPath() + QLatin1String("/../Resources/locale/")).absoluteFilePath();
 #else
-    m_localePath = QFileInfo(applicationDirPath() + QLatin1String("/../share/waterphoenix-browser/locale/")).absoluteFilePath();
+    m_localePath = QFileInfo(applicationDirPath() + QLatin1String("/../share/") + Branding::installDataDir() + QLatin1String("/locale/")).absoluteFilePath();
 #endif
 
 	const QString localLocalePath(applicationDirPath() + QLatin1String("/locale/"));
@@ -208,11 +217,15 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 
 		if (!profilePath.contains(QDir::separator()))
 		{
-            profilePath = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1String("/waterphoenix/profiles/")).absoluteFilePath(profilePath);
+            profilePath = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1String("/otter/profiles/")).absoluteFilePath(profilePath);
+		}
+		else
+		{
+            profilePath = QFileInfo(profilePath).absoluteFilePath();
 		}
 	}
 
-	profilePath = QDir::toNativeSeparators(QFileInfo(profilePath).absoluteFilePath());
+	profilePath = QDir::toNativeSeparators(profilePath);
 
 	if (m_commandLineParser.isSet(QLatin1String("cache")))
 	{
@@ -786,7 +799,7 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 		case ActionsManager::AboutApplicationAction:
 			{
 				const WebBackend *webBackend(AddonsManager::getWebBackend());
-                QString about(tr("<b>Water Phoenix %1</b><br>Web browser controlled by the user, not vice-versa.<br><a href=\"https://www.waterphoenix.org/\">https://www.waterphoenix.org/</a>").arg(Application::getFullVersion()));
+                QString about(tr("<b>%1 %2</b><br>Web browser controlled by the user, not vice-versa.<br><a href=\"%3\">%3</a>").arg(Branding::aboutName(), Application::getFullVersion(), Branding::websiteUrl()));
 
 				if (webBackend)
 				{
@@ -804,7 +817,7 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 					}
 				}
 
-                QMessageBox::about(m_activeWindow, QLatin1String("Water Phoenix"), about);
+                QMessageBox::about(m_activeWindow, Branding::displayFullName(), about);
 			}
 
 			return;
@@ -1272,11 +1285,12 @@ void Application::setLocale(const QString &locale)
 	}
 
 	const QString systemLocale(QLocale::system().name());
+	const QString translationBaseName(Branding::translationBaseName());
 	QString identifier(locale);
 
 	if (locale.endsWith(QLatin1String(".qm")))
 	{
-		identifier = QFileInfo(locale).baseName().remove(QLatin1String("waterphoenix-browser_"));
+		identifier = QFileInfo(locale).baseName().remove(translationBaseName + QLatin1Char('_'));
 	}
 	else if (locale == QLatin1String("system"))
 	{
@@ -1286,7 +1300,12 @@ void Application::setLocale(const QString &locale)
 	const bool useSystemLocale(locale.isEmpty() || locale == QLatin1String("system"));
 
 	m_qtTranslator->load(QLatin1String("qt_") + (useSystemLocale ? systemLocale : identifier), QLibraryInfo::location(QLibraryInfo::TranslationsPath));
-	m_applicationTranslator->load((locale.endsWith(QLatin1String(".qm")) ? locale : QLatin1String("waterphoenix-browser_") + (useSystemLocale ? systemLocale : locale)), m_localePath);
+	m_applicationTranslator->load(
+		locale.endsWith(QLatin1String(".qm"))
+			? locale
+			: translationBaseName + QLatin1Char('_') + (useSystemLocale ? systemLocale : locale),
+		m_localePath
+	);
 
 	QLocale::setDefault(Utils::createLocale(identifier));
 }
@@ -1453,7 +1472,7 @@ QString Application::createReport(ReportOptions options)
 	QString reportString;
 	QTextStream stream(&reportString);
 	stream.setFieldAlignment(QTextStream::AlignLeft);
-	stream << QLatin1String("Otter Browser diagnostic report created on ") << QDateTime::currentDateTimeUtc().toString(Qt::ISODate) << QLatin1String("\n\n");
+	stream << Branding::displayFullName() << QLatin1String(" diagnostic report created on ") << QDateTime::currentDateTimeUtc().toString(Qt::ISODate) << QLatin1String("\n\n");
 
 	for (int i = 0; i < report.sections.count(); ++i)
 	{
@@ -1741,7 +1760,7 @@ bool Application::canClose()
 	{
 		QMessageBox messageBox;
 		messageBox.setWindowTitle(tr("Question"));
-        messageBox.setText(tr("You are about to quit the current Water Phoenix Browser session."));
+        messageBox.setText(tr("You are about to quit the current %1 Browser session.").arg(Branding::aboutName()));
 		messageBox.setInformativeText(tr("Do you want to continue?"));
 		messageBox.setIcon(QMessageBox::Question);
 		messageBox.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);

@@ -27,6 +27,7 @@
 #include "QtWebKitWebBackend.h"
 #include "../../../../core/Application.h"
 #include "../../../../core/BookmarksManager.h"
+#include "../../../../core/Branding.h"
 #include "../../../../core/Console.h"
 #include "../../../../core/CookieJar.h"
 #include "../../../../core/ContentFiltersManager.h"
@@ -292,7 +293,7 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 								QPrinter printer;
 								printer.setOutputFormat(QPrinter::PdfFormat);
 								printer.setOutputFileName(path);
-								printer.setCreator(QStringLiteral("Otter Browser %1").arg(Application::getFullVersion()));
+								printer.setCreator(QStringLiteral("%1 %2").arg(Branding::displayFullName(), Application::getFullVersion()));
 								printer.setDocName(getTitle());
 
 								m_page->mainFrame()->print(&printer);

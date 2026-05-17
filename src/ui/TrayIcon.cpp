@@ -22,6 +22,7 @@
 #include "Action.h"
 #include "Menu.h"
 #include "../core/Application.h"
+#include "../core/Branding.h"
 
 namespace Otter
 {
@@ -71,7 +72,7 @@ TrayIcon::TrayIcon(Application *parent) : QObject(parent),
 
 	m_trayIcon->setIcon(Application::windowIcon());
 	m_trayIcon->setContextMenu(menu);
-	m_trayIcon->setToolTip(tr("Otter Browser"));
+	m_trayIcon->setToolTip(Branding::displayFullName());
 	m_trayIcon->show();
 
 	setParent(nullptr);
@@ -176,7 +177,7 @@ bool TrayIcon::event(QEvent *event)
 {
 	if (event->type() == QEvent::LanguageChange)
 	{
-		m_trayIcon->setToolTip(tr("Otter Browser"));
+		m_trayIcon->setToolTip(Branding::displayFullName());
 	}
 
 	return QObject::event(event);

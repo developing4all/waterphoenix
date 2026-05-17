@@ -19,6 +19,7 @@
 
 #include "ThemesManager.h"
 #include "Application.h"
+#include "Branding.h"
 #include "PlatformIntegration.h"
 #include "SettingsManager.h"
 #include "../ui/Animation.h"
@@ -377,7 +378,7 @@ QIcon ThemesManager::createIcon(const QString &name, bool fromTheme, IconContext
 		return QIcon::fromTheme(name);
 	}
 
-    const QString iconPath((!fromTheme && name == QLatin1String("waterphoenix-browser")) ? QLatin1String(":/icons/waterphoenix-browser") : m_iconThemePath + name);
+    const QString iconPath((!fromTheme && name == Branding::desktopIconName()) ? QLatin1String(":/branding/app-icon") : m_iconThemePath + name);
 	const QString svgPath(iconPath + QLatin1String(".svg"));
 	const QString rasterPath(iconPath + QLatin1String(".png"));
 
