@@ -3,6 +3,7 @@
 * Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
+* Copyright (C) 2026 Haydar Alkaduhimi <haydar@developing4all.com>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -133,6 +134,7 @@ protected:
 	bool isInEmptyTabBarArea(QWidget *sourceWidget, const QPoint &globalPosition) const;
 	bool isInsideActualTabOrTabControl(QWidget *sourceWidget, const QPoint &globalPosition) const;
 	bool isInEmptyTabToolBarMoveArea(QWidget *sourceWidget, const QPoint &globalPosition) const;
+	bool isWindowControlsSpacer(QWidget *widget) const;
 	bool isTabBarToolBarInTitleBarArea() const;
 	bool isTabBarToolBarInWindowMoveArea() const;
 	bool isInTabBarToolBarDockHandleArea(const QPoint &globalPosition) const;
@@ -170,6 +172,8 @@ private:
 	WindowControlsWidget *m_windowControls;
 	QAction *m_windowControlsAction;
 	QPointer<ToolBarWidget> m_windowControlsToolBar;
+	QAction *m_windowControlsSpacerAction;
+	QWidget *m_windowControlsSpacer;
 	QPointer<Window> m_activeWindow;
 	Qt::Edges m_resizeEdges;
 	bool m_wasMaximized;

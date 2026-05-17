@@ -3,6 +3,7 @@
 * Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
+* Copyright (C) 2026 Haydar Alkaduhimi <haydar@developing4all.com>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -75,6 +76,8 @@ MainWindow::MainWindow(const QVariantMap &parameters, const Session::MainWindow 
 	m_statusBar(nullptr),
 	m_windowControls(nullptr),
 	m_windowControlsAction(nullptr),
+	m_windowControlsSpacerAction(nullptr),
+	m_windowControlsSpacer(nullptr),
 	m_activeWindow(nullptr),
 	m_resizeEdges(Qt::Edges()),
 	m_wasMaximized(false),
@@ -2919,10 +2922,19 @@ bool MainWindow::eventFilter(QObject *object, QEvent *event)
 				}
 			}
 
-			// If this belongs to a ToolBarWidget that is NOT the TabBar, let Qt handle it natively
+			// If this belongs to a ToolBarWidget that is NOT the TabBar, check if it's the spacer
 			if (sourceToolBar && sourceToolBar->getIdentifier() != ToolBarsManager::TabBar)
 			{
-				return false;
+				QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+				const QPoint globalPosition = mouseEvent->globalPos();
+				const QPoint toolbarPosition = sourceToolBar->mapFromGlobal(globalPosition);
+				QWidget *child = sourceToolBar->childAt(toolbarPosition);
+				
+				// Only allow if the clicked child is the window controls spacer
+				if (!isWindowControlsSpacer(child))
+				{
+					return false;
+				}
 			}
 
 			QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
@@ -3363,7 +3375,13 @@ void MainWindow::ensureWindowControlsInToolBar(ToolBarWidget *targetToolBar)
 	if (m_windowControlsAction && m_windowControlsToolBar && m_windowControlsToolBar != targetToolBar)
 	{
 		m_windowControlsToolBar->removeAction(m_windowControlsAction);
+		if (m_windowControlsSpacerAction)
+		{
+			m_windowControlsToolBar->removeAction(m_windowControlsSpacerAction);
+		}
 		m_windowControlsAction = nullptr;
+		m_windowControlsSpacerAction = nullptr;
+		m_windowControlsSpacer = nullptr;
 		m_windowControlsToolBar = nullptr;
 	}
 
@@ -3376,15 +3394,27 @@ void MainWindow::ensureWindowControlsInToolBar(ToolBarWidget *targetToolBar)
 			if (toolBar->actions().contains(m_windowControlsAction))
 			{
 				toolBar->removeAction(m_windowControlsAction);
+				if (m_windowControlsSpacerAction && toolBar->actions().contains(m_windowControlsSpacerAction))
+				{
+					toolBar->removeAction(m_windowControlsSpacerAction);
+				}
 				break;
 			}
 		}
 		m_windowControlsAction = nullptr;
+		m_windowControlsSpacerAction = nullptr;
+		m_windowControlsSpacer = nullptr;
 	}
 
 	// Add to new toolbar if not already there
 	if (!m_windowControlsAction)
 	{
+		// Add a spacer before window controls to create dragging area
+		m_windowControlsSpacer = new QWidget();
+		m_windowControlsSpacer->setFixedWidth(20);
+		m_windowControlsSpacer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+		
+		m_windowControlsSpacerAction = targetToolBar->addWidget(m_windowControlsSpacer);
 		m_windowControlsAction = targetToolBar->addWidget(m_windowControls);
 		m_windowControlsToolBar = targetToolBar;
 	}
@@ -3411,6 +3441,10 @@ void MainWindow::removeWindowControlsFromToolbar(ToolBarWidget *toolBar)
 	if (m_windowControlsAction && m_windowControlsToolBar)
 	{
 		m_windowControlsToolBar->removeAction(m_windowControlsAction);
+		if (m_windowControlsSpacerAction)
+		{
+			m_windowControlsToolBar->removeAction(m_windowControlsSpacerAction);
+		}
 	}
 	// If action exists but toolbar is null, search all toolbars and remove it
 	else if (m_windowControlsAction)
@@ -3421,12 +3455,18 @@ void MainWindow::removeWindowControlsFromToolbar(ToolBarWidget *toolBar)
 			if (currentToolBar->actions().contains(m_windowControlsAction))
 			{
 				currentToolBar->removeAction(m_windowControlsAction);
+				if (m_windowControlsSpacerAction && currentToolBar->actions().contains(m_windowControlsSpacerAction))
+				{
+					currentToolBar->removeAction(m_windowControlsSpacerAction);
+				}
 				break;
 			}
 		}
 	}
 	
 	m_windowControlsAction = nullptr;
+	m_windowControlsSpacerAction = nullptr;
+	m_windowControlsSpacer = nullptr;
 	m_windowControlsToolBar = nullptr;
 	
 	// Hide widget
@@ -3498,6 +3538,16 @@ void MainWindow::updateWindowControlsPlacement()
 
 
 
+bool MainWindow::isWindowControlsSpacer(QWidget *widget) const
+{
+	if (!widget || !m_windowControlsSpacer)
+	{
+		return false;
+	}
+
+	return (widget == m_windowControlsSpacer || m_windowControlsSpacer->isAncestorOf(widget));
+}
+
 bool MainWindow::isInEmptyTabToolBarMoveArea(QWidget *sourceWidget, const QPoint &globalPosition) const
 {
 	Q_UNUSED(sourceWidget)
@@ -3522,6 +3572,10 @@ bool MainWindow::isInEmptyTabToolBarMoveArea(QWidget *sourceWidget, const QPoint
 		if (child == m_tabBar || m_tabBar->isAncestorOf(child))
 		{
 			// This is handled by the m_tabBar checks below
+		}
+		else if (isWindowControlsSpacer(child))
+		{
+			return true;
 		}
 		else
 		{
@@ -3608,10 +3662,17 @@ bool MainWindow::handleCustomDecorationMousePress(QWidget *sourceWidget, QMouseE
 		}
 	}
 
-	// If this belongs to a ToolBarWidget that is NOT the TabBar, don't custom-handle it
+	// If this belongs to a ToolBarWidget that is NOT the TabBar, check if it's the spacer
 	if (sourceToolBar && sourceToolBar->getIdentifier() != ToolBarsManager::TabBar)
 	{
-		return false;
+		const QPoint toolbarPosition = sourceToolBar->mapFromGlobal(globalPosition);
+		QWidget *child = sourceToolBar->childAt(toolbarPosition);
+		
+		// Only allow if the clicked child is the window controls spacer
+		if (!isWindowControlsSpacer(child))
+		{
+			return false;
+		}
 	}
 
 	// If click is in toolbar dock handle area, return false
@@ -3626,7 +3687,7 @@ bool MainWindow::handleCustomDecorationMousePress(QWidget *sourceWidget, QMouseE
 		return false;
 	}
 
-	// If click is on any child widget of the TabBar toolbar, return false
+	// If click is on any child widget of the TabBar toolbar, return false (unless it's the spacer)
 	ToolBarWidget *tabBarToolBar = getTabBarToolBar();
 	if (tabBarToolBar)
 	{
@@ -3636,8 +3697,13 @@ bool MainWindow::handleCustomDecorationMousePress(QWidget *sourceWidget, QMouseE
 			QWidget *child = tabBarToolBar->childAt(toolbarPosition);
 			if (child)
 			{
+				// Allow the spacer widget
+				if (isWindowControlsSpacer(child))
+				{
+					// Continue to dragging logic
+				}
 				// If child is m_tabBar or descendant, this was already handled above
-				if (child != m_tabBar && !m_tabBar->isAncestorOf(child))
+				else if (child != m_tabBar && !m_tabBar->isAncestorOf(child))
 				{
 					return false;
 				}
