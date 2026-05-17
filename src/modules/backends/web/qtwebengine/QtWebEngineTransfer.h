@@ -22,7 +22,11 @@
 
 #include "../../../../core/TransfersManager.h"
 
+#if QT_VERSION >= 0x060000
+#include <QtWebEngineCore/QWebEngineDownloadRequest>
+#else
 #include <QtWebEngineWidgets/QWebEngineDownloadItem>
+#endif
 
 namespace Otter
 {
@@ -32,7 +36,11 @@ class QtWebEngineTransfer final : public Transfer
 	Q_OBJECT
 
 public:
+#if QT_VERSION >= 0x060000
+	explicit QtWebEngineTransfer(QWebEngineDownloadRequest *item, TransferOptions options = CanAskForPathOption, QObject *parent = nullptr);
+#else
 	explicit QtWebEngineTransfer(QWebEngineDownloadItem *item, TransferOptions options = CanAskForPathOption, QObject *parent = nullptr);
+#endif
 
 	QUrl getSource() const override;
 	QString getSuggestedFileName() override;
@@ -47,7 +55,11 @@ public slots:
 	bool setTarget(const QString &target, bool canOverwriteExisting = false) override;
 
 private:
+#if QT_VERSION >= 0x060000
+	QPointer<QWebEngineDownloadRequest> m_item;
+#else
 	QPointer<QWebEngineDownloadItem> m_item;
+#endif
 };
 
 }

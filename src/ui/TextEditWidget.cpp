@@ -24,7 +24,11 @@
 #include "../core/NotesManager.h"
 #include "../core/SpellCheckManager.h"
 #ifdef OTTER_ENABLE_SPELLCHECK
+#ifdef OTTER_USE_SYSTEM_SONNET
+#include <Sonnet/Highlighter>
+#else
 #include "../../3rdparty/sonnet/src/ui/highlighter.h"
+#endif
 #endif
 
 #include <QtGui/QClipboard>

@@ -24,8 +24,13 @@
 #include "../../../../core/SessionsManager.h"
 #include "../../../../ui/WebWidget.h"
 
-#include <QtWebEngineWidgets/QWebEngineCertificateError>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtWebEngineCore/QWebEnginePage>
+#include <QtWebEngineCore/QWebEngineCertificateError>
+#else
 #include <QtWebEngineWidgets/QWebEnginePage>
+#include <QtWebEngineWidgets/QWebEngineCertificateError>
+#endif
 
 namespace Otter
 {
@@ -69,7 +74,6 @@ protected:
 	QString createJavaScriptList(const QStringList &rules) const;
 	QStringList chooseFiles(FileSelectionMode mode, const QStringList &oldFiles, const QStringList &acceptedMimeTypes) override;
 	bool acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) override;
-	bool certificateError(const QWebEngineCertificateError &error) override;
 	bool javaScriptConfirm(const QUrl &url, const QString &message) override;
 	bool javaScriptPrompt(const QUrl &url, const QString &message, const QString &defaultValue, QString *result) override;
 
@@ -85,6 +89,9 @@ private:
 	bool m_isIgnoringJavaScriptPopups;
 	bool m_isViewingMedia;
 	bool m_isPopup;
+
+private slots:
+	bool handleCertificateError(QWebEngineCertificateError error);
 
 signals:
 	void requestedNewWindow(WebWidget *widget, SessionsManager::OpenHints hints, const QVariantMap &parameters);

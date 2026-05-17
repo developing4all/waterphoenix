@@ -49,6 +49,7 @@
 #include "../../../ui/WebsiteInformationDialog.h"
 #include "../../../ui/Window.h"
 
+#include <QtCore/QTimer>
 #include <QtGui/QClipboard>
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QInputDialog>
@@ -79,7 +80,6 @@ WebContentsWidget::WebContentsWidget(const QVariantMap &parameters, const QHash<
 	m_isIgnoringMouseRelease(false)
 {
 	m_splitter->setObjectName(QLatin1String("web"));
-	m_splitter->hide();
 
 	m_layout->setContentsMargins(0, 0, 0, 0);
 	m_layout->setSpacing(0);
@@ -184,6 +184,14 @@ void WebContentsWidget::showEvent(QShowEvent *event)
 	{
 		m_progressBarWidget = new ProgressToolBarWidget(m_window, m_webWidget);
 	}
+
+	if (m_startPageWidget && m_startPageWidget->isVisible())
+	{
+		QTimer::singleShot(0, this, [this]()
+		{
+			updateStartPageGeometry();
+		});
+	}
 }
 
 void WebContentsWidget::focusInEvent(QFocusEvent *event)
@@ -208,6 +216,11 @@ void WebContentsWidget::resizeEvent(QResizeEvent *event)
 	{
 		m_progressBarWidget->scheduleGeometryUpdate();
 	}
+
+	if (m_startPageWidget && m_startPageWidget->isVisible())
+	{
+		updateStartPageGeometry();
+	}
 }
 
 void WebContentsWidget::contextMenuEvent(QContextMenuEvent *event)
@@ -216,6 +229,17 @@ void WebContentsWidget::contextMenuEvent(QContextMenuEvent *event)
 	{
 		event->accept();
 	}
+}
+
+void WebContentsWidget::updateStartPageGeometry()
+{
+	if (!m_startPageWidget || !m_splitter)
+	{
+		return;
+	}
+
+	m_startPageWidget->setGeometry(m_splitter->geometry());
+	m_startPageWidget->raise();
 }
 
 void WebContentsWidget::keyPressEvent(QKeyEvent *event)
@@ -798,30 +822,22 @@ void WebContentsWidget::handleUrlChange(const QUrl &url)
 		closePasswordBar();
 	}
 
-	if (!m_window)
+	if (!m_window || !m_webWidget)
 	{
 		return;
 	}
 
-	if (m_isStartPageEnabled && url.scheme() == QLatin1String("about") && url.path() == QLatin1String("start"))
+	m_splitter->show();
+	m_webWidget->show();
+
+	const bool isStartPage(m_isStartPageEnabled && url.scheme() == QLatin1String("about") && url.path() == QLatin1String("start"));
+
+	if (isStartPage)
 	{
-		if (m_webWidget)
-		{
-			m_webWidget->setParent(this);
-			m_webWidget->hide();
-		}
-
-		m_splitter->hide();
-
 		if (!m_startPageWidget)
 		{
 			m_startPageWidget = new StartPageWidget(m_window);
 			m_startPageWidget->setParent(this);
-		}
-
-		if (m_layout->indexOf(m_startPageWidget) < 0)
-		{
-			layout()->addWidget(m_startPageWidget);
 		}
 
 		if (GesturesManager::isTracking() && GesturesManager::getTrackedObject() == m_webWidget->getViewport())
@@ -829,52 +845,39 @@ void WebContentsWidget::handleUrlChange(const QUrl &url)
 			GesturesManager::continueGesture(m_startPageWidget);
 		}
 
+		m_startPageWidget->raise();
 		m_startPageWidget->show();
+		updateStartPageGeometry();
+
+		QTimer::singleShot(0, this, [this]()
+		{
+			updateStartPageGeometry();
+		});
+
+		return;
 	}
-	else
+
+	if (m_startPageWidget)
 	{
-		if (m_startPageWidget)
+		StartPageWidget *startPageWidget(m_startPageWidget);
+
+		if (GesturesManager::isTracking() && GesturesManager::getTrackedObject() == startPageWidget)
 		{
-			m_webWidget->setParent(this);
-			m_startPageWidget->hide();
+			GesturesManager::continueGesture(m_webWidget->getViewport());
 		}
 
-		if (m_webWidget)
-		{
-			m_splitter->show();
-			m_splitter->insertWidget(0, m_webWidget);
+		m_startPageWidget = nullptr;
 
-			m_webWidget->show();
+		startPageWidget->hide();
+		startPageWidget->markForDeletion();
+	}
 
-			if (m_window && m_window->isActive() && !Utils::isUrlEmpty(m_webWidget->getUrl()))
-			{
-				m_webWidget->setFocus();
-			}
-		}
+	m_webWidget->raise();
+	m_webWidget->show();
 
-		if (m_startPageWidget)
-		{
-			if (GesturesManager::isTracking() && GesturesManager::getTrackedObject() == m_startPageWidget && m_webWidget)
-			{
-				GesturesManager::continueGesture(m_webWidget->getViewport());
-			}
-
-			layout()->removeWidget(m_startPageWidget);
-
-			m_startPageWidget->hide();
-			m_startPageWidget->markForDeletion();
-			m_startPageWidget = nullptr;
-
-			if (GesturesManager::isTracking() && GesturesManager::getTrackedObject() == m_startPageWidget && m_webWidget)
-			{
-				GesturesManager::continueGesture(m_webWidget->getViewport());
-			}
-
-			if (m_webWidget && m_window && m_window->isActive())
-			{
-				m_webWidget->setFocus();
-			}
-		}
+	if (m_window->isActive() && !Utils::isUrlEmpty(m_webWidget->getUrl()))
+	{
+		m_webWidget->setFocus();
 	}
 }
 
@@ -1170,27 +1173,16 @@ void WebContentsWidget::setWidget(WebWidget *widget, const QVariantMap &paramete
 		connect(m_splitter, &SplitterWidget::splitterMoved, widget, &WebWidget::geometryChanged);
 	}
 
-	const bool isHidden(m_isStartPageEnabled && Utils::isUrlEmpty(widget->getUrl()) && (!m_webWidget || (m_startPageWidget && m_startPageWidget->isVisibleTo(this))));
-
 	m_webWidget = widget;
 	m_webWidget->setOptions(options);
 
-	if (isHidden)
-	{
-		m_webWidget->hide();
-	}
-	else
-	{
-		m_splitter->show();
-		m_splitter->insertWidget(0, m_webWidget);
-
-		m_webWidget->show();
-	}
+	m_splitter->insertWidget(0, m_webWidget);
+	m_splitter->show();
+	m_webWidget->show();
 
 	if (m_window)
 	{
 		widget->setWindowIdentifier(m_window->getIdentifier());
-
 		connect(m_webWidget, &WebWidget::requestedCloseWindow, m_window, &Window::requestClose);
 	}
 

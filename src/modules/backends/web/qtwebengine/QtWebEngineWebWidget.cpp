@@ -46,17 +46,30 @@
 #include <QtCore/QMimeData>
 #include <QtCore/QTimer>
 #include <QtCore/QtMath>
+#if QT_VERSION >= 0x060000
+#include <QtGui/QAction>
+#endif
 #include <QtGui/QClipboard>
 #include <QtGui/QContextMenuEvent>
 #include <QtGui/QImageWriter>
 #include <QtPrintSupport/QPrintPreviewDialog>
 #include <QtWebEngineCore/QWebEngineCookieStore>
 #include <QtWebEngineCore/QWebEngineFindTextResult>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtWebEngineCore/QWebEngineHistory>
+#include <QtWebEngineCore/QWebEngineHttpRequest>
+#include <QtWebEngineCore/QWebEngineProfile>
+#include <QtWebEngineCore/QWebEngineScript>
+#include <QtWebEngineCore/QWebEngineSettings>
+#else
 #include <QtWebEngineWidgets/QWebEngineHistory>
 #include <QtWebEngineWidgets/QWebEngineProfile>
 #include <QtWebEngineWidgets/QWebEngineScript>
 #include <QtWebEngineWidgets/QWebEngineSettings>
+#endif
+#if QT_VERSION < 0x060000
 #include <QtWidgets/QAction>
+#endif
 #include <QtWidgets/QVBoxLayout>
 
 namespace Otter
@@ -98,6 +111,7 @@ QtWebEngineWebWidget::QtWebEngineWebWidget(const QVariantMap &parameters, WebBac
 	m_isClosing(false),
 	m_isEditing(false),
 	m_isFullScreen(false),
+	m_isPrivate(SessionsManager::calculateOpenHints(parameters).testFlag(SessionsManager::PrivateOpen)),
 	m_isTypedIn(false)
 {
 	setFocusPolicy(Qt::StrongFocus);
@@ -236,7 +250,11 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 
 				if (information.canSave)
 				{
-					m_page->save(information.path, QWebEngineDownloadItem::SingleHtmlSaveFormat);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+					m_page->save(information.path, QWebEngineDownloadRequest::SingleHtmlSaveFormat);
+#else
+					m_page->save(information.path);
+#endif
 				}
 			}
 			else
@@ -249,11 +267,19 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 					switch (format)
 					{
 						case CompletePageSaveFormat:
-							m_page->save(path, QWebEngineDownloadItem::CompleteHtmlSaveFormat);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+							m_page->save(path, QWebEngineDownloadRequest::CompleteHtmlSaveFormat);
+#else
+							m_page->save(path);
+#endif
 
 							break;
 						case MhtmlSaveFormat:
-							m_page->save(path, QWebEngineDownloadItem::MimeHtmlSaveFormat);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+							m_page->save(path, QWebEngineDownloadRequest::MimeHtmlSaveFormat);
+#else
+							m_page->save(path, QWebEngineDownloadItem::CompleteHtmlSaveFormat);
+#endif
 
 							break;
 						case PdfSaveFormat:
@@ -261,7 +287,11 @@ void QtWebEngineWebWidget::triggerAction(int identifier, const QVariantMap &para
 
 							break;
 						default:
-							m_page->save(path, QWebEngineDownloadItem::SingleHtmlSaveFormat);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+							m_page->save(path, QWebEngineDownloadRequest::SingleHtmlSaveFormat);
+#else
+							m_page->save(path);
+#endif
 
 							break;
 					}
@@ -892,10 +922,12 @@ void QtWebEngineWebWidget::print(QPrinter *printer)
 {
 	QEventLoop eventLoop;
 
+	/* qt6: no member named 'print' in 'Otter::QtWebEnginePage'
 	m_page->print(printer, [&](bool)
 	{
 		eventLoop.quit();
 	});
+	*/
 
 	eventLoop.exec();
 }
@@ -1009,10 +1041,12 @@ void QtWebEngineWebWidget::handlePrintRequest()
 	{
 		QEventLoop eventLoop;
 
+		/* qt6: no member named 'print' in 'Otter::QtWebEnginePage'
 		m_page->print(printer, [&](bool)
 		{
 			eventLoop.quit();
 		});
+		*/
 
 		eventLoop.exec();
 	});
@@ -1874,7 +1908,7 @@ bool QtWebEngineWebWidget::isPopup() const
 
 bool QtWebEngineWebWidget::isPrivate() const
 {
-	return m_page->profile()->isOffTheRecord();
+	return m_isPrivate;
 }
 
 bool QtWebEngineWebWidget::isScrollBar(const QPoint &position) const

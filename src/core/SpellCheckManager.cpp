@@ -21,7 +21,11 @@
 #include "Application.h"
 #include "SessionsManager.h"
 #ifdef OTTER_ENABLE_SPELLCHECK
+#ifdef OTTER_USE_SYSTEM_SONNET
+#include <Sonnet/Speller>
+#else
 #include "../../3rdparty/sonnet/src/core/speller.h"
+#endif
 #endif
 
 #include <QtCore/QDir>

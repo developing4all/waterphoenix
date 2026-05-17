@@ -24,7 +24,6 @@
 #include "loader_p.h"
 
 #include <QtCore/QMap>
-#include <QtCore/QMutableStringListIterator>
 #include <QtCore/QLocale>
 #include <QtCore/QSettings>
 

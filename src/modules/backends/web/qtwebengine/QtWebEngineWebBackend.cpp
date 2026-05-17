@@ -35,7 +35,11 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QRegularExpression>
+#if QT_VERSION >= 0x060000
+#include <QtWebEngineCore/QWebEngineSettings>
+#else
 #include <QtWebEngineWidgets/QWebEngineSettings>
+#endif
 
 namespace Otter
 {
@@ -56,15 +60,17 @@ QtWebEngineWebBackend::QtWebEngineWebBackend(QObject *parent) : WebBackend(paren
 	qputenv("QTWEBENGINE_DICTIONARIES_PATH", SpellCheckManager::getDictionariesPath().toLatin1());
 }
 
-void QtWebEngineWebBackend::handleDownloadRequested(QWebEngineDownloadItem *item)
+#if QT_VERSION >= 0x060000
+void QtWebEngineWebBackend::handleDownloadRequested(QWebEngineDownloadRequest *item)
 {
-	if (item->savePageFormat() != QWebEngineDownloadItem::UnknownSaveFormat)
+	if (item->savePageFormat() != QWebEngineDownloadRequest::UnknownSaveFormat)
 	{
 		return;
 	}
 
-	const QWebEngineProfile *profile(qobject_cast<QWebEngineProfile*>(sender()));
-	QtWebEngineTransfer *transfer(new QtWebEngineTransfer(item, (Transfer::CanNotifyOption | ((profile && profile->isOffTheRecord()) ? Transfer::IsPrivateOption : Transfer::NoOption))));
+	QtWebEnginePage *page(qobject_cast<QtWebEnginePage*>(item->page()));
+	const bool isPrivate(page && page->getWebWidget() && page->getWebWidget()->isPrivate());
+	QtWebEngineTransfer *transfer(new QtWebEngineTransfer(item, (Transfer::CanNotifyOption | (isPrivate ? Transfer::IsPrivateOption : Transfer::NoOption))));
 
 	if (transfer->getState() == Transfer::CancelledState)
 	{
@@ -72,8 +78,6 @@ void QtWebEngineWebBackend::handleDownloadRequested(QWebEngineDownloadItem *item
 
 		return;
 	}
-
-	QtWebEnginePage *page(qobject_cast<QtWebEnginePage*>(item->page()));
 
 	if (page && page->getWebWidget())
 	{
@@ -136,11 +140,87 @@ void QtWebEngineWebBackend::handleDownloadRequested(QWebEngineDownloadItem *item
 			break;
 	}
 }
+#else
+void QtWebEngineWebBackend::handleDownloadRequested(QWebEngineDownloadItem *item)
+{
+	QtWebEnginePage *page(qobject_cast<QtWebEnginePage*>(item->page()));
+	const bool isPrivate(page && page->getWebWidget() && page->getWebWidget()->isPrivate());
+	QtWebEngineTransfer *transfer(new QtWebEngineTransfer(item, (Transfer::CanNotifyOption | (isPrivate ? Transfer::IsPrivateOption : Transfer::NoOption))));
+
+	if (transfer->getState() == Transfer::CancelledState)
+	{
+		transfer->deleteLater();
+
+		return;
+	}
+
+	if (page && page->getWebWidget())
+	{
+		page->getWebWidget()->startTransfer(transfer);
+
+		return;
+	}
+
+	const HandlersManager::MimeTypeHandlerDefinition handler(HandlersManager::getMimeTypeHandler(transfer->getMimeType()));
+
+	switch (handler.transferMode)
+	{
+		case HandlersManager::MimeTypeHandlerDefinition::IgnoreTransfer:
+			transfer->cancel();
+			transfer->deleteLater();
+
+			break;
+		case HandlersManager::MimeTypeHandlerDefinition::AskTransfer:
+			TransferDialog(transfer).exec();
+
+			break;
+		case HandlersManager::MimeTypeHandlerDefinition::OpenTransfer:
+			transfer->setOpenCommand(handler.openCommand);
+
+			TransfersManager::addTransfer(transfer);
+
+			break;
+		case HandlersManager::MimeTypeHandlerDefinition::SaveTransfer:
+			transfer->setTarget(handler.downloadsPath + QDir::separator() + transfer->getSuggestedFileName());
+
+			if (transfer->getState() == Transfer::CancelledState)
+			{
+				TransfersManager::addTransfer(transfer);
+			}
+			else
+			{
+				transfer->deleteLater();
+			}
+
+			break;
+		case HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer:
+			{
+				const QString path(Utils::getSavePath(transfer->getSuggestedFileName(), handler.downloadsPath, {}, true).path);
+
+				if (path.isEmpty())
+				{
+					transfer->cancel();
+					transfer->deleteLater();
+
+					return;
+				}
+
+				transfer->setTarget(path);
+
+				TransfersManager::addTransfer(transfer);
+			}
+
+			break;
+		default:
+			break;
+	}
+}
+#endif
 
 void QtWebEngineWebBackend::handleOptionChanged(int identifier)
 {
 	QWebEngineProfile *profile(QWebEngineProfile::defaultProfile());
-	QWebEngineSettings *settings(QWebEngineSettings::globalSettings());
+	QWebEngineSettings *settings(QWebEngineProfile::defaultProfile()->settings());
 
 	switch (identifier)
 	{
@@ -234,7 +314,7 @@ QWebEngineProfile* QtWebEngineWebBackend::getDefaultProfile()
 
 		ContentFiltersManager::initialize();
 
-		QWebEngineSettings *settings(QWebEngineSettings::globalSettings());
+		QWebEngineSettings *settings(QWebEngineProfile::defaultProfile()->settings());
 
 		profile->setHttpAcceptLanguage(NetworkManagerFactory::getAcceptLanguage());
 		profile->setHttpUserAgent(getUserAgent());

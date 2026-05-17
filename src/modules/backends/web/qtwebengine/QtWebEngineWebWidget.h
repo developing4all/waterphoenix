@@ -23,8 +23,13 @@
 #include "../../../../ui/WebWidget.h"
 
 #include <QtNetwork/QNetworkReply>
-#include <QtWebEngineWidgets/QWebEngineFullScreenRequest>
 #include <QtWebEngineWidgets/QWebEngineView>
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtWebEngineCore/QWebEngineFullScreenRequest>
+#else
+#include <QtWebEngineWidgets/QWebEngineFullScreenRequest>
+#endif
 
 namespace Otter
 {
@@ -174,6 +179,7 @@ private:
 	bool m_isClosing;
 	bool m_isEditing;
 	bool m_isFullScreen;
+	bool m_isPrivate;
 	bool m_isTypedIn;
 
 friend class QtWebEnginePage;

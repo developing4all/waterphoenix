@@ -23,7 +23,11 @@
 #define QTWEBKITSPELLCHECKER_H
 
 #include "qwebkitplatformplugin.h"
+#ifdef OTTER_USE_SYSTEM_SONNET
+#include <Sonnet/Speller>
+#else
 #include "../../../../../3rdparty/sonnet/src/core/speller.h"
+#endif
 
 namespace Otter
 {
