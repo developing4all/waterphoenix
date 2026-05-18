@@ -19,6 +19,7 @@ set(BRAND_PACKAGE_NAME "otter-browser")
 
 # File and directory names
 set(BRAND_PROFILE_DIR_NAME "otter")
+set(BRAND_CACHE_DIR_NAME "otter")
 set(BRAND_DESKTOP_FILE_BASENAME "otter-browser")
 set(BRAND_DESKTOP_FILE_NAME "otter-browser.desktop")
 set(BRAND_STARTUP_WM_CLASS "otter-browser")

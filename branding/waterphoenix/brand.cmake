@@ -18,7 +18,8 @@ set(BRAND_EXECUTABLE_NAME "waterphoenix-browser")
 set(BRAND_PACKAGE_NAME "waterphoenix-browser")
 
 # File and directory names
-set(BRAND_PROFILE_DIR_NAME "WaterPhoenix")
+set(BRAND_PROFILE_DIR_NAME "waterphoenix")
+set(BRAND_CACHE_DIR_NAME "waterphoenix")
 set(BRAND_DESKTOP_FILE_BASENAME "waterphoenix-browser")
 set(BRAND_DESKTOP_FILE_NAME "waterphoenix-browser.desktop")
 set(BRAND_STARTUP_WM_CLASS "waterphoenix-browser")

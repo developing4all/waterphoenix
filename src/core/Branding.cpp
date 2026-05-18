@@ -51,6 +51,11 @@ QString Branding::profileDirectoryName()
     return QLatin1String(BRAND_PROFILE_DIR_NAME);
 }
 
+QString Branding::cacheDirectoryName()
+{
+    return QLatin1String(BRAND_CACHE_DIR_NAME);
+}
+
 QString Branding::iconName()
 {
     return QLatin1String(BRAND_ICON_NAME);

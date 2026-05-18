@@ -126,8 +126,8 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 	QTextCodec::setCodecForLocale(QTextCodec::codecForMib(106));
 #endif
 
-	QString profilePath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1String("/otter"));
-	QString cachePath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
+	QString profilePath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1Char('/') + Branding::profileDirectoryName());
+	QString cachePath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QLatin1Char('/') + Branding::cacheDirectoryName());
 
 #ifdef Q_OS_DARWIN
 	m_localePath = QFileInfo(applicationDirPath() + QLatin1String("/../Resources/locale/")).absoluteFilePath();
@@ -217,7 +217,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 
 		if (!profilePath.contains(QDir::separator()))
 		{
-            profilePath = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1String("/otter/profiles/")).absoluteFilePath(profilePath);
+            profilePath = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1Char('/') + Branding::profileDirectoryName() + QLatin1String("/profiles/")).absoluteFilePath(profilePath);
 		}
 		else
 		{

@@ -210,15 +210,66 @@ The following Otter references are intentionally preserved:
 - **Internal identifiers** - Settings keys, internal paths
 - **Translation contexts** - `<name>Otter::ClassName</name>` in .ts files
 
+## Profile and Cache Separation
+
+### Brand-Specific Paths
+
+Water Phoenix and Otter use separate profile and cache directories:
+
+- **Water Phoenix**: `~/.config/waterphoenix/` and `~/.cache/waterphoenix/`
+- **Otter**: `~/.config/otter/` and `~/.cache/otter/`
+
+### Profile Path Resolution
+
+Default profile paths are brand-specific:
+```bash
+# Water Phoenix default
+~/.config/waterphoenix/
+
+# Otter default  
+~/.config/otter/
+```
+
+### Named Profiles
+
+Named profiles are resolved under the brand-specific profile namespace:
+```bash
+# Water Phoenix named profile
+./waterphoenix-browser --profile test
+# Uses: ~/.config/waterphoenix/profiles/test/
+
+# Otter named profile
+./otter-browser --profile test  
+# Uses: ~/.config/otter/profiles/test/
+```
+
+### Custom Profile Paths
+
+Absolute or relative paths (containing directory separators) are used exactly as specified:
+```bash
+# Both brands use the same custom path
+./waterphoenix-browser --profile /custom/path/profile
+./otter-browser --profile /custom/path/profile
+```
+
+### Portable Mode
+
+Portable mode remains unchanged and relative to the binary directory:
+```bash
+# Both brands use portable mode
+./binary --portable
+# Profile: binary_directory/profile
+# Cache: binary_directory/cache
+```
+
+### Migration Policy
+
+**No automatic migration is performed**:
+- Existing Otter profiles are not modified
+- Water Phoenix starts with a fresh profile
+- Users can manually migrate data if desired
+
 ## Migration Notes
-
-### Profile/Config Paths
-
-**TODO**: Profile directory migration needs consideration:
-- Current: `~/.config/otter/`
-- Target: `~/.config/WaterPhoenix/`
-
-This change affects existing user data and requires migration logic.
 
 ### Settings Organization
 

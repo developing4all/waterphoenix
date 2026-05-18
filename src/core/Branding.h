@@ -81,6 +81,11 @@ public:
     static QString profileDirectoryName();
 
     /**
+     * Returns the cache directory name
+     */
+    static QString cacheDirectoryName();
+
+    /**
      * Returns the full version string
      */
     static QString versionString();
